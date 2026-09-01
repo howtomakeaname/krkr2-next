@@ -154,6 +154,52 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!_dirty) setState(() => _dirty = true);
   }
 
+  /// iOS 设置惯例的取值行：点按后从底部弹出单选列表，返回选中值。
+  ///
+  /// 选择器（segmented/dropdown）直接塞进 tile 的 trailing 槽在窄屏上
+  /// 会被压缩变形，所以值类设置统一走"当前值 + chevron → 底部弹选"。
+  Future<T?> _showValuePicker<T>({
+    required String title,
+    required T current,
+    required List<UiDropdownItem<T>> options,
+  }) {
+    return UiBottomSheet.show<T>(
+      context,
+      title: title,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final item in options)
+            UiListTile(
+              title: item.label,
+              trailing: UiRadio<T>(
+                value: item.value,
+                groupValue: current,
+                onChanged: (v) => Navigator.pop(context, v),
+              ),
+              onTap: () => Navigator.pop(context, item.value),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _rendererLabel(String value, AppLocalizations l10n) =>
+      value == 'opengl' ? 'OpenGL' : l10n.software;
+
+  String _themeLabel(String code, AppLocalizations l10n) =>
+      code == 'light' ? l10n.themeLight : l10n.themeDark;
+
+  String _localeLabel(String code, AppLocalizations l10n) {
+    final map = {
+      'system': l10n.languageSystem,
+      'en': l10n.languageEn,
+      'zh': l10n.languageZh,
+      'ja': l10n.languageJa,
+    };
+    return map[code] ?? code;
+  }
+
   Future<void> _changeLocale(String code) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(PrefsKeys.locale, code);
@@ -190,11 +236,11 @@ class _SettingsPageState extends State<SettingsPage> {
         final discard = await UiDialog.show<bool>(
           context,
           title: l10n.settings,
-          message: 'Discard unsaved changes?',
+          message: l10n.discardChangesMessage,
           actions: [
             UiDialogAction(label: l10n.cancel, returnValue: false),
             UiDialogAction(
-              label: 'Discard',
+              label: l10n.discard,
               isDestructive: true,
               returnValue: true,
             ),
@@ -272,44 +318,44 @@ class _SettingsPageState extends State<SettingsPage> {
               header: l10n.settingsRendering,
               footer: l10n.renderPipelineHint,
               children: [
+                // 提示文案统一放在分组 footer，tile 不再重复 subtitle。
                 UiListTile(
                   title: l10n.renderPipeline,
-                  subtitle: l10n.renderPipelineHint,
-                  trailing: UiSegmented<String>(
-                    value: _renderer,
-                    items: [
-                      const UiSegmentedItem(value: 'opengl', label: 'OpenGL'),
-                      UiSegmentedItem(value: 'software', label: l10n.software),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _renderer = value);
-                      _markDirty();
-                    },
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: UiSpacing.lg,
-                    vertical: UiSpacing.sm,
-                  ),
+                  trailingText: _rendererLabel(_renderer, l10n),
+                  showChevron: true,
+                  onTap: () async {
+                    final v = await _showValuePicker<String>(
+                      title: l10n.renderPipeline,
+                      current: _renderer,
+                      options: [
+                        UiDropdownItem(value: 'opengl', label: 'OpenGL'),
+                        UiDropdownItem(value: 'software', label: l10n.software),
+                      ],
+                    );
+                    if (v == null || !mounted) return;
+                    setState(() => _renderer = v);
+                    _markDirty();
+                  },
                 ),
                 if (Platform.isAndroid)
                   UiListTile(
                     title: l10n.graphicsBackend,
                     subtitle: l10n.graphicsBackendHint,
-                    trailing: UiSegmented<String>(
-                      value: _angleBackend,
-                      items: const [
-                        UiSegmentedItem(value: 'gles', label: 'GLES'),
-                        UiSegmentedItem(value: 'vulkan', label: 'Vulkan'),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _angleBackend = value);
-                        _markDirty();
-                      },
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: UiSpacing.lg,
-                      vertical: UiSpacing.sm,
-                    ),
+                    trailingText: _angleBackend == 'gles' ? 'GLES' : 'Vulkan',
+                    showChevron: true,
+                    onTap: () async {
+                      final v = await _showValuePicker<String>(
+                        title: l10n.graphicsBackend,
+                        current: _angleBackend,
+                        options: const [
+                          UiDropdownItem(value: 'gles', label: 'GLES'),
+                          UiDropdownItem(value: 'vulkan', label: 'Vulkan'),
+                        ],
+                      );
+                      if (v == null || !mounted) return;
+                      setState(() => _angleBackend = v);
+                      _markDirty();
+                    },
                   ),
                 UiListTile(
                   title: l10n.performanceOverlay,
@@ -339,21 +385,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   UiListTile(
                     title: l10n.targetFrameRate,
                     subtitle: l10n.targetFrameRateDesc,
-                    trailing: UiDropdown<int>(
-                      value: _targetFps,
-                      items: PrefsKeys.fpsOptions
-                          .map(
-                            (fps) => UiDropdownItem(
-                              value: fps,
-                              label: l10n.fpsLabel(fps),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() => _targetFps = value);
-                        _markDirty();
-                      },
-                    ),
+                    trailingText: l10n.fpsLabel(_targetFps),
+                    showChevron: true,
+                    onTap: () async {
+                      final v = await _showValuePicker<int>(
+                        title: l10n.targetFrameRate,
+                        current: _targetFps,
+                        options: PrefsKeys.fpsOptions
+                            .map(
+                              (fps) => UiDropdownItem(
+                                value: fps,
+                                label: l10n.fpsLabel(fps),
+                              ),
+                            )
+                            .toList(),
+                      );
+                      if (v == null || !mounted) return;
+                      setState(() => _targetFps = v);
+                      _markDirty();
+                    },
                   ),
                 if (Platform.isAndroid || Platform.isIOS)
                   UiListTile(
@@ -376,42 +426,48 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 UiListTile(
                   title: l10n.themeMode,
-                  trailing: UiSegmented<String>(
-                    value: _themeModeCode,
-                    items: [
-                      UiSegmentedItem(
-                        value: 'dark',
-                        label: l10n.themeDark,
-                        icon: LucideIcons.moon,
-                      ),
-                      UiSegmentedItem(
-                        value: 'light',
-                        label: l10n.themeLight,
-                        icon: LucideIcons.sun,
-                      ),
-                    ],
-                    onChanged: _changeThemeMode,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: UiSpacing.lg,
-                    vertical: UiSpacing.sm,
-                  ),
+                  trailingText: _themeLabel(_themeModeCode, l10n),
+                  showChevron: true,
+                  onTap: () async {
+                    final v = await _showValuePicker<String>(
+                      title: l10n.themeMode,
+                      current: _themeModeCode,
+                      options: [
+                        UiDropdownItem(
+                          value: 'dark',
+                          label: l10n.themeDark,
+                          icon: LucideIcons.moon,
+                        ),
+                        UiDropdownItem(
+                          value: 'light',
+                          label: l10n.themeLight,
+                          icon: LucideIcons.sun,
+                        ),
+                      ],
+                    );
+                    if (v != null) await _changeThemeMode(v);
+                  },
                 ),
                 UiListTile(
                   title: l10n.language,
-                  trailing: UiDropdown<String>(
-                    value: _localeCode,
-                    items: [
-                      UiDropdownItem(
-                        value: 'system',
-                        label: l10n.languageSystem,
-                      ),
-                      UiDropdownItem(value: 'en', label: l10n.languageEn),
-                      UiDropdownItem(value: 'zh', label: l10n.languageZh),
-                      UiDropdownItem(value: 'ja', label: l10n.languageJa),
-                    ],
-                    onChanged: _changeLocale,
-                  ),
+                  trailingText: _localeLabel(_localeCode, l10n),
+                  showChevron: true,
+                  onTap: () async {
+                    final v = await _showValuePicker<String>(
+                      title: l10n.language,
+                      current: _localeCode,
+                      options: [
+                        UiDropdownItem(
+                          value: 'system',
+                          label: l10n.languageSystem,
+                        ),
+                        UiDropdownItem(value: 'en', label: l10n.languageEn),
+                        UiDropdownItem(value: 'zh', label: l10n.languageZh),
+                        UiDropdownItem(value: 'ja', label: l10n.languageJa),
+                      ],
+                    );
+                    if (v != null) await _changeLocale(v);
+                  },
                 ),
               ],
             ),
