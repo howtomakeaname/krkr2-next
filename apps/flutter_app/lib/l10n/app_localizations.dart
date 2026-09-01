@@ -706,6 +706,24 @@ abstract class AppLocalizations {
   /// **'All files access is required on Android. Please grant permission and open the game again.'**
   String get androidAllFilesAccess;
 
+  /// No description provided for @noXp3InFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'No XP3 archive found in the selected folder.'**
+  String get noXp3InFolder;
+
+  /// No description provided for @engineRestartRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The engine is already running another game. Restart the app to play a different one.'**
+  String get engineRestartRequired;
+
+  /// No description provided for @gamesImported.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} games imported'**
+  String gamesImported(int count);
+
   /// No description provided for @selectGameDirectory.
   ///
   /// In en, this message translates to:

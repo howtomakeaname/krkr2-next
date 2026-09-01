@@ -344,6 +344,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'All files access is required on Android. Please grant permission and open the game again.';
 
   @override
+  String get noXp3InFolder => 'No XP3 archive found in the selected folder.';
+
+  @override
+  String get engineRestartRequired =>
+      'The engine is already running another game. Restart the app to play a different one.';
+
+  @override
+  String gamesImported(int count) {
+    return '$count games imported';
+  }
+
+  @override
   String get selectGameDirectory => 'Select Game Directory';
 
   @override

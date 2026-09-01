@@ -332,6 +332,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidAllFilesAccess => 'Android 上需要“所有文件”访问权限。请授予权限后重新打开游戏。';
 
   @override
+  String get noXp3InFolder => '所选文件夹里没有找到 XP3 归档。';
+
+  @override
+  String get engineRestartRequired => '引擎已在本会话中运行另一游戏，如需更换请重启应用。';
+
+  @override
+  String gamesImported(int count) {
+    return '已导入 $count 个游戏';
+  }
+
+  @override
   String get selectGameDirectory => '选择游戏目录';
 
   @override

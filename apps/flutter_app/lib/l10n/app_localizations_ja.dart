@@ -335,6 +335,18 @@ class AppLocalizationsJa extends AppLocalizations {
       'Android では「すべてのファイル」へのアクセス権が必要です。許可してからゲームをもう一度開いてください。';
 
   @override
+  String get noXp3InFolder => '選択したフォルダに XP3 アーカイブが見つかりません。';
+
+  @override
+  String get engineRestartRequired =>
+      'エンジンはこのセッションで別のゲームを実行中です。変更するにはアプリを再起動してください。';
+
+  @override
+  String gamesImported(int count) {
+    return '$count 件のゲームをインポートしました';
+  }
+
+  @override
   String get selectGameDirectory => 'ゲームディレクトリを選択';
 
   @override

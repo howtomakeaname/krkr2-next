@@ -1,8 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-// OHOS 系统选择器适配实现：与主包同名 FilePicker 类，需前缀区分。
-import 'package:file_picker_ohos/file_picker_ohos.dart' as fp_ohos;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
@@ -233,7 +232,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _addGameDirectory() async {
     final l10n = AppLocalizations.of(context)!;
     if (Platform.operatingSystem == 'ohos') {
-      await _addGameFromSandbox(pickDirectory: true);
+      await _addGameDirectoryOhos();
       return;
     }
     final String? selectedDirectory = await FilePicker.platform
@@ -416,20 +415,40 @@ class _HomePageState extends State<HomePage> {
     '/data/storage/el2/base/files',
   ];
 
-  /// OHOS 导入：系统 DocumentViewPicker 选 .xp3。
+  /// OHOS 导入：系统 DocumentViewPicker 选 .xp3（可多选）。
   ///
-  /// file_picker_ohos 的实现会把选中文件拷贝到应用 cache（`cache/file_picker/`）
-  /// 再返回路径；cache 可能被系统清理，所以这里把副本改名移入应用 files 目录
-  /// 后再注册（同卷 rename 瞬时完成，失败时回退拷贝）。
+  /// 适配版 file_picker 的实现会把选中文件拷贝到应用 cache
+  /// （`cache/file_picker/`）再返回路径；cache 可能被系统清理，所以这里把
+  /// 副本改名移入应用 files 目录后再注册（同卷 rename 瞬时完成，失败时
+  /// 回退拷贝）。多选让"进入文件夹勾选多个 .xp3"成为文件夹导入的兜底
+  /// ——folder 选择模式在部分系统版本上没有确认按钮。
   Future<void> _addGameArchiveOhos() async {
     final l10n = AppLocalizations.of(context)!;
-    // .xp3 不是常见后缀，且该 fork 把无点号扩展名直接传给 OHOS 的
+    // .xp3 不是常见后缀，且适配层把无点号扩展名直接传给 OHOS 的
     // fileSuffixFilters（格式不符会过滤失败），因此用 any 选择 + 自行校验。
-    final result = await fp_ohos.FilePicker.platform.pickFiles();
-    if (result == null || result.files.isEmpty || !mounted) return;
-    final cachePath = result.files.single.path;
-    if (cachePath == null || !mounted) return;
-    if (!cachePath.toLowerCase().endsWith('.xp3')) {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    } on Exception {
+      // 适配层在用户取消时可能抛异常而非返回 null，视同取消。
+      result = null;
+    }
+    if (!mounted) return;
+    if (result == null || result.files.isEmpty) {
+      // 用户取消选择器时回落到 URL 网络导入：模拟器/调试场景经 hdc rport
+      // 从开发机拉取，真机可走同一 Wi-Fi 的局域网地址。
+      final docDir = await getApplicationDocumentsDirectory();
+      final url = await _showOhosNetworkImport(docDir.path);
+      if (url == null || url.isEmpty || !mounted) return;
+      await _downloadAndAddGame(url);
+      return;
+    }
+    final cachePaths = result.files
+        .map((f) => f.path)
+        .whereType<String>()
+        .where((path) => path.toLowerCase().endsWith('.xp3'))
+        .toList();
+    if (cachePaths.isEmpty || !mounted) {
       UiSnackbar.show(
         context,
         message: l10n.selectGameArchive,
@@ -438,6 +457,107 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
+    final docDir = await getApplicationDocumentsDirectory();
+    final registered = _gameManager.games.map((g) => g.path).toSet();
+    var addedCount = 0;
+    String? firstAdded;
+    var alreadyCount = 0;
+    for (final cachePath in cachePaths) {
+      final String destPath = await _adoptOhosCacheFile(cachePath) ?? cachePath;
+      if (registered.contains(destPath)) {
+        alreadyCount++;
+        continue;
+      }
+      final added = await _gameManager.addGame(GameInfo(path: destPath));
+      if (added) {
+        addedCount++;
+        firstAdded ??= destPath;
+        registered.add(destPath);
+      }
+    }
+    if (!mounted) return;
+    if (addedCount > 0) {
+      setState(() {});
+      _offerScrapeAfterAdd(firstAdded!);
+      if (addedCount > 1 && mounted) {
+        UiSnackbar.show(
+          context,
+          message: l10n.gamesImported(addedCount),
+          type: UiSnackbarType.success,
+        );
+      }
+    } else if (alreadyCount > 0) {
+      UiSnackbar.show(
+        context,
+        message: l10n.gameAlreadyExists(p.basename(cachePaths.first)),
+        type: UiSnackbarType.warning,
+      );
+    }
+  }
+
+  /// OHOS 目录导入：系统选择器选文件夹，导入其中全部 .xp3。
+  ///
+  /// 适配层（本地 file_picker fork 的 ArkTS 'dir' 分支）会列出选中文件夹
+  /// 里的 .xp3 并逐个拷入应用 cache，以 JSON 字符串（路径数组）回给
+  /// getDirectoryPath——这是 OHOS 分支特有的返回约定；其他平台该接口
+  /// 返回的是普通目录路径字符串。
+  Future<void> _addGameDirectoryOhos() async {
+    final l10n = AppLocalizations.of(context)!;
+    final raw = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: l10n.selectGameDirectory,
+    );
+    if (raw == null || raw.isEmpty || !mounted) return;
+    final List<dynamic> decoded;
+    try {
+      decoded = jsonDecode(raw) as List<dynamic>;
+    } catch (_) {
+      return;
+    }
+    if (decoded.isEmpty || !mounted) {
+      UiSnackbar.show(
+        context,
+        message: l10n.noXp3InFolder,
+        type: UiSnackbarType.warning,
+      );
+      return;
+    }
+
+    final docDir = await getApplicationDocumentsDirectory();
+    final registered = _gameManager.games.map((g) => g.path).toSet();
+    var addedCount = 0;
+    String? firstAdded;
+    for (final cachePath in decoded.cast<String>()) {
+      final destPath = await _adoptOhosCacheFile(cachePath);
+      if (destPath == null || registered.contains(destPath)) continue;
+      final added = await _gameManager.addGame(GameInfo(path: destPath));
+      if (added) {
+        addedCount++;
+        firstAdded ??= destPath;
+        registered.add(destPath);
+      }
+    }
+    if (!mounted) return;
+    if (addedCount > 0) {
+      setState(() {});
+      _offerScrapeAfterAdd(firstAdded!);
+      if (addedCount > 1 && mounted) {
+        UiSnackbar.show(
+          context,
+          message: l10n.gamesImported(addedCount),
+          type: UiSnackbarType.success,
+        );
+      }
+    } else {
+      UiSnackbar.show(
+        context,
+        message: l10n.gameAlreadyExists(p.basename(decoded.first as String)),
+        type: UiSnackbarType.warning,
+      );
+    }
+  }
+
+  /// 把适配层落在应用 cache 的文件副本移入应用 files 目录并返回最终路径。
+  Future<String?> _adoptOhosCacheFile(String cachePath) async {
     final docDir = await getApplicationDocumentsDirectory();
     final destPath = p.join(docDir.path, p.basename(cachePath));
     final picked = File(cachePath);
@@ -455,20 +575,7 @@ class _HomePageState extends State<HomePage> {
         await picked.delete();
       } catch (_) {}
     }
-
-    final game = GameInfo(path: destPath);
-    final added = await _gameManager.addGame(game);
-    if (!mounted) return;
-    if (added) {
-      setState(() {});
-      _offerScrapeAfterAdd(destPath);
-    } else {
-      UiSnackbar.show(
-        context,
-        message: l10n.gameAlreadyExists(p.basename(destPath)),
-        type: UiSnackbarType.warning,
-      );
-    }
+    return destPath;
   }
 
   Future<void> _addGameFromSandbox({required bool pickDirectory}) async {

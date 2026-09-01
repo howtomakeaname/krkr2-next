@@ -108,18 +108,16 @@ packages:
   file_picker:
     dependency: "direct main"
     description:
-      name: file_picker
-      sha256: "09b474c0c8117484b80cbebc043801ff91e05cfbd2874d512825c899e1754694"
-      url: "https://pub.dev"
-    source: hosted
-    version: "9.2.3"
+      path: "../../../ohos_flutter_packages/packages/file_picker/file_picker"
+      relative: true
+    source: path
+    version: "8.0.6"
   file_picker_ohos:
-    dependency: "direct main"
+    dependency: "direct overridden"
     description:
-      name: file_picker_ohos
-      sha256: eacaf22061dd0cf3dc6e39fc85a3d6877c37f85034ebb3a4c752e3b37638e794
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../../ohos_flutter_packages/packages/file_picker/file_picker/ohos"
+      relative: true
+    source: path
     version: "1.0.1"
   file_selector_linux:
     dependency: transitive
@@ -762,13 +760,13 @@ packages:
     source: hosted
     version: "1.1.1"
   win32:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
       name: win32
-      sha256: d7cb55e04cd34096cd3a79b3330245f54cb96a370a1c27adb3c84b917de8b08e
+      sha256: "5a751eddf9db89b3e5f9d50c20ab8612296e4e8db69009788d6c8b060a84191c"
       url: "https://pub.dev"
     source: hosted
-    version: "5.15.0"
+    version: "4.1.4"
   xdg_directories:
     dependency: transitive
     description:
