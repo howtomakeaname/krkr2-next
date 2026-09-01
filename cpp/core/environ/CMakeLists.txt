@@ -20,6 +20,9 @@ set(ENVIRON_SOURCE_FILES
     
     $<$<BOOL:${LINUX}>:${ENVIRON_PATH}/linux/Platform.cpp>
 
+    $<$<STREQUAL:${CMAKE_SYSTEM_NAME},OHOS>:${ENVIRON_PATH}/ohos/Platform.cpp>
+    $<$<STREQUAL:${CMAKE_SYSTEM_NAME},OHOS>:${ENVIRON_PATH}/ohos/musl_compat.cpp>
+
     $<$<BOOL:${WINDOWS}>:${ENVIRON_PATH}/win32/Platform.cpp>
 
     $<$<BOOL:${MACOS}>:${ENVIRON_PATH}/apple/macos/platform.mm>
@@ -50,6 +53,11 @@ set(ENVIRON_HEADERS_DIR
 add_library(${PROJECT_NAME} STATIC ${ENVIRON_SOURCE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${ENVIRON_HEADERS_DIR})
 target_link_libraries(${PROJECT_NAME} PUBLIC tjs2 PRIVATE core_base_module core_visual_module core_sound_module core_plugin_module core_movie_module core_utils_module)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+    # Platform.cpp logs through hilog (sysroot ships libhilog_ndk.z.so)
+    target_link_libraries(${PROJECT_NAME} PRIVATE hilog_ndk.z)
+endif()
 
 find_package(7zip CONFIG REQUIRED)
 find_package(tinyxml2 CONFIG REQUIRED)
