@@ -1123,7 +1123,12 @@ int LuaEngine::l_getScriptWaitReason(lua_State *L) {
 // e:random() — uniform [0,1) (official: 无参数 → number). Used by the media
 // framework (sysvo voice pick) expecting a float for % arithmetic.
 int LuaEngine::l_random(lua_State *L) {
-    lua_pushnumber(L, static_cast<double>(rand()) / (RAND_MAX + 1.0));
+    // KrKr2-Next: the adv framework uses `e:random() % n + 1` everywhere
+    // (sysvo.lua, config.lua, image.lua …) — a C-rand()-style non-negative
+    // integer. Returning a [0,1) float made `%` yield a fractional index, so
+    // `t[ch]` in sysvo.lua was nil and START on the title screen aborted with
+    // "attempt to index field '?'".
+    lua_pushinteger(L, static_cast<lua_Integer>(rand()));
     return 1;
 }
 

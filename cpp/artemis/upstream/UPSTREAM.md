@@ -19,3 +19,7 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   on OpenHarmony) instead of `__ANDROID__` only.
 - `src/audio/audio.cpp` is not compiled on OpenHarmony; the OHAudio backend
   lives in `cpp/artemis/ohos/audio_ohos.cpp` (same `artc::Audio` interface).
+- `src/script/lua_engine.cpp` — `e:random()` returns a non-negative integer
+  (C `rand()` semantics) instead of a `[0,1)` float; the adv framework uses
+  `e:random() % n + 1` (sysvo.lua / config.lua / image.lua), which needs an
+  integer to index tables (START on the title screen aborted otherwise).
