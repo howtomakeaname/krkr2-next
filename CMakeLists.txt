@@ -55,7 +55,7 @@ set(APP_NAME krkr2)
 
 project(${APP_NAME})
 
-if(ANDROID)
+if(ANDROID OR OHOS)
     add_compile_options(-Wno-inconsistent-missing-override)
 endif()
 
@@ -96,6 +96,10 @@ elseif(WINDOWS)
 elseif(IOS)
     # iOS uses Flutter as the app shell; only build engine libraries.
     # engine_api is built as a static library and linked into the Flutter Runner.
+elseif(OHOS)
+    # HarmonyOS uses Flutter as the app shell (same as Android/iOS):
+    # only engine libraries are built here. libengine_api.so is packaged
+    # into the HAP by build/build_ohos.sh and loaded through Dart FFI.
 elseif(MACOS)
     # macOS uses Flutter as the app shell; only build engine libraries.
     # The standalone krkr2 executable (cocos2dx) is no longer produced.
@@ -128,13 +132,13 @@ if(TARGET ${PROJECT_NAME})
     endif()
 endif()
 
-if(ENABLE_TESTS AND NOT (IOS OR ANDROID))
+if(ENABLE_TESTS AND NOT (IOS OR ANDROID OR OHOS))
     enable_testing()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
         add_subdirectory(tests)
     endif()
 endif()
 
-if(BUILD_TOOLS AND NOT (IOS OR ANDROID))
+if(BUILD_TOOLS AND NOT (IOS OR ANDROID OR OHOS))
     add_subdirectory(tools)
 endif()
