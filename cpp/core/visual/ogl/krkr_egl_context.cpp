@@ -29,6 +29,24 @@
 #include <android/native_window_jni.h>
 #define EGL_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "krkr2-egl", __VA_ARGS__)
 #define EGL_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "krkr2-egl", __VA_ARGS__)
+#elif defined(__OHOS__)
+// OpenHarmony: system EGL (libEGL.so) — no ANGLE needed. Native windows are
+// OHNativeWindow* handles obtained from Flutter's TextureRegistry and are
+// passed straight to eglCreateWindowSurface (same shape as ANativeWindow).
+#include <cstdio>
+#include <cstdarg>
+#include <hilog/log.h>
+// hilog masks plain %s as <private>; format into a stack buffer first and
+// hand hilog a single public string.
+#define EGL_OHOS_LOG(level, fmt, ...)                                   \
+    do {                                                                \
+        char _egl_log_buf_[512];                                        \
+        std::snprintf(_egl_log_buf_, sizeof(_egl_log_buf_), fmt, ##__VA_ARGS__); \
+        OH_LOG_Print(LOG_APP, level, 0x0206, "krkr2-egl", "%{public}s", \
+                     _egl_log_buf_);                                    \
+    } while (0)
+#define EGL_LOGI(...) EGL_OHOS_LOG(LOG_INFO, __VA_ARGS__)
+#define EGL_LOGE(...) EGL_OHOS_LOG(LOG_ERROR, __VA_ARGS__)
 #else
 #define EGL_LOGI(...) ((void)0)
 #define EGL_LOGE(...) ((void)0)
@@ -125,9 +143,9 @@ bool EGLContextManager::Initialize(uint32_t width, uint32_t height,
     spdlog::info("EGL version string: {}", eglQueryString(display_, EGL_VERSION));
 
     // Choose a config that supports Pbuffer + GLES2
-    // On Android, also require EGL_WINDOW_BIT for SurfaceTexture rendering
+    // On Android/OHOS, also require EGL_WINDOW_BIT for SurfaceTexture rendering
     EGLint configAttribs[] = {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__OHOS__)
         EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT | EGL_WINDOW_BIT,
 #else
         EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT,
@@ -505,7 +523,7 @@ void EGLContextManager::DestroyIOSurfaceResources() {
 bool EGLContextManager::InitializeWithWindow(void* window,
                                               uint32_t width, uint32_t height,
                                               AngleBackend backend) {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__OHOS__)
     if (!window || width == 0 || height == 0) {
         EGL_LOGE("InitializeWithWindow: invalid parameters (window=%p, %ux%u)",
                  window, width, height);
@@ -561,15 +579,24 @@ bool EGLContextManager::InitializeWithWindow(void* window,
     }
     EGL_LOGI("InitializeWithWindow: eglChooseConfig OK numConfigs=%d", numConfigs);
 
-    // 4. Create WindowSurface from ANativeWindow
+    // 4. Create WindowSurface from the native window
+    //    (ANativeWindow* on Android, OHNativeWindow* on OHOS)
+#if defined(__ANDROID__)
     auto* nativeWindow = static_cast<ANativeWindow*>(window);
     ANativeWindow_acquire(nativeWindow);
+#else
+    void* nativeWindow = window;
+#endif
 
     EGLint surfAttribs[] = { EGL_NONE };
-    window_surface_ = eglCreateWindowSurface(display_, config_, nativeWindow, surfAttribs);
+    window_surface_ = eglCreateWindowSurface(display_, config_,
+                                             reinterpret_cast<EGLNativeWindowType>(nativeWindow),
+                                             surfAttribs);
     if (window_surface_ == EGL_NO_SURFACE) {
         EGL_LOGE("InitializeWithWindow: eglCreateWindowSurface failed: 0x%x", eglGetError());
+#if defined(__ANDROID__)
         ANativeWindow_release(nativeWindow);
+#endif
         eglTerminate(display_);
         display_ = EGL_NO_DISPLAY;
         return false;
@@ -586,7 +613,9 @@ bool EGLContextManager::InitializeWithWindow(void* window,
         EGL_LOGE("InitializeWithWindow: eglCreateContext failed: 0x%x", eglGetError());
         eglDestroySurface(display_, window_surface_);
         window_surface_ = EGL_NO_SURFACE;
+#if defined(__ANDROID__)
         ANativeWindow_release(nativeWindow);
+#endif
         eglTerminate(display_);
         display_ = EGL_NO_DISPLAY;
         return false;
@@ -600,7 +629,9 @@ bool EGLContextManager::InitializeWithWindow(void* window,
         context_ = EGL_NO_CONTEXT;
         eglDestroySurface(display_, window_surface_);
         window_surface_ = EGL_NO_SURFACE;
+#if defined(__ANDROID__)
         ANativeWindow_release(nativeWindow);
+#endif
         eglTerminate(display_);
         display_ = EGL_NO_DISPLAY;
         return false;
@@ -648,7 +679,7 @@ bool EGLContextManager::InitializeWithWindow(void* window,
 
 bool EGLContextManager::AttachNativeWindow(void* window,
                                             uint32_t width, uint32_t height) {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__OHOS__)
     if (!window || width == 0 || height == 0) {
         spdlog::error("AttachNativeWindow: invalid parameters (window={}, {}x{})",
                       window != nullptr, width, height);
@@ -662,17 +693,24 @@ bool EGLContextManager::AttachNativeWindow(void* window,
     // Clean up previous WindowSurface resources
     DestroyNativeWindowResources();
 
+#if defined(__ANDROID__)
     auto* nativeWindow = static_cast<ANativeWindow*>(window);
     ANativeWindow_acquire(nativeWindow);
+#else
+    void* nativeWindow = window;
+#endif
 
-    // Create EGL WindowSurface from ANativeWindow
+    // Create EGL WindowSurface from the native window
     EGLint attribs[] = { EGL_NONE };
     window_surface_ = eglCreateWindowSurface(display_, config_,
-                                              nativeWindow, attribs);
+                                              reinterpret_cast<EGLNativeWindowType>(nativeWindow),
+                                              attribs);
     if (window_surface_ == EGL_NO_SURFACE) {
         spdlog::error("AttachNativeWindow: eglCreateWindowSurface failed: 0x{:x}",
                       eglGetError());
+#if defined(__ANDROID__)
         ANativeWindow_release(nativeWindow);
+#endif
         return false;
     }
 
@@ -682,7 +720,9 @@ bool EGLContextManager::AttachNativeWindow(void* window,
                       eglGetError());
         eglDestroySurface(display_, window_surface_);
         window_surface_ = EGL_NO_SURFACE;
+#if defined(__ANDROID__)
         ANativeWindow_release(nativeWindow);
+#endif
         return false;
     }
 
@@ -710,7 +750,7 @@ void EGLContextManager::DetachNativeWindow() {
 }
 
 void EGLContextManager::DestroyNativeWindowResources() {
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__OHOS__)
     if (native_window_) {
         // Revert to Pbuffer surface if available
         if (surface_ != EGL_NO_SURFACE && display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
@@ -723,7 +763,9 @@ void EGLContextManager::DestroyNativeWindowResources() {
             eglDestroySurface(display_, window_surface_);
             window_surface_ = EGL_NO_SURFACE;
         }
+#if defined(__ANDROID__)
         ANativeWindow_release(static_cast<ANativeWindow*>(native_window_));
+#endif
         native_window_ = nullptr;
         window_width_ = 0;
         window_height_ = 0;

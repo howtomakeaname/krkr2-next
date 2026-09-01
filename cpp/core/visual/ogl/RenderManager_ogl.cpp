@@ -150,10 +150,12 @@ namespace GL { // independ from global gl functions
     typedef PROC(WINAPI fGetProcAddress)(LPCSTR);
 #elif defined(TARGET_OS_IPHONE)
     typedef void *(fGetProcAddress)(const char *);
-#elif defined(__ANDROID__)
+#elif defined(__ANDROID__) || defined(__OHOS__)
     typedef void *(EGLAPIENTRY fGetProcAddress)(const char *);
 #elif defined(LINUX)
     typedef void *(GLAPIENTRY fGetProcAddress)(const char *);
+#else
+    typedef void *(fGetProcAddress)(const char *);
 #endif
     static fGetProcAddress *glGetProcAddress = nullptr;
 
