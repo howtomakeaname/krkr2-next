@@ -100,3 +100,23 @@ if(ANDROID)
     endif()
     target_link_libraries(engine_api PRIVATE log android)
 endif()
+
+# OpenHarmony: the sysroot ships real EGL/GLESv2 — no ANGLE involved.
+# Rendering goes straight to an OHNativeWindow-backed EGLSurface obtained
+# from Flutter's TextureRegistry (zero-copy, same path as Android).
+if(OHOS)
+    target_link_libraries(engine_api PRIVATE
+        EGL
+        GLESv2
+        GLESv3
+        hilog_ndk.z
+    )
+    # The vcpkg static archives (ffmpeg at least) contain hand-written NEON
+    # asm doing ADRP+ADD directly against global symbols (ff_cos_* and
+    # friends). Those relocations are only legal when the definitions bind
+    # locally within this .so — ffmpeg's own shared-library builds pass
+    # -Bsymbolic for exactly this reason; a static ffmpeg linked into a
+    # shared library has to do the same.
+    target_link_options(engine_api PRIVATE "LINKER:-Bsymbolic")
+    message(STATUS "engine_api: OHOS system EGL/GLES2 + hilog linked (-Bsymbolic)")
+endif()

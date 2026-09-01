@@ -3,6 +3,7 @@
 #if defined(ENGINE_API_USE_KRKR2_RUNTIME)
 
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <chrono>
 #include <cmath>
@@ -18,6 +19,7 @@
 
 #include <csignal>
 #include <cstdlib>
+#include <exception>
 #if defined(__ANDROID__)
 #include <android/log.h>
 #include <android/native_window.h>
@@ -25,13 +27,21 @@
 ANativeWindow* krkr_GetNativeWindow();
 void krkr_GetSurfaceDimensions(uint32_t*, uint32_t*);
 #endif
-#if !defined(__ANDROID__)
+#if defined(__OHOS__)
+#include <hilog/log.h>
+#endif
+#if !defined(__ANDROID__) && !defined(__OHOS__)
 #include <execinfo.h>
 #endif
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/sink.h>
 #include <spdlog/spdlog.h>
+#if defined(__OHOS__)
+#include <hilog/log.h>
+// Mirrors cpp/core/environ/ohos/Platform.cpp's KRKR_DOMAIN.
+static constexpr unsigned int kEngineApiHilogDomain = 0x0206;
+#endif
 
 #include "environ/Application.h"
 #include "environ/Platform.h"
@@ -52,6 +62,11 @@ void krkr_GetSurfaceDimensions(uint32_t*, uint32_t*);
 
 int TVPDrawSceneOnce(int interval);
 
+// Static-frame gate perf counters (defined in environ/stubs/ui_stubs.cpp).
+// Fetch-and-clear; called by engine_tick's periodic perf report.
+void TVPGetBlitPerf(uint64_t &calls, uint64_t &skipped, uint64_t &compare_us,
+                    uint64_t &gl_us);
+
 extern "C" void TVPRegisterKrkrGLESPluginAnchor();
 extern "C" void TVPRegisterKrkrLive2DPluginAnchor();
 
@@ -62,6 +77,18 @@ struct engine_handle_s {
   std::thread::id owner_thread;
   bool runtime_owner = false;
   uint64_t tick_count = 0;
+
+  // Software-path perf counters, logged periodically by engine_tick
+  // ("perf:" lines in the engine log / hilog).
+  struct PerfState {
+    uint64_t run_us = 0;    // Application->Run (engine sim + composition)
+    uint64_t draw_us = 0;   // TVPDrawSceneOnce + texture recycle
+    uint64_t read_us = 0;   // glFinish+glReadPixels+flip (pbuffer path)
+    uint64_t reads = 0;     // readbacks actually performed
+    uint64_t dirty = 0;     // ticks that produced new content
+    std::chrono::steady_clock::time_point last_report{};
+    bool last_report_valid = false;
+  } perf;
 
   // Frame state — readback buffer and tracking
   struct FrameState {
@@ -121,6 +148,15 @@ void AndroidInfoLog(const char* fmt, ...) {
   __android_log_vprint(ANDROID_LOG_INFO, "krkr2", fmt, args);
   va_end(args);
 }
+#elif defined(__OHOS__)
+void AndroidInfoLog(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  char buf[512];
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  OH_LOG_Print(LOG_APP, LOG_INFO, 0x0206, "krkr2", "%{public}s", buf);
+}
 #endif
 
 enum class EngineState {
@@ -170,8 +206,8 @@ std::shared_ptr<spdlog::logger> EnsureNamedLogger(const char* name) {
 void CrashSignalHandler(int sig) {
   spdlog::critical("FATAL SIGNAL {} received!", sig);
 
-  // Print a mini backtrace (not available on Android)
-#if !defined(__ANDROID__)
+  // Print a mini backtrace (not available on Android / OHOS musl)
+#if !defined(__ANDROID__) && !defined(__OHOS__)
   void* frames[32];
   int count = backtrace(frames, 32);
   char** symbols = backtrace_symbols(frames, count);
@@ -189,16 +225,39 @@ void CrashSignalHandler(int sig) {
   raise(sig);
 }
 
+void TerminateHandler() {
+  // std::terminate fires (→ SIGABRT) on any uncaught C++ exception; without
+  // this the exception text is lost because app stderr goes nowhere on OHOS.
+  if (std::exception_ptr eptr = std::current_exception()) {
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const std::exception& e) {
+      spdlog::critical("std::terminate: uncaught exception: {}", e.what());
+    } catch (...) {
+      spdlog::critical("std::terminate: uncaught non-std exception");
+    }
+  } else {
+    spdlog::critical("std::terminate called without an active exception");
+  }
+  spdlog::default_logger()->flush();
+  std::abort();
+}
+
 void InstallCrashSignalHandlers() {
   signal(SIGSEGV, CrashSignalHandler);
   signal(SIGABRT, CrashSignalHandler);
   signal(SIGBUS,  CrashSignalHandler);
   signal(SIGFPE,  CrashSignalHandler);
+  std::set_terminate(TerminateHandler);
 }
 
 void EnsureInternalPluginAnchorsLinked() {
   TVPRegisterKrkrGLESPluginAnchor();
+#if !defined(__OHOS__)
+  // Cubism Core ships no OHOS binary; krkrlive2d.cpp is excluded from the
+  // OHOS plugin build, so the anchor is not available there.
   TVPRegisterKrkrLive2DPluginAnchor();
+#endif
 }
 
 void EnsureRuntimeLoggersInitialized() {
@@ -296,6 +355,39 @@ void PushStartupLog(engine_handle_s* impl, const std::string& message) {
 }
 
 void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg& msg) {
+  const auto level_sv = spdlog::level::to_string_view(msg.level);
+  const std::string level(level_sv.data(), level_sv.size());
+  std::string logger(msg.logger_name.data(), msg.logger_name.size());
+  if (logger.empty()) {
+    logger = "core";
+  }
+  const std::string payload(msg.payload.data(), msg.payload.size());
+
+#if defined(__OHOS__)
+  // OHOS has no usable stdout (nothing reaches hilog), so mirror every
+  // runtime log line into $KRKR_FILES_DIR/krkr2-engine.log AND into hilog
+  // (tag "krkr2"). The funnels are independent of the startup queue
+  // lifecycle and therefore also capture lines emitted after the startup
+  // owner is gone (e.g. the termination tail that previously disappeared).
+  {
+    static std::mutex file_mutex;
+    std::lock_guard<std::mutex> guard(file_mutex);
+    OH_LOG_Print(LOG_APP, LOG_INFO, kEngineApiHilogDomain, "krkr2",
+                 "[%{public}s] [%{public}s] %{public}s", logger.c_str(),
+                 level.c_str(), payload.c_str());
+    const char* dir = std::getenv("KRKR_FILES_DIR");
+    if (dir != nullptr && *dir != '\0') {
+      const std::string path = std::string(dir) + "/krkr2-engine.log";
+      FILE* f = fopen(path.c_str(), "ab");
+      if (f != nullptr) {
+        fprintf(f, "[%s] [%s] %s\n", logger.c_str(), level.c_str(),
+                payload.c_str());
+        fclose(f);
+      }
+    }
+  }
+#endif
+
   engine_handle_s* target = nullptr;
   {
     std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
@@ -310,14 +402,6 @@ void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg& msg) {
   if (target == nullptr) {
     return;
   }
-
-  const auto level_sv = spdlog::level::to_string_view(msg.level);
-  const std::string level(level_sv.data(), level_sv.size());
-  std::string logger(msg.logger_name.data(), msg.logger_name.size());
-  if (logger.empty()) {
-    logger = "core";
-  }
-  const std::string payload(msg.payload.data(), msg.payload.size());
 
   std::string line;
   line.reserve(logger.size() + level.size() + payload.size() + 8);
@@ -695,6 +779,40 @@ engine_result_t engine_create(const engine_create_desc_t* desc,
   EnsureRuntimeLoggersInitialized();
   EnsureInternalPluginAnchorsLinked();
   TVPHostSuppressProcessExit = true;
+
+  // Honor the host-provided writable/cache dirs. On OHOS the process has no
+  // stdout and the app sandbox path is only known to the Flutter side, so
+  // the paths must be exported as env vars for the engine (see
+  // environ/ohos/Platform.cpp: TVPGetDefaultFileDir reads KRKR_FILES_DIR,
+  // which also anchors the krkr2-engine.log file funnel).
+  if (desc->writable_path_utf8 != nullptr && desc->writable_path_utf8[0] != '\0') {
+    setenv("KRKR_FILES_DIR", desc->writable_path_utf8, 1);
+  }
+  if (desc->cache_path_utf8 != nullptr && desc->cache_path_utf8[0] != '\0') {
+    setenv("KRKR_CACHE_DIR", desc->cache_path_utf8, 1);
+  }
+#if defined(__OHOS__)
+  {
+    // Funnel self-test: prove env injection + file write + hilog all work.
+    const char* dir = std::getenv("KRKR_FILES_DIR");
+    const std::string path =
+        (dir != nullptr && *dir != '\0')
+            ? std::string(dir) + "/krkr2-engine.log"
+            : std::string("/data/local/tmp/krkr2-engine.log");
+    FILE* f = fopen(path.c_str(), "ab");
+    const char* msg = "engine_create: funnel self-test\n";
+    bool ok = false;
+    if (f != nullptr) {
+      ok = fwrite(msg, 1, strlen(msg), f) == strlen(msg);
+      fclose(f);
+    }
+    OH_LOG_Print(LOG_APP, LOG_INFO, kEngineApiHilogDomain, "krkr2",
+                 "engine_create self-test: KRKR_FILES_DIR=%{public}s "
+                 "file=%{public}s write_ok=%{public}d",
+                 dir != nullptr ? dir : "(null)", path.c_str(),
+                 static_cast<int>(ok));
+  }
+#endif
 
   auto* impl = new (std::nothrow) engine_handle_s();
   if (impl == nullptr) {
@@ -1221,9 +1339,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
   // form->UpdateDrawBuffer() — the actual rendering path.
   // TVPDrawSceneOnce() only restores GL state and calls SwapBuffer,
   // which is insufficient.
+  const auto perf_run_t0 = std::chrono::steady_clock::now();
   if (::Application) {
     ::Application->Run();
   }
+  const auto perf_run_t1 = std::chrono::steady_clock::now();
   ::TVPDrawSceneOnce(0);
 
   // Process deferred texture deletions. iTVPTexture2D::Release() uses
@@ -1233,6 +1353,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
   // indefinitely, causing a memory leak — especially visible in OpenGL
   // mode where each texture also holds GPU resources.
   iTVPTexture2D::RecycleProcess();
+  const auto perf_draw_t1 = std::chrono::steady_clock::now();
+  impl->perf.run_us += std::chrono::duration_cast<std::chrono::microseconds>(
+      perf_run_t1 - perf_run_t0).count();
+  impl->perf.draw_us += std::chrono::duration_cast<std::chrono::microseconds>(
+      perf_draw_t1 - perf_run_t1).count();
 
   if (TVPTerminated) {
     return SetHandleErrorAndReturnLocked(
@@ -1253,29 +1378,47 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     impl->frame.serial += 1;
     impl->frame.ready = true;
   } else if (!impl->render.iosurface_attached) {
-    // Legacy Pbuffer readback path (slow, for backward compatibility)
-    const FrameReadbackLayout layout = GetFrameReadbackLayoutLocked(impl);
-    const size_t required_size =
-        static_cast<size_t>(layout.stride_bytes) *
-        static_cast<size_t>(layout.height);
-    if (impl->frame.rgba.size() != required_size) {
-      impl->frame.rgba.assign(required_size, 0);
-    }
+    // Legacy Pbuffer readback path (slow, for backward compatibility).
+    //
+    // Static-frame gate: when the composited bitmap was unchanged this
+    // tick, FlutterWindowLayer::UpdateDrawBuffer skipped the GL upload
+    // and left the frame-dirty flag clear. Skip the readback too — the
+    // pbuffer still holds the previous (identical) frame, and clearing
+    // rendered_this_tick makes the Flutter side keep its last decoded
+    // image instead of copying + decoding 3.7MB again.
+    if (!krkr::GetEngineEGLContext().ConsumeFrameDirty()) {
+      impl->frame.rendered_this_tick = false;
+    } else {
+      impl->perf.dirty += 1;
+      const auto perf_read_t0 = std::chrono::steady_clock::now();
+      const FrameReadbackLayout layout = GetFrameReadbackLayoutLocked(impl);
+      const size_t required_size =
+          static_cast<size_t>(layout.stride_bytes) *
+          static_cast<size_t>(layout.height);
+      if (impl->frame.rgba.size() != required_size) {
+        impl->frame.rgba.assign(required_size, 0);
+      }
 
-    if (required_size > 0 &&
-        ReadCurrentFrameRgba(layout, impl->frame.rgba.data())) {
-      impl->frame.width = layout.width;
-      impl->frame.height = layout.height;
-      impl->frame.stride_bytes = layout.stride_bytes;
-      impl->frame.ready = true;
-      impl->frame.serial += 1;
-    } else if (!impl->frame.ready && required_size > 0) {
-      std::fill(impl->frame.rgba.begin(), impl->frame.rgba.end(), 0);
-      impl->frame.width = layout.width;
-      impl->frame.height = layout.height;
-      impl->frame.stride_bytes = layout.stride_bytes;
-      impl->frame.ready = true;
-      impl->frame.serial += 1;
+      if (required_size > 0 &&
+          ReadCurrentFrameRgba(layout, impl->frame.rgba.data())) {
+        impl->frame.width = layout.width;
+        impl->frame.height = layout.height;
+        impl->frame.stride_bytes = layout.stride_bytes;
+        impl->frame.ready = true;
+        impl->frame.serial += 1;
+        impl->perf.reads += 1;
+      } else if (!impl->frame.ready && required_size > 0) {
+        std::fill(impl->frame.rgba.begin(), impl->frame.rgba.end(), 0);
+        impl->frame.width = layout.width;
+        impl->frame.height = layout.height;
+        impl->frame.stride_bytes = layout.stride_bytes;
+        impl->frame.ready = true;
+        impl->frame.serial += 1;
+        impl->perf.reads += 1;
+      }
+      const auto perf_read_t1 = std::chrono::steady_clock::now();
+      impl->perf.read_us += std::chrono::duration_cast<
+          std::chrono::microseconds>(perf_read_t1 - perf_read_t0).count();
     }
   } else {
     // IOSurface mode — just increment frame serial, no readback needed.
@@ -1287,6 +1430,100 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
 
   ClearHandleErrorLocked(impl);
   SetThreadError(nullptr);
+
+  // Periodic software-path perf report. µs counters are per-report-window;
+  // ub=UpdateDrawBuffer CPU-path calls, skip=identical frames it skipped.
+  if (impl->tick_count % 120 == 0) {
+    const auto now = std::chrono::steady_clock::now();
+    double span_s = 2.0;
+    if (impl->perf.last_report_valid) {
+      span_s = std::chrono::duration_cast<std::chrono::duration<double>>(
+          now - impl->perf.last_report).count();
+      if (span_s <= 0) span_s = 2.0;
+    }
+    uint64_t ub_calls = 0, ub_skipped = 0, ub_cmp_us = 0, ub_gl_us = 0;
+    TVPGetBlitPerf(ub_calls, ub_skipped, ub_cmp_us, ub_gl_us);
+    // Application->Run() cost breakdown (defined in Application.cpp /
+    // SystemControl.cpp; relaxed atomics, diagnostics only).
+    extern std::atomic<uint64_t> g_perf_msg_us, g_perf_timer_us,
+        g_perf_watch_us, g_perf_runs, g_perf_deliver_us, g_perf_tickbeat_us,
+        g_perf_gov_us, g_perf_rehash_us;
+    extern std::atomic<uint64_t> g_perf_n_events, g_perf_n_inpevents,
+        g_perf_max_queue, g_perf_idle_us, g_perf_cont_us, g_perf_wupd_us;
+    // Compose/invalidation counters (LayerIntf.cpp / LayerManager.cpp)
+    extern std::atomic<uint64_t> g_perf_compose_us, g_perf_compose_n,
+        g_perf_compose_rects, g_perf_compose_area;
+    extern std::atomic<uint64_t> g_perf_inval_n, g_perf_inval_area;
+    const uint64_t compose_us = g_perf_compose_us.exchange(0);
+    const uint64_t compose_n = g_perf_compose_n.exchange(0);
+    const uint64_t compose_rects = g_perf_compose_rects.exchange(0);
+    const uint64_t compose_area = g_perf_compose_area.exchange(0);
+    const uint64_t inval_n = g_perf_inval_n.exchange(0);
+    const uint64_t inval_area = g_perf_inval_area.exchange(0);
+    const uint64_t idle_us = g_perf_idle_us.exchange(0);
+    const uint64_t cont_us = g_perf_cont_us.exchange(0);
+    const uint64_t wupd_us = g_perf_wupd_us.exchange(0);
+    const uint64_t msg_us = g_perf_msg_us.exchange(0);
+    const uint64_t timer_us = g_perf_timer_us.exchange(0);
+    const uint64_t watch_us = g_perf_watch_us.exchange(0);
+    const uint64_t runs = g_perf_runs.exchange(0);
+    const uint64_t deliver_us = g_perf_deliver_us.exchange(0);
+    const uint64_t beat_us = g_perf_tickbeat_us.exchange(0);
+    const uint64_t gov_us = g_perf_gov_us.exchange(0);
+    const uint64_t rehash_us = g_perf_rehash_us.exchange(0);
+    const uint64_t n_events = g_perf_n_events.exchange(0);
+    const uint64_t n_inpevents = g_perf_n_inpevents.exchange(0);
+    const uint64_t max_queue = g_perf_max_queue.exchange(0);
+    // One-shot layer-structure dump on the first fully-idle report window
+    // (120 composes, none dirty) past the earliest boot — the steady title.
+    static bool s_layer_dump_done = false;
+    if (!s_layer_dump_done && runs == 120 && impl->perf.dirty == 0 &&
+        impl->tick_count > 360) {
+      s_layer_dump_done = true;
+      // Declared in visual/WindowIntf.h (pulled in via visual/impl/WindowImpl.h)
+      tjs_int nwin = TVPGetWindowCount();
+      for (tjs_int i = 0; i < nwin; i++) {
+        tTJSNI_Window *win = TVPGetWindowListAt(i);
+        if (win) {
+          spdlog::warn("layerdump window {} begin", i);
+          win->DumpPrimaryLayerStructure();
+          spdlog::warn("layerdump window {} end", i);
+        }
+      }
+    }
+    spdlog::info(
+        "perf: span={:.2f}s run={:.1f}ms draw={:.1f}ms read={:.1f}ms "
+        "reads={} dirty={} ub={} skip={} cmp={:.1f}ms ubgl={:.1f}ms | "
+        "brk: msg={:.1f}ms timer={:.1f}ms watch={:.1f}ms "
+        "(deliver={:.1f}ms beat={:.1f}ms gov={:.1f}ms rehash={:.1f}ms) "
+        "runs={} nev={} nie={} maxq={} idle={:.1f}ms cont={:.1f}ms "
+        "wupd={:.1f}ms | cmp: compose={:.1f}ms n={} rects={} area={}px "
+        "inval_n={} inval_area={}px",
+        span_s, impl->perf.run_us / 1000.0, impl->perf.draw_us / 1000.0,
+        impl->perf.read_us / 1000.0,
+        static_cast<unsigned long long>(impl->perf.reads),
+        static_cast<unsigned long long>(impl->perf.dirty),
+        static_cast<unsigned long long>(ub_calls),
+        static_cast<unsigned long long>(ub_skipped), ub_cmp_us / 1000.0,
+        ub_gl_us / 1000.0, msg_us / 1000.0, timer_us / 1000.0,
+        watch_us / 1000.0, deliver_us / 1000.0, beat_us / 1000.0,
+        gov_us / 1000.0, rehash_us / 1000.0,
+        static_cast<unsigned long long>(runs),
+        static_cast<unsigned long long>(n_events),
+        static_cast<unsigned long long>(n_inpevents),
+        static_cast<unsigned long long>(max_queue), idle_us / 1000.0,
+        cont_us / 1000.0, wupd_us / 1000.0,
+        compose_us / 1000.0,
+        static_cast<unsigned long long>(compose_n),
+        static_cast<unsigned long long>(compose_rects),
+        static_cast<unsigned long long>(compose_area),
+        static_cast<unsigned long long>(inval_n),
+        static_cast<unsigned long long>(inval_area));
+    impl->perf = {};
+    impl->perf.last_report = now;
+    impl->perf.last_report_valid = true;
+  }
+
 #if defined(__ANDROID__)
   if (impl->tick_count % 120 == 0) {
     AndroidInfoLog("engine_tick: tick=%llu rendered=%d serial=%llu native_window=%d iosurface=%d frame_ready=%d",
@@ -1931,7 +2168,7 @@ engine_result_t engine_set_render_target_surface(engine_handle_t handle,
         "engine_open_game must succeed before engine_set_render_target_surface");
   }
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__OHOS__)
   auto& egl = krkr::GetEngineEGLContext();
   if (!egl.IsValid()) {
     return SetHandleErrorAndReturnLocked(
@@ -1956,7 +2193,7 @@ engine_result_t engine_set_render_target_surface(engine_handle_t handle,
       return SetHandleErrorAndReturnLocked(
           impl,
           ENGINE_RESULT_INTERNAL_ERROR,
-          "failed to attach Android Surface as render target");
+          "failed to attach native window as render target");
     }
     impl->render.native_window_attached = true;
     spdlog::info("engine_set_render_target_surface: attached {}x{}", width, height);
