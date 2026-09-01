@@ -30,6 +30,7 @@ struct Layer {
     int z = 0;                 // higher = closer to viewer (ID leading number)
     float u0 = 0, v0 = 0, u1 = 1, v1 = 1;  // clip region (normalized UV)
     float ax = 0, ay = 0;      // anchor point within the image
+    float sx = 1.0f, sy = 1.0f; // xscale/yscale (lyprop percent / 100), pivot = anchor
     bool own_pos = false;      // lyprop set an explicit position on this layer
     // [lyprop draggable/dragarea] — the framework's slider pins are
     // draggable within a rect given as {left, top, right, bottom} offsets
@@ -80,6 +81,10 @@ public:
     // Topmost visible textured layer whose rect contains the stage point.
     void EffectiveRect(const Layer &l, float *ex, float *ey,
                        float *ea, bool *ev) const;
+    // KrKr2-Next: full effective transform — origin AND displayed size after
+    // the ancestor chain's translations and anchored scales are composed.
+    void EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
+                       float *eh, float *ea, bool *ev) const;
     std::string HitLayer(float x, float y) const;
 
     // [var system="get_layer_info"] — return the layer's stored position
@@ -96,6 +101,9 @@ public:
 
     int StageWidth() const { return stage_w_; }
     int StageHeight() const { return stage_h_; }
+
+    // KrKr2-Next: read-only view of the layer table (tests / diagnostics).
+    const std::vector<Layer> &Layers() const { return layers_; }
 
     // KrKr2-Next host hook: monotonically increasing layer-state revision.
     // Bumped by every mutation (LoadImage / SetProps / DeleteLayer / SetText /

@@ -27,3 +27,11 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   iTXt keyword→text table; the framework's `getfgfilepos` reads the
   `comment` = "pos,x,y,…" anchor of face-part sprites, which were otherwise
   drawn at 0,0 and invisible) and a no-op `e:unbindSurface`.
+- `src/render/compositor.{h,cpp}` — `EffectiveRect` now composes a proper
+  layer transform down the id chain (offset relative to the parent + scale
+  about the layer's own anchor; `xscale`/`yscale` parsed as percent, effective
+  size returned to Draw/HitLayer) instead of the upstream absolute/inherit
+  heuristic that subtracted the anchor. Fixes BGs dragged to -640,-360 by the
+  anchored `1.0` root, face parts on positioned character containers, choice
+  buttons under positioned parents, and keeps the pull-out toolbar hidden at
+  `left=1240` as the real engine does. `Layers()` accessor added for tests.

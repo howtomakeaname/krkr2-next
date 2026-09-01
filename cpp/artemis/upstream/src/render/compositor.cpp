@@ -75,60 +75,72 @@ int SectionCount(const std::string &id) {
 
 void Compositor::EffectiveRect(const Layer &l, float *ex, float *ey,
                                float *ea, bool *ev) const {
-    // Position semantics (validated against the real engine on device):
-    //  * a layer with its OWN explicit position (own_pos) renders at its
-    //    stored left/top ABSOLUTE stage coordinates (the message window, the
-    //    CG containers, the top-bar dock and the title buttons all place
-    //    themselves directly);
-    //  * a layer WITHOUT an explicit position (button art "500.d.1.0",
-    //    message text "1.80.mw.adv_adv") inherits the nearest positioned
-    //    ancestor's final position exactly — coordinates do NOT double-stack
-    //    along the chain;
-    //  * anchor(x/y) is a scale/rotation pivot only (with scale=1/rot=0 it
-    //    does not shift the draw origin); anchored children inherit the
-    //    ancestor's final position directly;
-    //  * a DRAGGABLE slider pin stores a RELATIVE offset in its track; it is
-    //    added to the nearest positioned ancestor's absolute position.
-    float a = l.alpha;
-    bool vis = l.visible;
-    float x = 0, y = 0;
-    float anc_x = 0, anc_y = 0;
-    bool anchored = false;
-    std::string id = l.id;
-    size_t dot;
-    while ((dot = id.rfind('.')) != std::string::npos) {
-        id = id.substr(0, dot);
-        for (const auto &p : layers_) {
-            if (p.id != id) continue;
-            a *= p.alpha;
-            vis = vis && p.visible;
-            if (!anchored && p.own_pos) {
-                float ax2, ay2, aa; bool av;
-                EffectiveRect(p, &ax2, &ay2, &aa, &av);
-                anc_x = ax2; anc_y = ay2; anchored = true;
+    float w, h;
+    EffectiveRect(l, ex, ey, &w, &h, ea, ev);
+}
+
+// KrKr2-Next: layer transform model, replacing the upstream absolute/inherit
+// heuristic. Each layer contributes
+//     T = translate(x, y) . translate(ax, ay) . scale(sx, sy) . translate(-ax, -ay)
+// i.e. an offset RELATIVE to its parent plus a scale about its own anchor,
+// and a layer's world transform is the composition of every ancestor's T
+// (root first). For axis-aligned scale+translate this collapses to
+//     origin' = origin + scale * (x + ax * (1 - sx)),   scale' = scale * sx
+// which reproduces the framework's layouts observed on device:
+//   * `1.0 {left=0 top=0 anchor=640,360 xscale=100}` covers the stage
+//     (the old `x - ax` rule pushed it to -640,-360 and dragged every BG
+//     with it);
+//   * face parts `<char>.<part> {x=f.x-z.x ...}` land on the head of a
+//     positioned character container; choice buttons `1.80.120.N.0
+//     {left=360}` stack under `1.80.120.N {top=284/368}`;
+//   * the pull-out toolbar `1.80.tb.tb {left=1240}` keeps its buttons
+//     off-screen except the 40px tab, as the real engine does;
+//   * the title character `500.b.1 {left=120 top=150 anchor=592,160
+//     xscale=200}` doubles around its anchor (top-left -472,-10 — the case
+//     the old `x - ax` rule was fitted to, valid only for scale 2).
+// Anchors without scale/rotation therefore never move a layer; a layer
+// without an explicit position simply inherits its parent's origin.
+void Compositor::EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
+                               float *eh, float *ea, bool *ev) const {
+    // Collect the ancestor chain root-first ("a.b.c" -> "a", "a.b").
+    std::vector<const Layer *> chain;
+    {
+        std::string id = l.id;
+        size_t dot;
+        while ((dot = id.rfind('.')) != std::string::npos) {
+            id = id.substr(0, dot);
+            for (const auto &p : layers_) {
+                if (p.id == id) { chain.push_back(&p); break; }
             }
-            break;
         }
     }
-    if (l.own_pos && l.draggable) {
-        x = anc_x + l.x - l.ax; y = anc_y + l.y - l.ay;
-    } else if (l.own_pos) {
-        x = l.x - l.ax; y = l.y - l.ay;   // absolute stage position
-    } else if (anchored) {
-        x = anc_x; y = anc_y;             // inherit ancestor's final position
-    } else {
-        x = l.x - l.ax; y = l.y - l.ay;
-    }
-    *ex = x; *ey = y; *ea = a; *ev = vis;
+    float ox = 0, oy = 0, sx = 1, sy = 1;
+    float a = 1.0f;
+    bool vis = true;
+    auto apply = [&](const Layer &n) {
+        a *= n.alpha;
+        vis = vis && n.visible;
+        // n.x/n.y stay 0 for plain group layers; SetText's default message
+        // placement and draggable pins store relative offsets here too.
+        ox += sx * (n.x + n.ax * (1.0f - n.sx));
+        oy += sy * (n.y + n.ay * (1.0f - n.sy));
+        sx *= n.sx;
+        sy *= n.sy;
+    };
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) apply(**it);
+    apply(l);
+    *ex = ox; *ey = oy;
+    *ew = l.w * sx; *eh = l.h * sy;
+    *ea = a; *ev = vis;
 }
 
 std::string Compositor::HitLayer(float x, float y) const {
     const Layer *best = nullptr;
     for (const auto &l : layers_) {
-        float ex, ey, ea; bool ev;
-        EffectiveRect(l, &ex, &ey, &ea, &ev);
+        float ex, ey, ew, eh, ea; bool ev;
+        EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
         if (!ev || !l.texture) continue;
-        if (x < ex || y < ey || x >= ex + l.w || y >= ey + l.h) continue;
+        if (x < ex || y < ey || x >= ex + ew || y >= ey + eh) continue;
         if (!best) best = &l;
         else {
             const int c = ZCmp(l.id, best->id);
@@ -440,6 +452,8 @@ void Compositor::SetProps(const std::string &id,
                 l.alpha = a > 1.0f ? a / 255.0f : a;   // script uses 0-255
             }
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
+            else if (kv.first == "xscale") { const float v = std::stof(kv.second); if (v > 0) l.sx = v / 100.0f; }
+            else if (kv.first == "yscale") { const float v = std::stof(kv.second); if (v > 0) l.sy = v / 100.0f; }
             else if (kv.first == "ownpos") l.own_pos = true;
             else if (kv.first == "anchory") l.ay = std::stof(kv.second);
             else if (kv.first == "visible") l.visible = (kv.second != "0");
@@ -532,12 +546,12 @@ void Compositor::Draw() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     for (const Layer *l : sorted) {
-        float ex, ey, ea; bool ev;
-        EffectiveRect(*l, &ex, &ey, &ea, &ev);
+        float ex, ey, ew, eh, ea; bool ev;
+        EffectiveRect(*l, &ex, &ey, &ew, &eh, &ea, &ev);
         if (!ev || !l->texture) continue;
         glBindTexture(GL_TEXTURE_2D, l->texture);
         glUniform1f(prog_.u_alpha, ea);
-        float x0 = ex, y0 = ey, x1 = ex + l->w, y1 = ey + l->h;
+        float x0 = ex, y0 = ey, x1 = ex + ew, y1 = ey + eh;
         // interleaved: x, y, u, v per vertex (triangle strip)
         float verts[16] = {
             x0, y0, l->u0, l->v0,   x1, y0, l->u1, l->v0,
@@ -651,6 +665,8 @@ void Compositor::SetProps(const std::string &id,
                 l.alpha = a > 1.0f ? a / 255.0f : a;
             }
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
+            else if (kv.first == "xscale") { const float v = std::stof(kv.second); if (v > 0) l.sx = v / 100.0f; }
+            else if (kv.first == "yscale") { const float v = std::stof(kv.second); if (v > 0) l.sy = v / 100.0f; }
             else if (kv.first == "ownpos") l.own_pos = true;
             else if (kv.first == "anchory") l.ay = std::stof(kv.second);
             else if (kv.first == "visible") l.visible = (kv.second != "0");
