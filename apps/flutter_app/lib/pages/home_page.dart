@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_info.dart';
 import '../services/game_manager.dart';
+import '../ui/ui.dart';
 import '../utils/xp3_utils.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
@@ -100,15 +102,19 @@ class _HomePageState extends State<HomePage> {
       _customDylibPath = null;
     } else {
       final modeStr = prefs.getString(PrefsKeys.engineMode);
-      _engineMode = modeStr == PrefsKeys.engineModeCustom ? EngineMode.custom : EngineMode.builtIn;
+      _engineMode = modeStr == PrefsKeys.engineModeCustom
+          ? EngineMode.custom
+          : EngineMode.builtIn;
       _customDylibPath = prefs.getString(PrefsKeys.dylibPath);
     }
     _perfOverlay = prefs.getBool(PrefsKeys.perfOverlay) ?? false;
     _fpsLimitEnabled = prefs.getBool(PrefsKeys.fpsLimitEnabled) ?? false;
     _targetFps = prefs.getInt(PrefsKeys.targetFps) ?? PrefsKeys.defaultFps;
-    if (!PrefsKeys.fpsOptions.contains(_targetFps)) _targetFps = PrefsKeys.defaultFps;
+    if (!PrefsKeys.fpsOptions.contains(_targetFps))
+      _targetFps = PrefsKeys.defaultFps;
     _renderer = prefs.getString(PrefsKeys.renderer) ?? PrefsKeys.rendererOpengl;
-    _angleBackend = prefs.getString(PrefsKeys.angleBackend) ?? PrefsKeys.angleBackendGles;
+    _angleBackend =
+        prefs.getString(PrefsKeys.angleBackend) ?? PrefsKeys.angleBackendGles;
     _forceLandscape = prefs.getBool(PrefsKeys.forceLandscape) ?? true;
     await _gameManager.load();
     await _gameManager.applyPendingPlaySession();
@@ -171,9 +177,11 @@ class _HomePageState extends State<HomePage> {
     }
 
     final toRemove = _gameManager.games
-        .where((g) =>
-            g.path.startsWith(_iosGamesDir!) &&
-            !scannedNames.contains(p.basename(g.path)))
+        .where(
+          (g) =>
+              g.path.startsWith(_iosGamesDir!) &&
+              !scannedNames.contains(p.basename(g.path)),
+        )
         .map((g) => g.path)
         .toList();
     for (final path in toRemove) {
@@ -192,34 +200,23 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Material(
-        color: Theme.of(ctx).colorScheme.surface,
-        borderRadius: sheetRadius,
-        clipBehavior: Clip.antiAlias,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.folder_open),
-                  title: Text(l10n.selectGameDirectory),
-                  onTap: () => Navigator.pop(ctx, 'directory'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.archive),
-                  title: Text(l10n.selectGameArchive),
-                  onTap: () => Navigator.pop(ctx, 'xp3'),
-                ),
-              ],
-            ),
+    final source = await UiBottomSheet.show<String>(
+      context,
+      title: l10n.addGame,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          UiListTile(
+            icon: LucideIcons.folderOpen,
+            title: l10n.selectGameDirectory,
+            onTap: () => Navigator.pop(context, 'directory'),
           ),
-        ),
+          UiListTile(
+            icon: LucideIcons.archive,
+            title: l10n.selectGameArchive,
+            onTap: () => Navigator.pop(context, 'xp3'),
+          ),
+        ],
       ),
     );
     if (source == null || !mounted) return;
@@ -237,10 +234,8 @@ class _HomePageState extends State<HomePage> {
       await _addGameFromSandbox(pickDirectory: true);
       return;
     }
-    final String? selectedDirectory =
-        await FilePicker.platform.getDirectoryPath(
-      dialogTitle: l10n.selectGameDirectory,
-    );
+    final String? selectedDirectory = await FilePicker.platform
+        .getDirectoryPath(dialogTitle: l10n.selectGameDirectory);
     if (selectedDirectory == null || !mounted) return;
 
     final game = GameInfo(path: selectedDirectory);
@@ -250,11 +245,10 @@ class _HomePageState extends State<HomePage> {
         setState(() {});
         _offerScrapeAfterAdd(selectedDirectory);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.gameAlreadyExists(game.displayTitle)),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.gameAlreadyExists(game.displayTitle),
+          type: UiSnackbarType.warning,
         );
       }
     }
@@ -272,11 +266,10 @@ class _HomePageState extends State<HomePage> {
       final realPath = await _platformChannel.invokeMethod<String>('pickFile');
       if (realPath == null || !mounted) return;
       if (!realPath.toLowerCase().endsWith('.xp3')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.selectGameArchive),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.selectGameArchive,
+          type: UiSnackbarType.warning,
         );
         return;
       }
@@ -287,11 +280,10 @@ class _HomePageState extends State<HomePage> {
           setState(() {});
           _offerScrapeAfterAdd(realPath);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(l10n.gameAlreadyExists(p.basename(realPath))),
-              behavior: SnackBarBehavior.floating,
-            ),
+          UiSnackbar.show(
+            context,
+            message: l10n.gameAlreadyExists(p.basename(realPath)),
+            type: UiSnackbarType.warning,
           );
         }
       }
@@ -302,25 +294,25 @@ class _HomePageState extends State<HomePage> {
       // Using getDirectoryPath() causes macOS to grant powerbox-level access to the entire folder,
       // which persists across app launches and allows the engine to open all files within the directory.
       await _showMacosImportGuide();
-      
+
       final selectedDir = await FilePicker.platform.getDirectoryPath(
         dialogTitle: l10n.selectGameArchive,
       );
       if (selectedDir == null || !mounted) return;
 
-      final xp3Files = Directory(selectedDir)
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.toLowerCase().endsWith('.xp3'))
-          .toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
+      final xp3Files =
+          Directory(selectedDir)
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.toLowerCase().endsWith('.xp3'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path));
 
       if (xp3Files.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.selectGameArchive),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.selectGameArchive,
+          type: UiSnackbarType.warning,
         );
         return;
       }
@@ -330,10 +322,7 @@ class _HomePageState extends State<HomePage> {
       if (xp3Files.length == 1) {
         selectedFile = xp3Files.first;
       } else {
-        selectedFile = await showDialog<File>(
-          context: context,
-          builder: (ctx) => _Xp3PickerDialog(xp3Files: xp3Files),
-        );
+        selectedFile = await _pickXp3File(xp3Files);
         if (selectedFile == null || !mounted) return;
       }
 
@@ -344,11 +333,10 @@ class _HomePageState extends State<HomePage> {
           setState(() {});
           _offerScrapeAfterAdd(selectedFile.path);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(l10n.gameAlreadyExists(p.basename(selectedFile.path))),
-              behavior: SnackBarBehavior.floating,
-            ),
+          UiSnackbar.show(
+            context,
+            message: l10n.gameAlreadyExists(p.basename(selectedFile.path)),
+            type: UiSnackbarType.warning,
           );
         }
       }
@@ -376,11 +364,10 @@ class _HomePageState extends State<HomePage> {
 
     if (xp3Files.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.selectGameArchive),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.selectGameArchive,
+          type: UiSnackbarType.warning,
         );
       }
       return;
@@ -401,14 +388,13 @@ class _HomePageState extends State<HomePage> {
       if (addedCount > 0) {
         setState(() {});
         if (addedCount == 1 && lastAddedPath != null) {
-          _offerScrapeAfterAdd(lastAddedPath!);
+          _offerScrapeAfterAdd(lastAddedPath);
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.gameAlreadyExists(xp3Files.first.name)),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.gameAlreadyExists(xp3Files.first.name),
+          type: UiSnackbarType.warning,
         );
       }
     }
@@ -463,10 +449,7 @@ class _HomePageState extends State<HomePage> {
       // Nothing side-loaded yet. On OHOS the only way to get multi-GB game
       // data into the sandbox (short of shipping it in the HAP) is for the
       // app itself to fetch it, so offer a network import before giving up.
-      final url = await showDialog<String>(
-        context: context,
-        builder: (ctx) => _OhosNetworkImportDialog(hintPath: docDir.path),
-      );
+      final url = await _showOhosNetworkImport(docDir.path);
       if (url == null || url.isEmpty || !mounted) return;
       await _downloadAndAddGame(url);
       return;
@@ -478,13 +461,11 @@ class _HomePageState extends State<HomePage> {
       // (registered as a game but unusable), and re-importing resumes the
       // partial file in place instead of restarting the multi-GB download.
       final registered = _gameManager.games.map((g) => g.path).toSet();
-      final allRegistered =
-          candidates.every((f) => registered.contains(f.path));
+      final allRegistered = candidates.every(
+        (f) => registered.contains(f.path),
+      );
       if (allRegistered) {
-        final url = await showDialog<String>(
-          context: context,
-          builder: (ctx) => _OhosNetworkImportDialog(hintPath: docDir.path),
-        );
+        final url = await _showOhosNetworkImport(docDir.path);
         if (url == null || url.isEmpty || !mounted) return;
         await _downloadAndAddGame(url);
         return;
@@ -495,10 +476,7 @@ class _HomePageState extends State<HomePage> {
     if (candidates.length == 1) {
       selected = candidates.first;
     } else {
-      final picked = await showDialog<File>(
-        context: context,
-        builder: (ctx) => _Xp3PickerDialog(xp3Files: candidates.toList()),
-      );
+      final picked = await _pickXp3File(candidates.toList());
       if (picked == null || !mounted) return;
       selected = picked;
     }
@@ -510,14 +488,104 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
       _offerScrapeAfterAdd(selected.path);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(l10n.gameAlreadyExists(p.basename(selected.path))),
-          behavior: SnackBarBehavior.floating,
-        ),
+      UiSnackbar.show(
+        context,
+        message: l10n.gameAlreadyExists(p.basename(selected.path)),
+        type: UiSnackbarType.warning,
       );
     }
+  }
+
+  /// OHOS 网络导入弹窗：输入 URL 拉取 .xp3 到应用沙箱。
+  Future<String?> _showOhosNetworkImport(String hintPath) {
+    final l10n = AppLocalizations.of(context)!;
+    // The emulator debug bridge (`hdc rport tcp:8080 tcp:8080`) forwards the
+    // device's loopback:8080 to the development host, so this default works
+    // with any static file server on the host.
+    const defaultUrl = 'http://127.0.0.1:8080/data.xp3';
+    // Build marker: bumped whenever the import flow changes, so the live
+    // build can be identified from a screenshot (v2: resume + re-import).
+    const flowVersion = 'v4-watchdog';
+    final controller = TextEditingController(text: defaultUrl);
+    final future = UiDialog.show<String>(
+      context,
+      title: l10n.selectGameArchive,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '($flowVersion)\n$hintPath',
+            style: context.uiType.footnote.copyWith(
+              fontFamily: 'monospace',
+              color: context.uiColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: UiSpacing.md),
+          UiInput(controller: controller, label: 'URL'),
+        ],
+      ),
+      actions: [
+        UiDialogAction(label: l10n.cancel),
+        UiDialogAction(
+          label: l10n.addGame,
+          isDefault: true,
+          onPressed: () => Navigator.pop(context, controller.text.trim()),
+        ),
+      ],
+    );
+    // 等退场动画结束后再释放输入控制器，避免动画期间访问已释放对象。
+    future.whenComplete(
+      () => Future<void>.delayed(
+        const Duration(milliseconds: 500),
+        controller.dispose,
+      ),
+    );
+    return future;
+  }
+
+  /// 目录里有多个 XP3 时让用户选择主归档（默认选中第一个）。
+  Future<File?> _pickXp3File(List<File> xp3Files) {
+    final l10n = AppLocalizations.of(context)!;
+    final selected = ValueNotifier<int>(0);
+    final future = UiDialog.show<File>(
+      context,
+      title: l10n.selectGameArchive,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 360),
+        child: ValueListenableBuilder<int>(
+          valueListenable: selected,
+          builder: (ctx, idx, _) => ListView.builder(
+            shrinkWrap: true,
+            itemCount: xp3Files.length,
+            itemBuilder: (ctx, i) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: UiSpacing.xs),
+              child: UiRadio<int>(
+                value: i,
+                groupValue: idx,
+                onChanged: (v) => selected.value = v,
+                label: p.basename(xp3Files[i].path),
+              ),
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        UiDialogAction(label: l10n.cancel),
+        UiDialogAction(
+          label: l10n.addGame,
+          isDefault: true,
+          onPressed: () => Navigator.pop(context, xp3Files[selected.value]),
+        ),
+      ],
+    );
+    future.whenComplete(
+      () => Future<void>.delayed(
+        const Duration(milliseconds: 500),
+        selected.dispose,
+      ),
+    );
+    return future;
   }
 
   /// Downloads a game archive over HTTP into the sandbox and registers it.
@@ -528,27 +596,33 @@ class _HomePageState extends State<HomePage> {
   Future<void> _downloadAndAddGame(String url) async {
     final l10n = AppLocalizations.of(context)!;
     final docDir = await getApplicationDocumentsDirectory();
-    final name = url.split('/').lastWhere((s) => s.isNotEmpty,
-        orElse: () => 'data.xp3');
+    final name = url
+        .split('/')
+        .lastWhere((s) => s.isNotEmpty, orElse: () => 'data.xp3');
     final dest = File(p.join(docDir.path, name));
 
     final progress = ValueNotifier<String>('');
     // ignore: unawaited_futures
-    showDialog<void>(
-      context: context,
+    UiDialog.show<void>(
+      context,
       barrierDismissible: false,
-      builder: (ctx) => ValueListenableBuilder<String>(
+      title: name,
+      content: ValueListenableBuilder<String>(
         valueListenable: progress,
-        builder: (ctx, text, _) => AlertDialog(
-          title: Text(name, style: const TextStyle(fontFamily: 'monospace')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 12),
-              Text(text),
-            ],
-          ),
+        builder: (ctx, text, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const UiLoader(),
+            const SizedBox(height: UiSpacing.md),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: ctx.uiType.footnote.copyWith(
+                fontFamily: 'monospace',
+                color: ctx.uiColors.textTertiary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -595,14 +669,17 @@ class _HomePageState extends State<HomePage> {
               total = received + response.contentLength!;
             }
           }
-          final sink = dest.openWrite(mode: received > 0 ? FileMode.append : FileMode.write);
+          final sink = dest.openWrite(
+            mode: received > 0 ? FileMode.append : FileMode.write,
+          );
           var lastPace = 0;
           try {
             // 30s inter-chunk watchdog: a dropped tunnel can leave the
             // stream open-but-silent forever; timeout throws and the outer
             // loop resumes from the last flushed offset.
-            await for (final chunk
-                in response.stream.timeout(const Duration(seconds: 30))) {
+            await for (final chunk in response.stream.timeout(
+              const Duration(seconds: 30),
+            )) {
               sink.add(chunk);
               received += chunk.length;
               // Pace multi-GB writes: saturating the guest's page cache at
@@ -633,9 +710,11 @@ class _HomePageState extends State<HomePage> {
         await Future<void>.delayed(const Duration(milliseconds: 500));
       }
       if (total > 0 && received < total) {
-        throw Exception('download incomplete: '
-            '${(received / 1048576).toStringAsFixed(1)} MB of '
-            '${(total / 1048576).toStringAsFixed(1)} MB');
+        throw Exception(
+          'download incomplete: '
+          '${(received / 1048576).toStringAsFixed(1)} MB of '
+          '${(total / 1048576).toStringAsFixed(1)} MB',
+        );
       }
       progress.value =
           '${(received / 1048576).toStringAsFixed(1)} MB'
@@ -654,12 +733,11 @@ class _HomePageState extends State<HomePage> {
         if (await dest.exists()) await dest.delete();
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 6),
-          ),
+        UiSnackbar.show(
+          context,
+          message: error,
+          type: UiSnackbarType.error,
+          duration: const Duration(seconds: 6),
         );
       }
       return;
@@ -672,11 +750,10 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
       _offerScrapeAfterAdd(dest.path);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.gameAlreadyExists(p.basename(dest.path))),
-          behavior: SnackBarBehavior.floating,
-        ),
+      UiSnackbar.show(
+        context,
+        message: l10n.gameAlreadyExists(p.basename(dest.path)),
+        type: UiSnackbarType.warning,
       );
     }
   }
@@ -689,8 +766,7 @@ class _HomePageState extends State<HomePage> {
       if (depth > 3) return;
       try {
         for (final entity in dir.listSync(followLinks: false)) {
-          if (entity is File &&
-              entity.path.toLowerCase().endsWith('.xp3')) {
+          if (entity is File && entity.path.toLowerCase().endsWith('.xp3')) {
             results.add(entity);
           } else if (entity is Directory) {
             walk(entity, depth + 1);
@@ -721,7 +797,9 @@ class _HomePageState extends State<HomePage> {
       for (final entity in entries) {
         if (entity is! Directory) continue;
         try {
-          final looksLikeGame = entity.listSync(followLinks: false).any(
+          final looksLikeGame = entity
+              .listSync(followLinks: false)
+              .any(
                 (child) =>
                     child is File &&
                     (child.path.toLowerCase().endsWith('.xp3') ||
@@ -745,101 +823,90 @@ class _HomePageState extends State<HomePage> {
 
   void _showIosImportGuide() {
     final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.importGames),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.importGamesDesc, style: const TextStyle(fontSize: 14)),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.importStep1, style: const TextStyle(fontSize: 13)),
-                  const SizedBox(height: 6),
-                  Text(l10n.importStep2,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text(l10n.importStep3,
-                      style: const TextStyle(fontSize: 13)),
-                  const SizedBox(height: 6),
-                  Text(l10n.importStep4,
-                      style: const TextStyle(fontSize: 13)),
-                ],
-              ),
+    UiDialog.show<void>(
+      context,
+      title: l10n.importGames,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.importGamesDesc,
+            style: context.uiType.body.copyWith(fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.uiColors.groupedBackground,
+              borderRadius: UiRadius.brSm,
             ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.gamesDirectory,
-              style: TextStyle(
-                fontSize: 12,
-                fontFamily: 'monospace',
-                color: Theme.of(ctx)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.5),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.importStep1,
+                  style: context.uiType.body.copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.importStep2,
+                  style: context.uiType.body.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.importStep3,
+                  style: context.uiType.body.copyWith(fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.importStep4,
+                  style: context.uiType.body.copyWith(fontSize: 13),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.gotIt),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.gamesDirectory,
+            style: context.uiType.footnote.copyWith(
+              fontFamily: 'monospace',
+              color: context.uiColors.textTertiary,
+            ),
           ),
         ],
       ),
+      actions: [UiDialogAction(label: l10n.gotIt, isDefault: true)],
     );
   }
 
   Future<void> _showMacosImportGuide() async {
     final l10n = AppLocalizations.of(context)!;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.importGames),
-        content: Text(
-          l10n.macosImportTip,
-          style: const TextStyle(fontSize: 14),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.gotIt),
-          ),
-        ],
-      ),
+    await UiDialog.show<void>(
+      context,
+      title: l10n.importGames,
+      message: l10n.macosImportTip,
+      actions: [UiDialogAction(label: l10n.gotIt, isDefault: true)],
     );
   }
 
   Future<void> _removeGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.removeGame),
-        content: Text(l10n.removeGameConfirm(game.displayTitle)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.remove),
-          ),
-        ],
-      ),
+    final confirmed = await UiDialog.show<bool>(
+      context,
+      title: l10n.removeGame,
+      message: l10n.removeGameConfirm(game.displayTitle),
+      actions: [
+        UiDialogAction(label: l10n.cancel, returnValue: false),
+        UiDialogAction(
+          label: l10n.remove,
+          isDestructive: true,
+          returnValue: true,
+        ),
+      ],
     );
     if (confirmed == true && mounted) {
       await _gameManager.removeGame(game.path);
@@ -849,30 +916,29 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _setCoverImage(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: Text(l10n.coverFromGallery),
-              onTap: () => Navigator.pop(ctx, 'gallery'),
+    final source = await UiBottomSheet.show<String>(
+      context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          UiListTile(
+            icon: LucideIcons.image,
+            title: l10n.coverFromGallery,
+            onTap: () => Navigator.pop(context, 'gallery'),
+          ),
+          UiListTile(
+            icon: LucideIcons.camera,
+            title: l10n.coverFromCamera,
+            onTap: () => Navigator.pop(context, 'camera'),
+          ),
+          if (game.coverPath != null)
+            UiListTile(
+              icon: LucideIcons.trash2,
+              iconColor: context.uiColors.danger,
+              title: l10n.coverRemove,
+              onTap: () => Navigator.pop(context, 'remove'),
             ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: Text(l10n.coverFromCamera),
-              onTap: () => Navigator.pop(ctx, 'camera'),
-            ),
-            if (game.coverPath != null)
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                title: Text(l10n.coverRemove, style: const TextStyle(color: Colors.redAccent)),
-                onTap: () => Navigator.pop(ctx, 'remove'),
-              ),
-          ],
-        ),
+        ],
       ),
     );
     if (source == null || !mounted) return;
@@ -899,7 +965,8 @@ class _HomePageState extends State<HomePage> {
       await coversDir.create(recursive: true);
     }
     final ext = image.path.split('.').last;
-    final fileName = '${game.path.hashCode}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final fileName =
+        '${game.path.hashCode}_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final destPath = '${coversDir.path}/$fileName';
     await File(image.path).copy(destPath);
 
@@ -918,32 +985,28 @@ class _HomePageState extends State<HomePage> {
   Future<void> _renameGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: game.displayTitle);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.renameGame),
-        content: TextField(
+    final newName = await UiDialog.show<String>(
+      context,
+      title: l10n.renameGame,
+      content: Builder(
+        builder: (ctx) => UiInput(
           controller: controller,
           autofocus: true,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            labelText: l10n.displayTitle,
-          ),
+          label: l10n.displayTitle,
           onSubmitted: (value) => Navigator.pop(ctx, value),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: Text(l10n.save),
-          ),
-        ],
       ),
+      actions: [
+        UiDialogAction(label: l10n.cancel),
+        UiDialogAction(
+          label: l10n.save,
+          isDefault: true,
+          onPressed: () => Navigator.pop(context, controller.text),
+        ),
+      ],
     );
-    controller.dispose();
+    // 等对话框退场动画结束再释放，避免输入框在动画中访问已释放的 controller。
+    Future<void>.delayed(const Duration(milliseconds: 500), controller.dispose);
     if (newName != null && newName.isNotEmpty && mounted) {
       await _gameManager.renameGame(game.path, newName);
       setState(() {});
@@ -955,22 +1018,19 @@ class _HomePageState extends State<HomePage> {
     final dylibPath = _effectiveDylibPath;
     final isSystemLoadedBuiltIn =
         (Platform.isIOS ||
-                Platform.isAndroid ||
-                Platform.operatingSystem == 'ohos') &&
-            _engineMode == EngineMode.builtIn;
+            Platform.isAndroid ||
+            Platform.operatingSystem == 'ohos') &&
+        _engineMode == EngineMode.builtIn;
     if (dylibPath == null && !isSystemLoadedBuiltIn) {
       final msg = _engineMode == EngineMode.builtIn
           ? l10n.engineNotFoundBuiltIn
           : l10n.engineNotFoundCustom;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: l10n.settings,
-            onPressed: _openSettings,
-          ),
-        ),
+      UiSnackbar.show(
+        context,
+        message: msg,
+        type: UiSnackbarType.error,
+        actionLabel: l10n.settings,
+        onAction: _openSettings,
       );
       return;
     }
@@ -990,10 +1050,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openGameDetail(GameInfo game) async {
     final result = await Navigator.of(context).push<GameDetailResult>(
       MaterialPageRoute<GameDetailResult>(
-        builder: (_) => GameDetailPage(
-          game: game,
-          gameManager: _gameManager,
-        ),
+        builder: (_) => GameDetailPage(game: game, gameManager: _gameManager),
       ),
     );
     if (result == null || !mounted) return;
@@ -1007,22 +1064,18 @@ class _HomePageState extends State<HomePage> {
     final idx = _gameManager.games.indexWhere((g) => g.path == addedPath);
     if (idx < 0 || !mounted) return;
     final game = _gameManager.games[idx];
-    final shouldScrape = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.scrapeMetadata),
-        content: Text(l10n.scrapeAfterAddPrompt),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.scrapeAfterAddNo),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.scrapeAfterAddYes),
-          ),
-        ],
-      ),
+    final shouldScrape = await UiDialog.show<bool>(
+      context,
+      title: l10n.scrapeMetadata,
+      message: l10n.scrapeAfterAddPrompt,
+      actions: [
+        UiDialogAction(label: l10n.scrapeAfterAddNo, returnValue: false),
+        UiDialogAction(
+          label: l10n.scrapeAfterAddYes,
+          isDefault: true,
+          returnValue: true,
+        ),
+      ],
     );
     if (shouldScrape != true || !mounted) return;
     final result = await Navigator.of(context).push<GameDetailResult>(
@@ -1046,33 +1099,35 @@ class _HomePageState extends State<HomePage> {
     final progress = ValueNotifier<double>(0.0);
     final currentFile = ValueNotifier<String>('');
 
-    showDialog<void>(
-      context: context,
+    UiDialog.show<void>(
+      context,
       barrierDismissible: false,
-      builder: (ctx) => PopScope(
+      title: isXp3 ? l10n.unpackingProgress : l10n.packingProgress,
+      content: PopScope(
+        // 操作进行中禁止返回键/手势关闭进度弹窗。
         canPop: false,
-        child: AlertDialog(
-          title: Text(isXp3 ? l10n.unpackingProgress : l10n.packingProgress),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ValueListenableBuilder<double>(
-                valueListenable: progress,
-                builder: (_, value, _) =>
-                    LinearProgressIndicator(value: value),
-              ),
-              const SizedBox(height: 12),
-              ValueListenableBuilder<String>(
-                valueListenable: currentFile,
-                builder: (_, value, _) => Text(
-                  value,
-                  style: Theme.of(ctx).textTheme.bodySmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, _) => UiProgress(value: value),
+            ),
+            const SizedBox(height: UiSpacing.md),
+            ValueListenableBuilder<String>(
+              valueListenable: currentFile,
+              builder: (ctx, value, _) => Text(
+                value,
+                style: ctx.uiType.footnote.copyWith(
+                  fontFamily: 'monospace',
+                  color: ctx.uiColors.textTertiary,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1097,11 +1152,10 @@ class _HomePageState extends State<HomePage> {
           final added = await _gameManager.addGame(newGame);
           if (added && mounted) setState(() {});
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(l10n.unpackComplete),
-                behavior: SnackBarBehavior.floating,
-              ),
+            UiSnackbar.show(
+              context,
+              message: l10n.unpackComplete,
+              type: UiSnackbarType.success,
             );
             if (added) _offerScrapeAfterAdd(destDir);
           }
@@ -1122,11 +1176,10 @@ class _HomePageState extends State<HomePage> {
           final added = await _gameManager.addGame(newGame);
           if (added && mounted) setState(() {});
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(l10n.packComplete),
-                behavior: SnackBarBehavior.floating,
-              ),
+            UiSnackbar.show(
+              context,
+              message: l10n.packComplete,
+              type: UiSnackbarType.success,
             );
             if (added) _offerScrapeAfterAdd(xp3Path);
           }
@@ -1135,11 +1188,9 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.xp3OperationFailed(e.toString())),
-            behavior: SnackBarBehavior.floating,
-          ),
+        UiSnackbar.show(
+          context,
+          message: l10n.xp3OperationFailed(e.toString()),
         );
       }
     } finally {
@@ -1205,7 +1256,6 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final colorScheme = Theme.of(context).colorScheme;
     final games = _sortedGames;
     final isDesktop = !Platform.isAndroid && !Platform.isIOS;
     final topPadding = MediaQuery.of(context).padding.top;
@@ -1213,7 +1263,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: UiLoader())
           : CustomScrollView(
               slivers: [
                 SliverPadding(
@@ -1230,34 +1280,33 @@ class _HomePageState extends State<HomePage> {
                         Expanded(
                           child: Text(
                             l10n.appTitle,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
+                            style: context.uiType.headline.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         if (isDesktop)
                           Tooltip(
                             message: _engineMode == EngineMode.builtIn
                                 ? (_builtInAvailable
-                                    ? l10n.builtInReady
-                                    : l10n.builtInNotReady)
+                                      ? l10n.builtInReady
+                                      : l10n.builtInNotReady)
                                 : (_customDylibPath != null
-                                    ? _customDylibPath!.split('/').last
-                                    : l10n.customNotSet),
+                                      ? _customDylibPath!.split('/').last
+                                      : l10n.customNotSet),
                             child: Icon(
                               _engineMode == EngineMode.builtIn
-                                  ? Icons.inventory_2
-                                  : Icons.extension,
-                              color: _effectiveDylibPath != null
-                                  ? colorScheme.primary
-                                  : colorScheme.error,
+                                  ? LucideIcons.packageOpen
+                                  : LucideIcons.puzzle,
+                              color: _engineReady
+                                  ? context.uiColors.brand
+                                  : context.uiColors.danger,
                               size: 22,
                             ),
                           ),
                         const SizedBox(width: 4),
                         IconButton(
-                          icon: const Icon(Icons.settings),
+                          icon: const Icon(LucideIcons.settings),
                           tooltip: l10n.settings,
                           onPressed: _openSettings,
                         ),
@@ -1268,7 +1317,7 @@ class _HomePageState extends State<HomePage> {
                 if (games.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: _buildEmptyState(colorScheme, l10n),
+                    child: _buildEmptyState(l10n),
                   )
                 else
                   _buildGameGrid(games, l10n),
@@ -1279,61 +1328,50 @@ class _HomePageState extends State<HomePage> {
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FloatingActionButton.extended(
-                  heroTag: 'refresh',
+                UiButton(
+                  label: l10n.refresh,
+                  leadingIcon: LucideIcons.refreshCw,
+                  variant: UiButtonVariant.secondary,
                   onPressed: () async {
                     await _scanIosGamesDir();
                     if (mounted) setState(() {});
                   },
-                  icon: const Icon(Icons.refresh),
-                  label: Text(l10n.refresh),
                 ),
-                const SizedBox(width: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'guide',
+                const SizedBox(width: UiSpacing.md),
+                UiButton(
+                  label: l10n.howToImport,
+                  leadingIcon: LucideIcons.circleHelp,
                   onPressed: _showIosImportGuide,
-                  icon: const Icon(Icons.help_outline),
-                  label: Text(l10n.howToImport),
                 ),
               ],
             )
-          : FloatingActionButton.extended(
+          : UiButton(
+              label: l10n.addGame,
+              leadingIcon: LucideIcons.plus,
+              size: UiButtonSize.large,
               onPressed: _addGame,
-              icon: const Icon(Icons.add),
-              label: Text(l10n.addGame),
             ),
     );
   }
 
-  Widget _buildEmptyState(ColorScheme colorScheme, AppLocalizations l10n) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.videogame_asset_off,
-            size: 80,
-            color: colorScheme.onSurface.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            l10n.noGamesYet,
-            style: TextStyle(
-              fontSize: 20,
-              color: colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            Platform.isIOS ? l10n.noGamesHintIos : l10n.noGamesHintDesktop,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
-      ),
+  /// 引擎状态：显式 dylib 存在，或移动端/OHOS 由系统加载的内置引擎。
+  bool get _engineReady {
+    if (_effectiveDylibPath != null) return true;
+    return (Platform.isAndroid ||
+            Platform.isIOS ||
+            Platform.operatingSystem == 'ohos') &&
+        _engineMode == EngineMode.builtIn;
+  }
+
+  Widget _buildEmptyState(AppLocalizations l10n) {
+    return UiEmpty(
+      icon: LucideIcons.gamepad2,
+      title: l10n.noGamesYet,
+      description: Platform.isIOS
+          ? l10n.noGamesHintIos
+          : l10n.noGamesHintDesktop,
+      actionLabel: Platform.isIOS ? l10n.howToImport : l10n.addGame,
+      onAction: Platform.isIOS ? _showIosImportGuide : _addGame,
     );
   }
 
@@ -1350,21 +1388,18 @@ class _HomePageState extends State<HomePage> {
               crossAxisSpacing: 12,
               childAspectRatio: 3 / 4,
             ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final game = games[index];
-                return _CoverCard(
-                  game: game,
-                  l10n: l10n,
-                  onTap: () => _openGameDetail(game),
-                  onRename: () => _renameGame(game),
-                  onRemove: () => _removeGame(game),
-                  onSetCover: () => _setCoverImage(game),
-                  onPackUnpack: () => _packUnpackGame(game),
-                );
-              },
-              childCount: games.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final game = games[index];
+              return _CoverCard(
+                game: game,
+                l10n: l10n,
+                onTap: () => _openGameDetail(game),
+                onRename: () => _renameGame(game),
+                onRemove: () => _removeGame(game),
+                onSetCover: () => _setCoverImage(game),
+                onPackUnpack: () => _packUnpackGame(game),
+              );
+            }, childCount: games.length),
           ),
         );
       },
@@ -1396,115 +1431,76 @@ class _CoverCard extends StatelessWidget {
   bool get _hasCover =>
       game.coverPath != null && File(game.coverPath!).existsSync();
 
-  void _showContextMenu(BuildContext context) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final Offset offset = box.localToGlobal(Offset.zero);
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx + box.size.width,
-        offset.dy,
-        offset.dx + box.size.width,
-        offset.dy + box.size.height,
-      ),
-      items: [
-        PopupMenuItem(value: 'cover', child: _menuTile(Icons.image, l10n.setCover)),
-        PopupMenuItem(value: 'rename', child: _menuTile(Icons.edit, l10n.rename)),
-        PopupMenuItem(
-          value: 'pack_unpack',
-          child: _menuTile(
-            _isXp3 ? Icons.unarchive : Icons.archive,
-            _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
-          ),
-        ),
-        PopupMenuItem(
-          value: 'remove',
-          child: _menuTile(Icons.delete, l10n.remove, color: Colors.redAccent),
-        ),
-      ],
-    ).then((value) {
-      if (value == null) return;
-      switch (value) {
-        case 'cover':
-          onSetCover();
-        case 'rename':
-          onRename();
-        case 'pack_unpack':
-          onPackUnpack();
-        case 'remove':
-          onRemove();
-      }
-    });
-  }
-
-  static Widget _menuTile(IconData icon, String label, {Color? color}) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: color),
-        const SizedBox(width: 12),
-        Text(label, style: color != null ? TextStyle(color: color) : null),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _buildBackground(colorScheme),
-          _buildGradientOverlay(),
-          _buildTitleOverlay(game),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              onLongPress: () => _showContextMenu(context),
-              onSecondaryTap: () => _showContextMenu(context),
-            ),
-          ),
-        ],
+    return UiContextMenu(
+      onTap: onTap,
+      items: [
+        UiMenuItem(
+          label: l10n.setCover,
+          icon: LucideIcons.image,
+          onSelected: onSetCover,
+        ),
+        UiMenuItem(
+          label: l10n.rename,
+          icon: LucideIcons.pencil,
+          onSelected: onRename,
+        ),
+        UiMenuItem(
+          label: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
+          icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
+          onSelected: onPackUnpack,
+        ),
+        UiMenuItem(
+          label: l10n.remove,
+          icon: LucideIcons.trash2,
+          isDestructive: true,
+          onSelected: onRemove,
+        ),
+      ],
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: UiRadius.brLg),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildBackground(context),
+            _buildGradientOverlay(),
+            _buildTitleOverlay(game),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBackground(ColorScheme colorScheme) {
+  Widget _buildBackground(BuildContext context) {
     if (_hasCover) {
       return Image.file(
         File(game.coverPath!),
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholder(colorScheme),
+        errorBuilder: (_, __, ___) => _buildPlaceholder(context),
       );
     }
-    return _buildPlaceholder(colorScheme);
+    return _buildPlaceholder(context);
   }
 
-  Widget _buildPlaceholder(ColorScheme colorScheme) {
+  Widget _buildPlaceholder(BuildContext context) {
     // 中性表面色做底，主题色只用在图标上，避免整块饱和色
+    final colors = context.uiColors;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            colorScheme.surfaceContainerHigh,
-            colorScheme.surfaceContainerHighest,
-          ],
+          colors: [colors.surfaceElevated, colors.separator],
         ),
       ),
       child: Center(
         child: Icon(
-          Icons.videogame_asset,
+          LucideIcons.gamepad2,
           size: 48,
-          color: colorScheme.primary.withValues(alpha: 0.6),
+          color: colors.brand.withValues(alpha: 0.6),
         ),
       ),
     );
@@ -1521,10 +1517,7 @@ class _CoverCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.transparent,
-              Colors.black54,
-            ],
+            colors: [Colors.transparent, Colors.black54],
           ),
         ),
       ),
@@ -1559,7 +1552,8 @@ class _CoverCard extends StatelessWidget {
             Text(
               [
                 if (lastPlayed != null) _formatDate(lastPlayed),
-                if (hasDuration) l10n.playDuration(GameInfo.formatPlayDuration(totalSeconds)),
+                if (hasDuration)
+                  l10n.playDuration(GameInfo.formatPlayDuration(totalSeconds)),
               ].join(' · '),
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.6),
@@ -1580,136 +1574,5 @@ class _CoverCard extends StatelessWidget {
     if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
     if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-}
-
-/// Dialog shown on macOS when a folder contains multiple XP3 files.
-/// The user selects which one to add as a game entry.
-/// OHOS fallback import: fetch a game archive over HTTP into the app
-/// sandbox. Direct side-loading into the sandbox is blocked by the platform
-/// (DAC for adb-like tools, docs://-only pickers), so for emulator/dev
-/// images the app itself downloads the data.
-class _OhosNetworkImportDialog extends StatefulWidget {
-  const _OhosNetworkImportDialog({required this.hintPath});
-
-  final String hintPath;
-
-  @override
-  State<_OhosNetworkImportDialog> createState() =>
-      _OhosNetworkImportDialogState();
-}
-
-class _OhosNetworkImportDialogState extends State<_OhosNetworkImportDialog> {
-  /// The emulator debug bridge (`hdc rport tcp:8080 tcp:8080`) forwards the
-  /// device's loopback:8080 to the development host, so this default works
-  /// with any static file server on the host.
-  static const String _defaultUrl = 'http://127.0.0.1:8080/data.xp3';
-
-  /// Build marker: bumped whenever the import flow changes, so the live
-  /// build can be identified from a screenshot (v2: resume + re-import).
-  static const String _flowVersion = 'v4-watchdog';
-
-  late final TextEditingController _controller =
-      TextEditingController(text: _defaultUrl);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.selectGameArchive),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${l10n.selectGameArchive} ($_flowVersion)\n${widget.hintPath}'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            decoration: const InputDecoration(labelText: 'URL'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: Text(l10n.addGame),
-        ),
-      ],
-    );
-  }
-}
-
-class _Xp3PickerDialog extends StatefulWidget {
-  const _Xp3PickerDialog({required this.xp3Files});
-
-  final List<File> xp3Files;
-
-  @override
-  State<_Xp3PickerDialog> createState() => _Xp3PickerDialogState();
-}
-
-class _Xp3PickerDialogState extends State<_Xp3PickerDialog> {
-  int? _selectedIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    // Pre-select the first file as a sensible default.
-    _selectedIndex = 0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.selectGameArchive),
-      content: SizedBox(
-        width: 400,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: widget.xp3Files.length,
-          itemBuilder: (ctx, i) {
-            final name = p.basename(widget.xp3Files[i].path);
-            return RadioListTile<int>(
-              value: i,
-              groupValue: _selectedIndex,
-              title: Text(name, style: const TextStyle(fontFamily: 'monospace')),
-              onChanged: (value) {
-                setState(() {
-                  _selectedIndex = value;
-                });
-              },
-            );
-          },
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: _selectedIndex == null
-              ? null
-              : () {
-                  Navigator.pop(
-                    context,
-                    widget.xp3Files[_selectedIndex!],
-                  );
-                },
-          child: Text(l10n.addGame),
-        ),
-      ],
-    );
   }
 }
