@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -14,6 +15,7 @@ import '../engine/flutter_engine_bridge_adapter.dart';
 import '../constants/prefs_keys.dart';
 import '../services/game_manager.dart';
 import '../widgets/engine_surface.dart';
+import '../ui/ui.dart';
 import '../widgets/performance_overlay.dart';
 
 /// The game running page — full-screen engine surface with auto-start flow.
@@ -382,8 +384,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     } catch (_) {}
     _writablePath = writablePath;
     _log('engine_create(writable: $writablePath)...');
-    final int createResult =
-        await _bridge.engineCreate(writablePath: writablePath, cachePath: cachePath);
+    final int createResult = await _bridge.engineCreate(
+      writablePath: writablePath,
+      cachePath: cachePath,
+    );
     if (createResult != _engineResultOk) {
       _fail(
         'engine_create failed: result=$createResult, '
@@ -868,11 +872,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}:'
         '${now.second.toString().padLeft(2, '0')}';
-    unawaited(
-      File('$dir/perf-dart.log')
-          .writeAsString('[$stamp] $line\n', mode: FileMode.append)
-          .catchError((Object _) {}),
-    );
+    unawaited(() async {
+      try {
+        await File('$dir/perf-dart.log')
+            .writeAsString('[$stamp] $line\n', mode: FileMode.append);
+      } catch (_) {}
+    }());
   }
 
   // --- UI ---
@@ -940,7 +945,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Icon(
-                      _showOverlay ? Icons.close : Icons.menu,
+                      _showOverlay ? LucideIcons.x : LucideIcons.menu,
                       color: Colors.white70,
                       size: 24,
                     ),
@@ -1149,7 +1154,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
+            const Icon(
+              LucideIcons.circleAlert,
+              color: Colors.redAccent,
+              size: 64,
+            ),
             const SizedBox(height: 16),
             const Text(
               'Engine Error',
@@ -1179,17 +1188,16 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                OutlinedButton.icon(
+                UiButton(
+                  label: 'Back',
+                  leadingIcon: LucideIcons.chevronLeft,
+                  variant: UiButtonVariant.outline,
                   onPressed: _exitGame,
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Back'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Colors.white30),
-                  ),
                 ),
-                const SizedBox(width: 16),
-                FilledButton.icon(
+                const SizedBox(width: UiSpacing.lg),
+                UiButton(
+                  label: 'Retry',
+                  leadingIcon: LucideIcons.refreshCw,
                   onPressed: () {
                     setState(() {
                       _phase = _EnginePhase.initializing;
@@ -1202,8 +1210,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     );
                     unawaited(_autoStart());
                   },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
                 ),
               ],
             ),
@@ -1214,27 +1220,28 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   Widget _buildOverlay() {
+    final colors = context.uiColors;
     return Positioned(
       right: 16,
       top: MediaQuery.of(context).padding.top + 52,
       child: Material(
-        color: Colors.black87,
-        borderRadius: BorderRadius.circular(12),
+        color: colors.surfaceElevated,
+        borderRadius: UiRadius.brLg,
         elevation: 8,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
           child: IntrinsicWidth(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
                 _overlayItem(
-                  icon: Icons.bug_report,
+                  icon: LucideIcons.bug,
                   label: _showDebug ? 'Hide Debug' : 'Show Debug',
                   onTap: _toggleDebug,
                 ),
                 _overlayItem(
-                  icon: Icons.pause,
+                  icon: LucideIcons.pause,
                   label: _isTicking ? 'Pause' : 'Resume',
                   onTap: () async {
                     if (_isTicking) {
@@ -1249,9 +1256,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     setState(() => _showOverlay = false);
                   },
                 ),
-                const Divider(color: Colors.white24, height: 1),
+                Divider(color: colors.separator, height: 1),
                 _overlayItem(
-                  icon: Icons.exit_to_app,
+                  icon: LucideIcons.logOut,
                   label: 'Exit Game',
                   onTap: _exitGame,
                   destructive: true,
@@ -1270,7 +1277,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     required VoidCallback onTap,
     bool destructive = false,
   }) {
-    final color = destructive ? Colors.redAccent : Colors.white70;
+    final color = destructive
+        ? context.uiColors.danger
+        : context.uiColors.textPrimary;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -1325,7 +1334,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   GestureDetector(
                     onTap: _toggleDebug,
                     child: const Icon(
-                      Icons.close,
+                      LucideIcons.x,
                       color: Colors.white54,
                       size: 16,
                     ),
