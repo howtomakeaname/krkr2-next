@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/game_info.dart';
@@ -6,6 +7,7 @@ import '../models/game_metadata_candidate.dart';
 import '../services/cover_downloader.dart';
 import '../services/game_manager.dart';
 import '../services/game_metadata_scraper.dart';
+import '../ui/ui.dart';
 
 /// Step 2 of scrape flow: show search results, let user select one, then apply.
 class ScrapeSelectPage extends StatefulWidget {
@@ -44,7 +46,7 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
       return const SizedBox(
         width: 48,
         height: 48,
-        child: Icon(Icons.image_not_supported_outlined),
+        child: Icon(LucideIcons.imageOff),
       );
     }
     return SizedBox(
@@ -54,24 +56,18 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
         displayUrl,
         fit: BoxFit.cover,
         headers: CoverDownloader.imageRequestHeaders,
-        errorBuilder: (_, __, ___) => const Icon(
-          Icons.broken_image_outlined,
-          size: 48,
+        errorBuilder: (_, __, ___) => const SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(LucideIcons.imageOff),
         ),
-        loadingBuilder: (_, child, progress) =>
-            progress == null
-                ? child
-                : const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ),
+        loadingBuilder: (_, child, progress) => progress == null
+            ? child
+            : const SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(child: UiLoader(size: UiLoaderSize.small)),
+              ),
       ),
     );
   }
@@ -79,8 +75,10 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
   Future<void> _confirm() async {
     final l10n = AppLocalizations.of(context)!;
     if (_selected == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.scrapeMetadataSelectOne)),
+      UiSnackbar.show(
+        context,
+        message: l10n.scrapeMetadataSelectOne,
+        type: UiSnackbarType.warning,
       );
       return;
     }
@@ -98,12 +96,12 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
 
     if (!mounted) return;
     setState(() => _applying = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(localPath != null
-            ? l10n.scrapeMetadataSuccess
-            : l10n.scrapeMetadataCoverFailed),
-      ),
+    UiSnackbar.show(
+      context,
+      message: localPath != null
+          ? l10n.scrapeMetadataSuccess
+          : l10n.scrapeMetadataCoverFailed,
+      type: UiSnackbarType.success,
     );
     Navigator.of(context).pop(true);
   }
@@ -111,7 +109,6 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -119,77 +116,61 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
         leading: _applying
             ? null
             : IconButton(
-                icon: const Icon(Icons.arrow_back),
+                icon: const Icon(LucideIcons.chevronLeft),
                 onPressed: () => Navigator.of(context).pop(false),
               ),
       ),
       body: candidates.isEmpty
           ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      l10n.scrapeMetadataNoResults,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: Text(l10n.back),
-                    ),
-                  ],
-                ),
+              child: UiEmpty(
+                icon: LucideIcons.searchX,
+                title: l10n.scrapeMetadataNoResults,
+                actionLabel: l10n.back,
+                onAction: () => Navigator.of(context).pop(false),
               ),
             )
           : Column(
               children: [
                 Expanded(
                   child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
                     itemCount: candidates.length,
                     itemBuilder: (context, index) {
                       final c = candidates[index];
-                      final isSelected = _selected == c;
-                      return ListTile(
+                      return UiListTile(
                         leading: _buildCandidateLeading(c),
-                        title: Text(c.title),
-                        subtitle: c.sourceLabel != null
-                            ? Text(
-                                c.sourceLabel!,
-                                style: theme.textTheme.bodySmall,
-                              )
-                            : null,
-                        selected: isSelected,
-                                        onTap: () => setState(() => _selected = c),
+                        title: c.title,
+                        subtitle: c.sourceLabel,
+                        trailing: UiRadio<GameMetadataCandidate>(
+                          value: c,
+                          groupValue: _selected,
+                          onChanged: (value) =>
+                              setState(() => _selected = value),
+                        ),
+                        onTap: () => setState(() => _selected = c),
                       );
                     },
                   ),
                 ),
                 SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(UiSpacing.lg),
                     child: Row(
                       children: [
-                        TextButton(
+                        UiButton(
+                          label: l10n.back,
+                          variant: UiButtonVariant.ghost,
                           onPressed: _applying
                               ? null
                               : () => Navigator.of(context).pop(false),
-                          child: Text(l10n.back),
                         ),
-                        const SizedBox(width: 16),
-                        FilledButton(
-                          onPressed: _applying ? null : _confirm,
-                          child: _applying
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(l10n.scrapeMetadataConfirm),
+                        const SizedBox(width: UiSpacing.lg),
+                        Expanded(
+                          child: UiButton(
+                            label: l10n.scrapeMetadataConfirm,
+                            loading: _applying,
+                            onPressed: _applying ? null : _confirm,
+                          ),
                         ),
                       ],
                     ),
