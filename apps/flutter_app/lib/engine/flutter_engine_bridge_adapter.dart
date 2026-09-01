@@ -263,6 +263,19 @@ class FlutterEngineBridgeAdapter implements EngineBridge {
   }
 
   @override
+  Future<int> engineSetRenderTargetNativeWindow({
+    required int address,
+    required int width,
+    required int height,
+  }) {
+    return _delegate.engineSetRenderTargetNativeWindow(
+      address: address,
+      width: width,
+      height: height,
+    );
+  }
+
+  @override
   String engineGetRendererInfo() => _delegate.engineGetRendererInfo();
 
   @override

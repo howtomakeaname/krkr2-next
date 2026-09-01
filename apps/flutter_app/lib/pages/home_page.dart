@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
@@ -54,6 +55,11 @@ class _HomePageState extends State<HomePage> {
       // automatically via DynamicLibrary.open('libengine_api.so').
       return '__bundled_in_apk__';
     }
+    if (Platform.operatingSystem == 'ohos') {
+      // Same as Android: libengine_api.so is packaged in the HAP and
+      // resolved by the loader search path.
+      return '__bundled_in_hap__';
+    }
     try {
       final executablePath = Platform.resolvedExecutable;
       final execDir = File(executablePath).parent.path;
@@ -66,9 +72,13 @@ class _HomePageState extends State<HomePage> {
 
   String? get _effectiveDylibPath {
     if (_engineMode == EngineMode.builtIn) {
-      // On iOS and Android, the engine is loaded automatically by the system;
+      // On iOS/Android/OHOS, the engine is loaded automatically by the system;
       // no explicit dylib path is needed.
-      if (Platform.isIOS || Platform.isAndroid) return null;
+      if (Platform.isIOS ||
+          Platform.isAndroid ||
+          Platform.operatingSystem == 'ohos') {
+        return null;
+      }
       return _builtInDylibPath;
     }
     return _customDylibPath;
@@ -223,6 +233,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _addGameDirectory() async {
     final l10n = AppLocalizations.of(context)!;
+    if (Platform.operatingSystem == 'ohos') {
+      await _addGameFromSandbox(pickDirectory: true);
+      return;
+    }
     final String? selectedDirectory =
         await FilePicker.platform.getDirectoryPath(
       dialogTitle: l10n.selectGameDirectory,
@@ -341,6 +355,11 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
+    if (Platform.operatingSystem == 'ohos') {
+      await _addGameFromSandbox(pickDirectory: false);
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: l10n.selectGameArchive,
       type: FileType.custom,
@@ -393,6 +412,335 @@ class _HomePageState extends State<HomePage> {
         );
       }
     }
+  }
+
+  /// OHOS import path. The system document picker only hands out docs://
+  /// URIs, not POSIX paths, so the fopen-based engine can't consume what it
+  /// returns — and every app is sandboxed anyway. Games therefore arrive by
+  /// side-loading, and importing means scanning the sandbox plus a few
+  /// well-known developer roots instead of running a system picker.
+  static const List<String> _ohosExtraScanRoots = [
+    '/data/local/tmp',
+    // Sandbox files root (parent of the documents dir). `hdc file send`
+    // can deliver multi-GB archives here at ~400 MB/s — far faster and
+    // more reliable than the rport HTTP tunnel — and it stays inside the
+    // app sandbox, so the engine can always read it.
+    '/data/storage/el2/base/files',
+  ];
+
+  Future<void> _addGameFromSandbox({required bool pickDirectory}) async {
+    final l10n = AppLocalizations.of(context)!;
+    final docDir = await getApplicationDocumentsDirectory();
+
+    // A set: the scan of a root and the direct probe of the same root can
+    // both surface <root>/data.xp3.
+    final candidates = <File>{};
+    if (pickDirectory) {
+      candidates.addAll(_scanSandboxForGameDirectories(docDir));
+      for (final root in _ohosExtraScanRoots) {
+        if (Directory(root).existsSync()) {
+          candidates.addAll(_scanSandboxForGameDirectories(Directory(root)));
+        }
+      }
+    } else {
+      candidates.addAll(_scanSandboxForXp3(docDir));
+      for (final root in _ohosExtraScanRoots) {
+        if (Directory(root).existsSync()) {
+          candidates.addAll(_scanSandboxForXp3(Directory(root)));
+        }
+        // The developer roots are not listable by the app (mode --x for
+        // other uids), so directory scans come back empty there — but
+        // traversing a KNOWN path is allowed. Probe the conventional
+        // KrKr archive name directly.
+        final direct = File('$root/data.xp3');
+        if (direct.existsSync()) {
+          candidates.add(direct);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) {
+      // Nothing side-loaded yet. On OHOS the only way to get multi-GB game
+      // data into the sandbox (short of shipping it in the HAP) is for the
+      // app itself to fetch it, so offer a network import before giving up.
+      final url = await showDialog<String>(
+        context: context,
+        builder: (ctx) => _OhosNetworkImportDialog(hintPath: docDir.path),
+      );
+      if (url == null || url.isEmpty || !mounted) return;
+      await _downloadAndAddGame(url);
+      return;
+    }
+
+    if (!pickDirectory) {
+      // Every found archive is already registered. Still offer the network
+      // import: a previous transfer may have been truncated mid-stream
+      // (registered as a game but unusable), and re-importing resumes the
+      // partial file in place instead of restarting the multi-GB download.
+      final registered = _gameManager.games.map((g) => g.path).toSet();
+      final allRegistered =
+          candidates.every((f) => registered.contains(f.path));
+      if (allRegistered) {
+        final url = await showDialog<String>(
+          context: context,
+          builder: (ctx) => _OhosNetworkImportDialog(hintPath: docDir.path),
+        );
+        if (url == null || url.isEmpty || !mounted) return;
+        await _downloadAndAddGame(url);
+        return;
+      }
+    }
+
+    final File selected;
+    if (candidates.length == 1) {
+      selected = candidates.first;
+    } else {
+      final picked = await showDialog<File>(
+        context: context,
+        builder: (ctx) => _Xp3PickerDialog(xp3Files: candidates.toList()),
+      );
+      if (picked == null || !mounted) return;
+      selected = picked;
+    }
+
+    final game = GameInfo(path: selected.path);
+    final added = await _gameManager.addGame(game);
+    if (!mounted) return;
+    if (added) {
+      setState(() {});
+      _offerScrapeAfterAdd(selected.path);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(l10n.gameAlreadyExists(p.basename(selected.path))),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  /// Downloads a game archive over HTTP into the sandbox and registers it.
+  /// This is the OHOS dev/emulator import path: neither `hdc file send` nor
+  /// the system picker can deliver multi-GB data into the sandbox, so the
+  /// app pulls the file itself (e.g. via `hdc rport tcp:8080 tcp:8080`
+  /// tunneling to a static file server on the host).
+  Future<void> _downloadAndAddGame(String url) async {
+    final l10n = AppLocalizations.of(context)!;
+    final docDir = await getApplicationDocumentsDirectory();
+    final name = url.split('/').lastWhere((s) => s.isNotEmpty,
+        orElse: () => 'data.xp3');
+    final dest = File(p.join(docDir.path, name));
+
+    final progress = ValueNotifier<String>('');
+    // ignore: unawaited_futures
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ValueListenableBuilder<String>(
+        valueListenable: progress,
+        builder: (ctx, text, _) => AlertDialog(
+          title: Text(name, style: const TextStyle(fontFamily: 'monospace')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(text),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    String? error;
+    try {
+      // The rport tunnel can drop the connection mid-stream and Dart's
+      // http stream then ends cleanly — a truncated file looks like a
+      // successful import. Resume via HTTP Range until the reported
+      // Content-Length is fully on disk.
+      const int kMaxAttempts = 30;
+      var total = 0;
+      // Resume a partially-downloaded file from a previous import: probe
+      // with a Range offset instead of restarting 2.7 GB from scratch.
+      var received = (await dest.exists()) ? await dest.length() : 0;
+      for (var attempt = 1; attempt <= kMaxAttempts; attempt++) {
+        final client = http.Client();
+        try {
+          final request = http.Request('GET', Uri.parse(url));
+          if (received > 0) {
+            request.headers['Range'] = 'bytes=$received-';
+          }
+          final response = await client.send(request);
+          if (response.statusCode == 416 && received > 0) {
+            // Offset at/after EOF: the file is already complete.
+            total = received;
+            break;
+          }
+          final isResume = response.statusCode == 206 && received > 0;
+          if (response.statusCode != 200 && !isResume) {
+            throw Exception('HTTP ${response.statusCode}');
+          }
+          if (response.statusCode == 200 && received > 0) {
+            // Server ignored our Range header — appending the full body
+            // would corrupt the file.
+            throw Exception('server does not support Range resume');
+          }
+          if (attempt == 1) {
+            total = response.contentLength ?? 0;
+            if (received > 0 && total > 0) total += received;
+          } else if (isResume) {
+            // 206 carries the remaining length only.
+            if (response.contentLength != null) {
+              total = received + response.contentLength!;
+            }
+          }
+          final sink = dest.openWrite(mode: received > 0 ? FileMode.append : FileMode.write);
+          var lastPace = 0;
+          try {
+            // 30s inter-chunk watchdog: a dropped tunnel can leave the
+            // stream open-but-silent forever; timeout throws and the outer
+            // loop resumes from the last flushed offset.
+            await for (final chunk
+                in response.stream.timeout(const Duration(seconds: 30))) {
+              sink.add(chunk);
+              received += chunk.length;
+              // Pace multi-GB writes: saturating the guest's page cache at
+              // loopback speed once took down the emulator's device daemon.
+              // A short pause every 16 MB keeps the transfer around
+              // 100-150 MB/s and refreshes the progress line.
+              if (received - lastPace >= 16 * 1024 * 1024) {
+                lastPace = received;
+                // Flush at each pace point: IOSink.add only buffers in RAM,
+                // so without this the on-disk size (used to resume after a
+                // crash/force-stop) lags arbitrarily behind `received`.
+                await sink.flush();
+                progress.value =
+                    '${(received / 1048576).toStringAsFixed(1)} MB'
+                    '${total > 0 ? ' / ${(total / 1048576).toStringAsFixed(1)} MB' : ''}';
+                await Future<void>.delayed(const Duration(milliseconds: 120));
+              }
+            }
+          } finally {
+            await sink.flush();
+            await sink.close();
+          }
+        } finally {
+          client.close();
+        }
+        if (total <= 0 || received >= total) break;
+        // Truncated — loop and resume from `received`.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      if (total > 0 && received < total) {
+        throw Exception('download incomplete: '
+            '${(received / 1048576).toStringAsFixed(1)} MB of '
+            '${(total / 1048576).toStringAsFixed(1)} MB');
+      }
+      progress.value =
+          '${(received / 1048576).toStringAsFixed(1)} MB'
+          '${total > 0 ? ' / ${(total / 1048576).toStringAsFixed(1)} MB' : ''}';
+    } catch (e) {
+      error = e.toString();
+    }
+
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    if (error != null) {
+      // Never leave a partial file behind — a truncated .xp3 registers as a
+      // valid game but corrupts engine startup.
+      try {
+        if (await dest.exists()) await dest.delete();
+      } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+      return;
+    }
+
+    final game = GameInfo(path: dest.path);
+    final added = await _gameManager.addGame(game);
+    if (!mounted) return;
+    if (added) {
+      setState(() {});
+      _offerScrapeAfterAdd(dest.path);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.gameAlreadyExists(p.basename(dest.path))),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  /// Finds .xp3 archives under [root], up to a small depth so an accidental
+  /// scan of a huge tree stays bounded.
+  static List<File> _scanSandboxForXp3(Directory root) {
+    final results = <File>[];
+    void walk(Directory dir, int depth) {
+      if (depth > 3) return;
+      try {
+        for (final entity in dir.listSync(followLinks: false)) {
+          if (entity is File &&
+              entity.path.toLowerCase().endsWith('.xp3')) {
+            results.add(entity);
+          } else if (entity is Directory) {
+            walk(entity, depth + 1);
+          }
+        }
+      } on FileSystemException {
+        // Unreadable entries (pickers' cache, other users' dirs) — skip.
+      }
+    }
+
+    walk(root, 0);
+    results.sort((a, b) => a.path.compareTo(b.path));
+    return results;
+  }
+
+  /// Finds directories that look like an unpacked KrKr game (they directly
+  /// contain a .xp3 archive or a startup.tjs).
+  static List<File> _scanSandboxForGameDirectories(Directory root) {
+    final results = <File>[];
+    void walk(Directory dir, int depth) {
+      if (depth > 3) return;
+      final List<FileSystemEntity> entries;
+      try {
+        entries = dir.listSync(followLinks: false).toList();
+      } on FileSystemException {
+        return;
+      }
+      for (final entity in entries) {
+        if (entity is! Directory) continue;
+        try {
+          final looksLikeGame = entity.listSync(followLinks: false).any(
+                (child) =>
+                    child is File &&
+                    (child.path.toLowerCase().endsWith('.xp3') ||
+                        child.path.toLowerCase().endsWith('startup.tjs')),
+              );
+          if (looksLikeGame) {
+            results.add(File(entity.path));
+          } else {
+            walk(entity, depth + 1);
+          }
+        } on FileSystemException {
+          continue;
+        }
+      }
+    }
+
+    walk(root, 0);
+    results.sort((a, b) => a.path.compareTo(b.path));
+    return results;
   }
 
   void _showIosImportGuide() {
@@ -606,7 +954,10 @@ class _HomePageState extends State<HomePage> {
     final l10n = AppLocalizations.of(context)!;
     final dylibPath = _effectiveDylibPath;
     final isSystemLoadedBuiltIn =
-        (Platform.isIOS || Platform.isAndroid) && _engineMode == EngineMode.builtIn;
+        (Platform.isIOS ||
+                Platform.isAndroid ||
+                Platform.operatingSystem == 'ohos') &&
+            _engineMode == EngineMode.builtIn;
     if (dylibPath == null && !isSystemLoadedBuiltIn) {
       final msg = _engineMode == EngineMode.builtIn
           ? l10n.engineNotFoundBuiltIn
@@ -1234,6 +1585,70 @@ class _CoverCard extends StatelessWidget {
 
 /// Dialog shown on macOS when a folder contains multiple XP3 files.
 /// The user selects which one to add as a game entry.
+/// OHOS fallback import: fetch a game archive over HTTP into the app
+/// sandbox. Direct side-loading into the sandbox is blocked by the platform
+/// (DAC for adb-like tools, docs://-only pickers), so for emulator/dev
+/// images the app itself downloads the data.
+class _OhosNetworkImportDialog extends StatefulWidget {
+  const _OhosNetworkImportDialog({required this.hintPath});
+
+  final String hintPath;
+
+  @override
+  State<_OhosNetworkImportDialog> createState() =>
+      _OhosNetworkImportDialogState();
+}
+
+class _OhosNetworkImportDialogState extends State<_OhosNetworkImportDialog> {
+  /// The emulator debug bridge (`hdc rport tcp:8080 tcp:8080`) forwards the
+  /// device's loopback:8080 to the development host, so this default works
+  /// with any static file server on the host.
+  static const String _defaultUrl = 'http://127.0.0.1:8080/data.xp3';
+
+  /// Build marker: bumped whenever the import flow changes, so the live
+  /// build can be identified from a screenshot (v2: resume + re-import).
+  static const String _flowVersion = 'v4-watchdog';
+
+  late final TextEditingController _controller =
+      TextEditingController(text: _defaultUrl);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      title: Text(l10n.selectGameArchive),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${l10n.selectGameArchive} ($_flowVersion)\n${widget.hintPath}'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            decoration: const InputDecoration(labelText: 'URL'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: Text(l10n.addGame),
+        ),
+      ],
+    );
+  }
+}
+
 class _Xp3PickerDialog extends StatefulWidget {
   const _Xp3PickerDialog({required this.xp3Files});
 

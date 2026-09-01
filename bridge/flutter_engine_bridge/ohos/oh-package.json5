@@ -1,0 +1,9 @@
+{
+  "name": "flutter_engine_bridge",
+  "version": "1.0.0",
+  "description": "KrKr2 engine bridge for OpenHarmony: zero-copy OHNativeWindow textures for the krkr2 GL renderer.",
+  "main": "index.ets",
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}

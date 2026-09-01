@@ -38,6 +38,8 @@ flutter:
       android:
         package: org.github.krkr2.flutter_engine_bridge
         pluginClass: FlutterEngineBridgePlugin
+      ohos:
+        pluginClass: FlutterEngineBridgePlugin
       ios:
         pluginClass: FlutterEngineBridgePlugin
       linux:

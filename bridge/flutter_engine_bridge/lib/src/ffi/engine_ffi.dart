@@ -430,6 +430,24 @@ class EngineFfiBridge {
     );
   }
 
+  /// OHOS: attach an OHNativeWindow* (obtained from the embedder's
+  /// SurfaceTextureEntry via the method channel) as the render target.
+  /// [address] is the raw pointer value; 0 detaches.
+  int setRenderTargetNativeWindow({
+    required int address,
+    required int width,
+    required int height,
+  }) {
+    final Pointer<Void> window =
+        address == 0 ? nullptr : Pointer<Void>.fromAddress(address);
+    return _bindings.engineSetRenderTargetSurface(
+      _handle,
+      window,
+      width,
+      height,
+    );
+  }
+
   bool getFrameRenderedFlag() {
     final outFlag = calloc<Uint32>();
     try {

@@ -495,6 +495,11 @@ class EngineBindings {
     if (Platform.isAndroid || Platform.isLinux) {
       return const ['libengine_api.so'];
     }
+    // The OHOS Flutter fork reports 'ohos'; the standard SDK has no
+    // Platform.isOhos, so compare operatingSystem directly.
+    if (Platform.operatingSystem == 'ohos') {
+      return const ['libengine_api.so'];
+    }
     if (Platform.isIOS) {
       return const [];
     }

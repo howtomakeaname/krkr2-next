@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../engine/engine_bridge.dart';
 import '../engine/flutter_engine_bridge_adapter.dart';
@@ -94,6 +95,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   final Stopwatch _playStopwatch = Stopwatch();
   int? _playRunningSinceEpochMs;
   bool _playSessionFinalized = false;
+
+  // Documents dir captured at engine_create — anchor for the Dart-side
+  // perf log (readable from shell next to the engine funnel log).
+  String? _writablePath;
 
   @override
   void initState() {
@@ -364,7 +369,21 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     // synchronous FFI call blocks the main thread.
     await Future<void>.delayed(Duration.zero);
 
-    final int createResult = await _bridge.engineCreate();
+    // Give the engine a writable dir in the app sandbox. Native
+    // engine_create exports it as KRKR_FILES_DIR (used for saves and as
+    // the anchor for the OHOS engine log file).
+    String? writablePath;
+    String? cachePath;
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      writablePath = docDir.path;
+      final cacheDir = await getTemporaryDirectory();
+      cachePath = cacheDir.path;
+    } catch (_) {}
+    _writablePath = writablePath;
+    _log('engine_create(writable: $writablePath)...');
+    final int createResult =
+        await _bridge.engineCreate(writablePath: writablePath, cachePath: cachePath);
     if (createResult != _engineResultOk) {
       _fail(
         'engine_create failed: result=$createResult, '
@@ -532,7 +551,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         _tickCount += 1;
 
         if (_tickCount % 300 == 0) {
-          _log('Tick alive: count=$_tickCount');
+          final String dartPerf = EngineSurfacePerf.take();
+          _log('Tick alive: count=$_tickCount dartperf $dartPerf');
+          _writeDartPerf(dartPerf);
         }
       } finally {
         _tickInFlight = false;
@@ -834,6 +855,24 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     if (mounted && _phase != _EnginePhase.running) {
       setState(() {});
     }
+  }
+
+  /// Append the periodic Dart-side perf line to perf-dart.log next to the
+  /// engine funnel log (Dart print never reaches hilog, so a file under the
+  /// app sandbox — reachable from shell via /mnt/debugtmp — is the channel).
+  void _writeDartPerf(String line) {
+    final String? dir = _writablePath;
+    if (dir == null) return;
+    final now = DateTime.now();
+    final String stamp =
+        '${now.hour.toString().padLeft(2, '0')}:'
+        '${now.minute.toString().padLeft(2, '0')}:'
+        '${now.second.toString().padLeft(2, '0')}';
+    unawaited(
+      File('$dir/perf-dart.log')
+          .writeAsString('[$stamp] $line\n', mode: FileMode.append)
+          .catchError((Object _) {}),
+    );
   }
 
   // --- UI ---

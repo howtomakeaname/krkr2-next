@@ -247,6 +247,24 @@ class FlutterEngineBridge {
     );
   }
 
+  /// OHOS: attach the OHNativeWindow backing a Flutter external texture as
+  /// the engine's EGL render target. [address] comes from the method
+  /// channel's createSurfaceTexture result (nativeWindowPtr); 0 detaches.
+  Future<int> engineSetRenderTargetNativeWindow({
+    required int address,
+    required int width,
+    required int height,
+  }) async {
+    return _withFfiCall(
+      apiName: 'engine_set_render_target_surface',
+      call: (ffi) => ffi.setRenderTargetNativeWindow(
+        address: address,
+        width: width,
+        height: height,
+      ),
+    );
+  }
+
   Future<bool> engineGetFrameRenderedFlag() async {
     final ffi = _ffiBridge;
     if (ffi == null) {

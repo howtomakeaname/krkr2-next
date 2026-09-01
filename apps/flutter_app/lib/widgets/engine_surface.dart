@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -19,6 +20,11 @@ class EngineInputEventType {
   static const int textInput = 7;
   static const int back = 8;
 }
+
+/// True on the OpenHarmony Flutter fork. The fork reports 'ohos' through
+/// Platform.operatingSystem but the standard SDK has no Platform.isOhos,
+/// so compare the string directly.
+bool get _isOhos => Platform.operatingSystem == 'ohos';
 
 /// Rendering mode for the engine surface.
 enum EngineSurfaceMode {
@@ -80,10 +86,16 @@ class EngineSurfaceState extends State<EngineSurface> {
   int? _ioSurfaceId;
   bool _ioSurfaceInitInFlight = false;
 
-  // SurfaceTexture zero-copy mode (Android)
+  // SurfaceTexture zero-copy mode (Android, OHOS)
   int? _surfaceTextureId;
   bool _surfaceTextureInitInFlight = false;
+  // OHOS: raw OHNativeWindow* attached via FFI (0 = detached)
+  int _nativeWindowPtr = 0;
   Size _lastRequestedLogicalSize = Size.zero;
+
+  /// Logical size of this widget from the last build; used to map pointer
+  /// positions onto the letterboxed RawImage frame (software path).
+  Size _lastWidgetLogicalSize = Size.zero;
   double _lastRequestedDpr = 1.0;
   EngineInputEventData? _pendingPointerMoveEvent;
   bool _pointerMoveFlushScheduled = false;
@@ -176,6 +188,17 @@ class EngineSurfaceState extends State<EngineSurface> {
       16384,
     );
 
+    if (_isOhos) {
+      // Keep the engine pbuffer at the game's native size (e.g. 1280x720
+      // landscape). Resizing it to the portrait full-screen layout would
+      // make every glReadPixels readback cost ~15MB/frame; RawImage with
+      // BoxFit.contain scales the frame to the widget size anyway.
+      _surfaceWidth = 0;
+      _surfaceHeight = 0;
+      await _ensureRenderTarget();
+      return;
+    }
+
     if (width == _surfaceWidth && height == _surfaceHeight) {
       await _ensureRenderTarget();
       return;
@@ -204,6 +227,20 @@ class EngineSurfaceState extends State<EngineSurface> {
       case EngineSurfaceMode.gpuZeroCopy:
         if (Platform.isAndroid) {
           await _ensureSurfaceTexture();
+        } else if (_isOhos) {
+          // OHOS zero-copy is disabled: presenting to the embedder texture's
+          // OHNativeWindow via eglSwapBuffers can block the tick thread
+          // forever. The embedder only consumes queued buffers while it is
+          // compositing a Flutter scene, and compositing needs this very
+          // isolate to yield first — once the buffer queue fills,
+          // eglSwapBuffers deadlocks the UI isolate (observed as a frozen
+          // frame plus endless raster JANK reports). The plugin's
+          // updateTextureRgba is also a no-op on OHOS, so the legacy plugin
+          // texture cannot display frames either. Leave all texture ids
+          // null: _pollFrame then takes the RawImage path
+          // (engineReadFrame → decodeImageFromPixels), which requires
+          // nothing from the embedder.
+          widget.onLog?.call('OHOS: using software RawImage frame path');
         } else {
           await _ensureIOSurfaceTexture();
         }
@@ -394,6 +431,43 @@ class EngineSurfaceState extends State<EngineSurface> {
 
       final int textureId = result['textureId'] as int;
 
+      if (_isOhos) {
+        // The ArkTS plugin returns the OHNativeWindow* (as a string) behind
+        // its SurfaceTextureEntry; attach it through FFI, the OHOS analogue
+        // of the Android JNI nativeSetSurface call.
+        final String windowPtrStr = result['nativeWindowPtr'] as String? ?? '';
+        final int windowPtr = int.tryParse(windowPtrStr) ?? 0;
+        if (windowPtr == 0) {
+          widget.onLog?.call(
+            'SurfaceTexture missing nativeWindowPtr, falling back to legacy texture mode',
+          );
+          await widget.bridge.disposeSurfaceTexture(textureId: textureId);
+          await _ensureTexture();
+          return;
+        }
+        final int setResult = await widget.bridge
+            .engineSetRenderTargetNativeWindow(
+              address: windowPtr,
+              width: _surfaceWidth,
+              height: _surfaceHeight,
+            );
+        if (setResult != 0) {
+          _reportError(
+            'engine_set_render_target_surface failed: $setResult, '
+            'error=${widget.bridge.engineGetLastError()}',
+          );
+          await widget.bridge.engineSetRenderTargetNativeWindow(
+            address: 0,
+            width: 0,
+            height: 0,
+          );
+          await widget.bridge.disposeSurfaceTexture(textureId: textureId);
+          await _ensureTexture();
+          return;
+        }
+        _nativeWindowPtr = windowPtr;
+      }
+
       // The SurfaceTexture/Surface is already passed to C++ via JNI
       // in the Kotlin plugin's createSurfaceTexture method.
       // The C++ engine_tick() will auto-detect the pending ANativeWindow
@@ -420,6 +494,18 @@ class EngineSurfaceState extends State<EngineSurface> {
     final int? textureId = _surfaceTextureId;
     if (textureId == null) return;
     _surfaceTextureId = null;
+    if (_isOhos && _nativeWindowPtr != 0) {
+      // Detach the OHNativeWindow from the engine before the embedder
+      // releases it, mirroring the Android JNI detach in disposeSurfaceTexture.
+      try {
+        await widget.bridge.engineSetRenderTargetNativeWindow(
+          address: 0,
+          width: 0,
+          height: 0,
+        );
+      } catch (_) {}
+      _nativeWindowPtr = 0;
+    }
     await widget.bridge.disposeSurfaceTexture(textureId: textureId);
   }
 
@@ -471,6 +557,14 @@ class EngineSurfaceState extends State<EngineSurface> {
 
   // --- Frame polling ---
 
+  /// Software RawImage-path perf counters, accumulated in [_pollFrame].
+  /// Read (and reset) via [EngineSurfacePerf.take] — the game page logs
+  /// them periodically alongside the engine-side "perf:" lines.
+  static int _perfReadCalls = 0;
+  static int _perfReadUs = 0;
+  static int _perfDecodeCalls = 0;
+  static int _perfDecodeUs = 0;
+
   Future<void> _pollFrame({bool? externalRendered}) async {
     if (!widget.active || _frameInFlight) {
       return;
@@ -498,7 +592,11 @@ class EngineSurfaceState extends State<EngineSurface> {
       }
 
       // Legacy path: read pixels
+      final Stopwatch readSw = Stopwatch()..start();
       final EngineFrameData? frameData = await widget.bridge.engineReadFrame();
+      readSw.stop();
+      _perfReadCalls += 1;
+      _perfReadUs += readSw.elapsedMicroseconds;
       if (frameData == null) {
         return;
       }
@@ -546,12 +644,16 @@ class EngineSurfaceState extends State<EngineSurface> {
         }
       }
 
+      final Stopwatch decodeSw = Stopwatch()..start();
       final ui.Image nextImage = await _decodeRgbaFrame(
         rgbaData,
         width: frameInfo.width,
         height: frameInfo.height,
         rowBytes: frameInfo.strideBytes,
       );
+      decodeSw.stop();
+      _perfDecodeCalls += 1;
+      _perfDecodeUs += decodeSw.elapsedMicroseconds;
 
       if (!mounted) {
         nextImage.dispose();
@@ -640,17 +742,60 @@ class EngineSurfaceState extends State<EngineSurface> {
     // The C++ side (DrawDevice::TransformToPrimaryLayerManager)
     // then maps these surface coordinates → primary layer coordinates.
     final double dpr = _devicePixelRatio > 0 ? _devicePixelRatio : 1.0;
+    double x = event.localPosition.dx * dpr;
+    double y = event.localPosition.dy * dpr;
+    double dX = (deltaX ?? event.delta.dx) * dpr;
+    double dY = (deltaY ?? event.delta.dy) * dpr;
+
+    // Software RawImage path: the displayed image is letterboxed inside the
+    // widget (RawImage fit: BoxFit.contain) while the engine keeps its frame
+    // at the game's native pixel size (e.g. 1280x720). Surface coordinates
+    // (= widget physical size) therefore do not match frame coordinates on
+    // screens with a different aspect (portrait phone showing a landscape
+    // game): a tap at widget-y 1428 lands far outside the 720-tall layer
+    // tree and every layer hit-test misses. Apply the same contain-fit
+    // math the display uses: widget px → centered frame px.
+    if (_mapsPointerToFramePixels) {
+      final double widgetPhysW = _lastWidgetLogicalSize.width * dpr;
+      final double widgetPhysH = _lastWidgetLogicalSize.height * dpr;
+      if (widgetPhysW > 0 && widgetPhysH > 0) {
+        final double scale = math.min(
+          widgetPhysW / _frameWidth,
+          widgetPhysH / _frameHeight,
+        );
+        final double offX = (widgetPhysW - _frameWidth * scale) / 2;
+        final double offY = (widgetPhysH - _frameHeight * scale) / 2;
+        x = (x - offX) / scale;
+        y = (y - offY) / scale;
+        dX /= scale;
+        dY /= scale;
+        // Clamp taps in the letterbox bars to the frame edges so they still
+        // reach the engine (the engine ignores clicks that hit no layer).
+        x = x.clamp(0.0, _frameWidth - 1.0);
+        y = y.clamp(0.0, _frameHeight - 1.0);
+      }
+    }
+
     return EngineInputEventData(
       type: type,
       timestampMicros: event.timeStamp.inMicroseconds,
-      x: event.localPosition.dx * dpr,
-      y: event.localPosition.dy * dpr,
-      deltaX: (deltaX ?? event.delta.dx) * dpr,
-      deltaY: (deltaY ?? event.delta.dy) * dpr,
+      x: x,
+      y: y,
+      deltaX: dX,
+      deltaY: dY,
       pointerId: event.pointer,
       button: _flutterButtonsToEngineButton(event.buttons),
     );
   }
+
+  /// True when frames are shown via RawImage (software readback) and pointer
+  /// positions must be mapped from widget coordinates to native frame pixels.
+  bool get _mapsPointerToFramePixels =>
+      _ioSurfaceTextureId == null &&
+      _surfaceTextureId == null &&
+      _textureId == null &&
+      _frameWidth > 0 &&
+      _frameHeight > 0;
 
   void _sendPointer({
     required int type,
@@ -774,6 +919,7 @@ class EngineSurfaceState extends State<EngineSurface> {
       builder: (BuildContext context, BoxConstraints constraints) {
         final Size size = Size(constraints.maxWidth, constraints.maxHeight);
         final double dpr = MediaQuery.of(context).devicePixelRatio;
+        _lastWidgetLogicalSize = size;
         _ensureSurfaceSizeIfNeeded(size, dpr);
 
         return Focus(
@@ -831,4 +977,30 @@ class EngineSurfaceState extends State<EngineSurface> {
       },
     );
   }
+}
+
+/// Snapshot accessor for the software RawImage-path perf counters
+/// accumulated inside the engine surface state (see _pollFrame).
+class EngineSurfacePerf {
+  /// Returns a one-line summary of (and resets) the counters:
+  /// `read=<calls>x/<ms> decode=<calls>x/<ms>`.
+  static String take() {
+    final int readCalls = _EngineSurfacePerf.readCalls;
+    final int readUs = _EngineSurfacePerf.readUs;
+    final int decodeCalls = _EngineSurfacePerf.decodeCalls;
+    final int decodeUs = _EngineSurfacePerf.decodeUs;
+    _EngineSurfacePerf.readCalls = 0;
+    _EngineSurfacePerf.readUs = 0;
+    _EngineSurfacePerf.decodeCalls = 0;
+    _EngineSurfacePerf.decodeUs = 0;
+    return 'read=${readCalls}x/${(readUs / 1000).toStringAsFixed(1)}ms '
+        'decode=${decodeCalls}x/${(decodeUs / 1000).toStringAsFixed(1)}ms';
+  }
+}
+
+class _EngineSurfacePerf {
+  static int readCalls = 0;
+  static int readUs = 0;
+  static int decodeCalls = 0;
+  static int decodeUs = 0;
 }

@@ -155,6 +155,15 @@ abstract interface class EngineBridge {
   });
   Future<void> disposeSurfaceTexture({required int textureId});
 
+  // OHOS OHNativeWindow zero-copy rendering (same mechanism as Android
+  // SurfaceTexture, but the window pointer is attached through FFI here
+  // instead of JNI inside the native plugin).
+  Future<int> engineSetRenderTargetNativeWindow({
+    required int address,
+    required int width,
+    required int height,
+  });
+
   String engineGetRendererInfo();
   Future<EngineMemoryStats?> engineGetMemoryStats();
   String engineGetLastError();
