@@ -13,6 +13,13 @@ vcpkg_cmake_configure(
         # toolchain's --gcc-toolchain then trips -Werror=unused-command-line-
         # argument in every try-compile (pid_t size check aborts configure).
         -DENABLE_WERROR=OFF
+        # FIND_PATH/FIND_LIBRARY for libb2 also scan the compiler's default
+        # prefix (/opt/homebrew on dev Macs), where some formula ships
+        # blake2.h/libb2. libarchive then records a dependency nothing in the
+        # vcpkg tree provides: rar5.c calls blake2sp_* unresolved at final
+        # link. Disable the external libb2 probe so the bundled reference
+        # implementation is compiled in instead.
+        -DENABLE_LIBB2=OFF
         -DENABLE_OPENSSL=OFF
         -DENABLE_TEST=OFF
         -DENABLE_TAR=OFF
