@@ -1,0 +1,27 @@
+# OHOS-only dependency overrides — opt in before building for HarmonyOS:
+#   cp pubspec_overrides.ohos.yaml pubspec_overrides.yaml
+#
+# pub resolves pubspec_overrides.yaml over pubspec.yaml, and that file stays
+# local (gitignored), so platforms other than OHOS build from a fresh clone
+# without the sibling ohos_flutter_packages checkout.
+#
+# OpenHarmony ports of the first-party flutter/packages plugins (openharmony-tpc
+# fork). The umbrella packages forward to the *_ohos endorsed implementations,
+# so overriding both layers keeps everything resolving locally.
+dependency_overrides:
+  shared_preferences:
+    path: ../../../ohos_flutter_packages/packages/shared_preferences/shared_preferences
+  shared_preferences_ohos:
+    path: ../../../ohos_flutter_packages/packages/shared_preferences/shared_preferences_ohos
+  path_provider:
+    path: ../../../ohos_flutter_packages/packages/path_provider/path_provider
+  path_provider_ohos:
+    path: ../../../ohos_flutter_packages/packages/path_provider/path_provider_ohos
+  url_launcher:
+    path: ../../../ohos_flutter_packages/packages/url_launcher/url_launcher
+  url_launcher_ohos:
+    path: ../../../ohos_flutter_packages/packages/url_launcher/url_launcher_ohos
+  image_picker:
+    path: ../../../ohos_flutter_packages/packages/image_picker/image_picker
+  image_picker_ohos:
+    path: ../../../ohos_flutter_packages/packages/image_picker/image_picker_ohos

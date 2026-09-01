@@ -97,6 +97,9 @@ ls -la "$LIBS_OUT"
 # ============================================================
 echo "==> [3/3] flutter build hap --$BUILD_TYPE_LOWER"
 cd "$PROJECT_ROOT/apps/flutter_app"
+# Enable the OHOS dependency overrides (kept out of pubspec.yaml so other
+# platforms build from a fresh clone without the sibling packages checkout).
+cp -f pubspec_overrides.ohos.yaml pubspec_overrides.yaml
 flutter pub get
 # `flutter build hap` always exits non-zero while app/signingConfigs is empty
 # (its debug-signing precheck), but hvigor has already produced the unsigned

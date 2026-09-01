@@ -72,7 +72,7 @@ This repository adds native HarmonyOS/OpenHarmony (API 20 / SDK 5.x) support on 
 
 1. [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/) with the OpenHarmony SDK (tested with API 20)
 2. The Flutter OHOS fork: [flutter_flutter_ohos](https://gitcode.com/openharmony-sig/flutter_flutter) (tested on branch `oh-3.41.9-release`); add its `bin` to PATH
-3. Check out [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) as a **sibling** directory named `ohos_flutter_packages/` (referenced via relative `dependency_overrides` in `pubspec.yaml`)
+3. Check out [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) as a **sibling** directory named `ohos_flutter_packages/` (the OHOS-only `dependency_overrides` live in `apps/flutter_app/pubspec_overrides.ohos.yaml`; the build script copies them to `pubspec_overrides.yaml` automatically. Other platforms are unaffected and do not need this checkout)
 4. vcpkg dependencies per the root `vcpkg.json`, using the `vcpkg/triplets/arm64-ohos.cmake` triplet
 
 ### Build & Install

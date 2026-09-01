@@ -72,7 +72,7 @@
 
 1. [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/)（含 OpenHarmony SDK，实测用 API 20）
 2. Flutter OHOS fork：[flutter_flutter_ohos](https://gitcode.com/openharmony-sig/flutter_flutter)（实测 `oh-3.41.9-release` 分支），检出后将其 `bin` 加入 PATH
-3. [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) 检出到与本仓库**同级**的 `ohos_flutter_packages/` 目录（`pubspec.yaml` 的 `dependency_overrides` 以相对路径引用）
+3. [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) 检出到与本仓库**同级**的 `ohos_flutter_packages/` 目录（OHOS 专属的 `dependency_overrides` 存放在 `apps/flutter_app/pubspec_overrides.ohos.yaml`，构建脚本会自动拷贝为 `pubspec_overrides.yaml` 启用；其他平台不受影响，无需该目录）
 4. vcpkg 依赖按仓库根 `vcpkg.json` 拉取，triplet 使用 `vcpkg/triplets/arm64-ohos.cmake`
 
 ### 构建与安装
