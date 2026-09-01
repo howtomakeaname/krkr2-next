@@ -288,6 +288,29 @@ void TVPInitFontNames() {
                 break;
 #endif
 
+#if defined(__OHOS__)
+            // OHOS ships world-readable CJK fonts in /system/fonts (verified on
+            // the emulator: NotoSansCJK-Regular.ttc covers JP glyphs, and the
+            // HarmonyOS_Sans_* faces are the fallbacks). Without this branch no
+            // font ever registers and the first engine text draw throws
+            // "Can't open font file" (seen at utils.tjs drawTextKinsokuRect).
+            if(tryLoadFontDirect("/system/fonts/NotoSansCJK-Regular.ttc",
+                                 "/system/fonts/NotoSansCJK-Regular.ttc"))
+                break;
+            if(tryLoadFontDirect("/system/fonts/NotoSerifCJK-Regular.ttc",
+                                 "/system/fonts/NotoSerifCJK-Regular.ttc"))
+                break;
+            if(tryLoadFontDirect("/system/fonts/HarmonyOS_Sans_SC.ttf",
+                                 "/system/fonts/HarmonyOS_Sans_SC.ttf"))
+                break;
+            if(tryLoadFontDirect("/system/fonts/HarmonyOS_Sans_TC.ttf",
+                                 "/system/fonts/HarmonyOS_Sans_TC.ttf"))
+                break;
+            if(tryLoadFontDirect("/system/fonts/HarmonyOS_Sans.ttf",
+                                 "/system/fonts/HarmonyOS_Sans.ttf"))
+                break;
+#endif
+
 #if defined(__APPLE__) && TARGET_OS_IOS
             // iOS: use CoreText API to get system font data (sandbox-safe).
             {
