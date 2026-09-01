@@ -89,9 +89,10 @@ tjs_int TVPGetSystemFreeMemory() {
 
 tjs_int TVPGetSelfUsedMemory() {
     std::ifstream statm{ "/proc/self/statm" };
-    tjs_int pages = 0;
-    statm >> pages; // 第一个字段是总内存页数
-    return (pages * sysconf(_SC_PAGESIZE)) / (1024 * 1024); // 转换为 MB
+    // 字段 0 是虚拟内存大小，字段 1 才是实际驻留（RSS）。
+    tjs_int total_pages = 0, resident_pages = 0;
+    statm >> total_pages >> resident_pages;
+    return (resident_pages * sysconf(_SC_PAGESIZE)) / (1024 * 1024); // 转换为 MB
 }
 
 std::string TVPGetPackageVersionString() { return "linux"; }
