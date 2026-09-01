@@ -27,14 +27,18 @@ class GamePage extends StatefulWidget {
     required this.gamePath,
     this.ffiLibraryPath,
     this.engineBridgeBuilder = createEngineBridge,
-    this.forceLandscape = true,
+    this.orientation = PrefsKeys.gameOrientationLandscape,
     this.gameManager,
   });
 
   final String gamePath;
   final String? ffiLibraryPath;
   final EngineBridgeBuilder engineBridgeBuilder;
-  final bool forceLandscape;
+
+  /// Initial screen orientation while the game runs: one of
+  /// [PrefsKeys.gameOrientationValues]. The in-game overlay can rotate
+  /// between landscape and portrait at runtime.
+  final String orientation;
 
   /// If set, play duration is recorded when leaving this page.
   final GameManager? gameManager;
@@ -75,8 +79,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   final GlobalKey<EnginePerformanceOverlayState> _perfOverlayKey0 =
       GlobalKey<EnginePerformanceOverlayState>();
 
-  // Orientation
-  bool _forceLandscape = true;
+  // Orientation currently applied to the window (landscape / portrait / auto).
+  late String _orientation = widget.orientation;
 
   // Which native runtime this entry runs on (drives preflight + the
   // `engine` option handed to the bridge).
@@ -118,7 +122,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       unawaited(_savePendingPlaySession());
     }
     WidgetsBinding.instance.addObserver(this);
-    _forceLandscape = widget.forceLandscape;
     _bridge = widget.engineBridgeBuilder(ffiLibraryPath: widget.ffiLibraryPath);
     _loadSettings();
     _applyOrientation();
@@ -783,7 +786,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     if (mounted) {
       final fps = prefs.getInt(PrefsKeys.targetFps) ?? PrefsKeys.defaultFps;
       final fpsLimitEnabled = prefs.getBool(PrefsKeys.fpsLimitEnabled) ?? false;
-      _forceLandscape = prefs.getBool(PrefsKeys.forceLandscape) ?? true;
       setState(() {
         _showPerfOverlay = prefs.getBool(PrefsKeys.perfOverlay) ?? false;
         _targetFps = fps;
@@ -792,19 +794,58 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Push [_orientation] to the window. On OpenHarmony the Flutter embedder
+  /// maps SystemChrome.setPreferredOrientations onto
+  /// window.setPreferredOrientation (landscape pair → AUTO_ROTATION_LANDSCAPE,
+  /// portrait pair → AUTO_ROTATION_PORTRAIT, all four → follows the system
+  /// rotation lock), so the same call serves Android, iOS and OHOS.
   void _applyOrientation() {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    if (_forceLandscape) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+    if (!PrefsKeys.orientationSupported) return;
+    final List<DeviceOrientation> wanted;
+    switch (_orientation) {
+      case PrefsKeys.gameOrientationPortrait:
+        wanted = const [
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ];
+        break;
+      case PrefsKeys.gameOrientationAuto:
+        wanted = DeviceOrientation.values;
+        break;
+      default:
+        wanted = const [
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ];
     }
+    unawaited(
+      SystemChrome.setPreferredOrientations(wanted).catchError((Object e) {
+        _log('setPreferredOrientations($_orientation) failed: $e');
+      }),
+    );
+  }
+
+  /// Runtime toggle from the in-game overlay: landscape ↔ portrait. "Follow
+  /// system" counts as landscape for the purpose of the flip.
+  void _toggleOrientation() {
+    final next = _orientation == PrefsKeys.gameOrientationPortrait
+        ? PrefsKeys.gameOrientationLandscape
+        : PrefsKeys.gameOrientationPortrait;
+    setState(() {
+      _orientation = next;
+      _showOverlay = false;
+    });
+    _log('Orientation → $next');
+    _applyOrientation();
   }
 
   void _restoreOrientation() {
-    if (!Platform.isAndroid && !Platform.isIOS) return;
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    if (!PrefsKeys.orientationSupported) return;
+    unawaited(
+      SystemChrome.setPreferredOrientations(
+        DeviceOrientation.values,
+      ).catchError((Object _) {}),
+    );
   }
 
   /// Apply the current fps_limit setting to the C++ engine layer.
@@ -1286,6 +1327,14 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     setState(() => _showOverlay = false);
                   },
                 ),
+                if (PrefsKeys.orientationSupported)
+                  _overlayItem(
+                    icon: _orientation == PrefsKeys.gameOrientationPortrait
+                        ? LucideIcons.rectangleHorizontal
+                        : LucideIcons.rectangleVertical,
+                    label: l10n.rotateScreen,
+                    onTap: _toggleOrientation,
+                  ),
                 Divider(color: colors.separator, height: 1),
                 _overlayItem(
                   icon: LucideIcons.logOut,

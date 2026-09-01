@@ -48,7 +48,7 @@ class _HomePageState extends State<HomePage> {
   int _targetFps = PrefsKeys.defaultFps;
   String _renderer = PrefsKeys.rendererOpengl;
   String _angleBackend = PrefsKeys.angleBackendGles;
-  bool _forceLandscape = true;
+  String _gameOrientation = PrefsKeys.gameOrientationLandscape;
 
   String? _resolveBuiltInDylibPath() {
     if (Platform.isIOS) {
@@ -117,7 +117,10 @@ class _HomePageState extends State<HomePage> {
     _renderer = prefs.getString(PrefsKeys.renderer) ?? PrefsKeys.rendererOpengl;
     _angleBackend =
         prefs.getString(PrefsKeys.angleBackend) ?? PrefsKeys.angleBackendGles;
-    _forceLandscape = prefs.getBool(PrefsKeys.forceLandscape) ?? true;
+    _gameOrientation = PrefsKeys.readGameOrientation(
+      prefs.getString(PrefsKeys.gameOrientation),
+      legacyForceLandscape: prefs.getBool(PrefsKeys.forceLandscape),
+    );
     await _gameManager.load();
     await _gameManager.applyPendingPlaySession();
 
@@ -1311,7 +1314,7 @@ class _HomePageState extends State<HomePage> {
         builder: (_) => GamePage(
           gamePath: game.path,
           ffiLibraryPath: dylibPath,
-          forceLandscape: _forceLandscape,
+          orientation: _gameOrientation,
           gameManager: _gameManager,
         ),
       ),
@@ -1483,7 +1486,7 @@ class _HomePageState extends State<HomePage> {
           targetFps: _targetFps,
           renderer: _renderer,
           angleBackend: _angleBackend,
-          forceLandscape: _forceLandscape,
+          gameOrientation: _gameOrientation,
         ),
       ),
     );
@@ -1499,7 +1502,7 @@ class _HomePageState extends State<HomePage> {
         _targetFps = result.targetFps;
         _renderer = result.renderer;
         _angleBackend = result.angleBackend;
-        _forceLandscape = result.forceLandscape;
+        _gameOrientation = result.gameOrientation;
       });
     }
   }

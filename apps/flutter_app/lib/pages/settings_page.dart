@@ -26,7 +26,7 @@ class SettingsPage extends StatefulWidget {
     required this.targetFps,
     required this.renderer,
     required this.angleBackend,
-    required this.forceLandscape,
+    required this.gameOrientation,
   });
 
   final EngineMode engineMode;
@@ -38,7 +38,7 @@ class SettingsPage extends StatefulWidget {
   final int targetFps;
   final String renderer;
   final String angleBackend;
-  final bool forceLandscape;
+  final String gameOrientation;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -54,7 +54,7 @@ class SettingsResult {
     required this.targetFps,
     required this.renderer,
     required this.angleBackend,
-    required this.forceLandscape,
+    required this.gameOrientation,
   });
 
   final EngineMode engineMode;
@@ -64,7 +64,7 @@ class SettingsResult {
   final int targetFps;
   final String renderer;
   final String angleBackend;
-  final bool forceLandscape;
+  final String gameOrientation;
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -75,7 +75,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late int _targetFps;
   late String _renderer;
   String _angleBackend = PrefsKeys.angleBackendGles;
-  late bool _forceLandscape;
+  late String _gameOrientation;
   String _localeCode = 'system';
   String _themeModeCode = 'dark';
   bool _dirty = false;
@@ -90,7 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _targetFps = widget.targetFps;
     _renderer = widget.renderer;
     _angleBackend = widget.angleBackend;
-    _forceLandscape = widget.forceLandscape;
+    _gameOrientation = widget.gameOrientation;
     _loadLocale();
     _loadThemeMode();
   }
@@ -131,7 +131,12 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setInt(PrefsKeys.targetFps, _targetFps);
     await prefs.setString(PrefsKeys.renderer, _renderer);
     await prefs.setString(PrefsKeys.angleBackend, _angleBackend);
-    await prefs.setBool(PrefsKeys.forceLandscape, _forceLandscape);
+    await prefs.setString(PrefsKeys.gameOrientation, _gameOrientation);
+    // Keep the legacy flag coherent for anything still reading it.
+    await prefs.setBool(
+      PrefsKeys.forceLandscape,
+      _gameOrientation == PrefsKeys.gameOrientationLandscape,
+    );
 
     if (mounted) {
       Navigator.pop(
@@ -144,7 +149,7 @@ class _SettingsPageState extends State<SettingsPage> {
           targetFps: _targetFps,
           renderer: _renderer,
           angleBackend: _angleBackend,
-          forceLandscape: _forceLandscape,
+          gameOrientation: _gameOrientation,
         ),
       );
     }
@@ -186,6 +191,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
   String _rendererLabel(String value, AppLocalizations l10n) =>
       value == 'opengl' ? 'OpenGL' : l10n.software;
+
+  String _orientationLabel(String value, AppLocalizations l10n) {
+    switch (value) {
+      case PrefsKeys.gameOrientationPortrait:
+        return l10n.orientationPortrait;
+      case PrefsKeys.gameOrientationAuto:
+        return l10n.orientationAuto;
+      default:
+        return l10n.orientationLandscape;
+    }
+  }
 
   String _themeLabel(String code, AppLocalizations l10n) =>
       code == 'light' ? l10n.themeLight : l10n.themeDark;
@@ -405,17 +421,38 @@ class _SettingsPageState extends State<SettingsPage> {
                       _markDirty();
                     },
                   ),
-                if (Platform.isAndroid || Platform.isIOS)
+                if (PrefsKeys.orientationSupported)
                   UiListTile(
-                    title: l10n.forceLandscape,
-                    subtitle: l10n.forceLandscapeDesc,
-                    trailing: UiSwitch(
-                      value: _forceLandscape,
-                      onChanged: (value) {
-                        setState(() => _forceLandscape = value);
-                        _markDirty();
-                      },
-                    ),
+                    title: l10n.screenOrientation,
+                    subtitle: l10n.screenOrientationDesc,
+                    trailingText: _orientationLabel(_gameOrientation, l10n),
+                    showChevron: true,
+                    onTap: () async {
+                      final v = await _showValuePicker<String>(
+                        title: l10n.screenOrientation,
+                        current: _gameOrientation,
+                        options: [
+                          UiDropdownItem(
+                            value: PrefsKeys.gameOrientationLandscape,
+                            label: l10n.orientationLandscape,
+                            icon: LucideIcons.rectangleHorizontal,
+                          ),
+                          UiDropdownItem(
+                            value: PrefsKeys.gameOrientationPortrait,
+                            label: l10n.orientationPortrait,
+                            icon: LucideIcons.rectangleVertical,
+                          ),
+                          UiDropdownItem(
+                            value: PrefsKeys.gameOrientationAuto,
+                            label: l10n.orientationAuto,
+                            icon: LucideIcons.rotate3d,
+                          ),
+                        ],
+                      );
+                      if (v == null || !mounted) return;
+                      setState(() => _gameOrientation = v);
+                      _markDirty();
+                    },
                   ),
               ],
             ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Centralized SharedPreferences keys and engine option constants.
 ///
 /// All pages (home_page, settings_page, game_page) should reference
@@ -16,6 +18,11 @@ class PrefsKeys {
   static const String locale = 'krkr2_locale';
   static const String themeMode = 'krkr2_theme_mode';
   static const String forceLandscape = 'krkr2_force_landscape';
+
+  /// Orientation used while a game runs: one of [gameOrientationValues].
+  /// Supersedes the boolean [forceLandscape]; when unset the boolean is
+  /// consulted so upgraded installs keep their previous behaviour.
+  static const String gameOrientation = 'krkr2_game_orientation';
 
   /// Pending play session: JSON { "path": "...", "startTime": "ISO8601" }. Cleared on normal exit or applied on next launch.
   static const String pendingPlaySession = 'krkr2_pending_play_session';
@@ -48,7 +55,40 @@ class PrefsKeys {
   static const String engineModeBuiltIn = 'builtIn';
   static const String engineModeCustom = 'custom';
 
+  // ── Game orientation values ─────────────────────────────────────
+  static const String gameOrientationAuto = 'auto';
+  static const String gameOrientationLandscape = 'landscape';
+  static const String gameOrientationPortrait = 'portrait';
+  static const List<String> gameOrientationValues = [
+    gameOrientationLandscape,
+    gameOrientationPortrait,
+    gameOrientationAuto,
+  ];
+
+  /// Whether the platform lets the app steer the window orientation
+  /// (SystemChrome.setPreferredOrientations → window.setPreferredOrientation
+  /// on OpenHarmony, the usual paths on Android/iOS). Desktop windows have no
+  /// orientation.
+  static bool get orientationSupported => _isMobilePlatform;
+
   // ── Default values ──────────────────────────────────────────────
   static const int defaultFps = 60;
   static const List<int> fpsOptions = [30, 60, 120];
+
+  /// Resolve the persisted game orientation, honouring the legacy boolean.
+  static String readGameOrientation(
+    String? stored, {
+    bool? legacyForceLandscape,
+  }) {
+    if (stored != null && gameOrientationValues.contains(stored)) {
+      return stored;
+    }
+    if (legacyForceLandscape == false) return gameOrientationAuto;
+    return gameOrientationLandscape;
+  }
+
+  static bool get _isMobilePlatform {
+    final os = Platform.operatingSystem;
+    return os == 'android' || os == 'ios' || os == 'ohos';
+  }
 }
