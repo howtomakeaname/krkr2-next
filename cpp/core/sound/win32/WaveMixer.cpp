@@ -21,6 +21,11 @@
 #include "TickCount.h"
 #include "WaveImpl.h"
 #include <SDL2/SDL.h>
+#ifdef __OHOS__
+#include <atomic>
+#include <ohaudio/native_audiostreambuilder.h>
+#include <ohaudio/native_audiorenderer.h>
+#endif
 #include <algorithm>
 #include <assert.h>
 #include <iomanip>
@@ -486,6 +491,80 @@ public:
 
 #endif
 
+#ifdef __OHOS__
+
+// OpenHarmony OHAudio renderer — the OHOS counterpart of AAudio/Oboe.
+// Callback-driven: the audio server thread pulls mixed PCM through
+// iTVPAudioRenderer::FillBuffer, exactly like the Oboe path on Android.
+class tTVPAudioRendererOHOS : public iTVPAudioRenderer {
+    OH_AudioRenderer *_renderer = nullptr;
+    std::atomic<int64_t> _framesWritten{ 0 };
+
+    static int32_t OnWriteData(OH_AudioRenderer *renderer, void *userData,
+                               void *buffer, int32_t length) {
+        (void)renderer;
+        auto *self = static_cast<tTVPAudioRendererOHOS *>(userData);
+        memset(buffer, 0, length);
+        self->FillBuffer((uint8_t *)buffer, length);
+        self->_framesWritten += length / self->_frame_size;
+        return 0;
+    }
+
+public:
+    virtual ~tTVPAudioRendererOHOS() {
+        if(_renderer) {
+            OH_AudioRenderer_Stop(_renderer);
+            OH_AudioRenderer_Release(_renderer);
+        }
+    }
+
+    bool Init() override {
+        InitMixer();
+        OH_AudioStreamBuilder *builder = nullptr;
+        if(OH_AudioStreamBuilder_Create(&builder, AUDIOSTREAM_TYPE_RENDERER) !=
+           AUDIOSTREAM_SUCCESS) {
+            SDL_Log("Fail to create OH_AudioStreamBuilder");
+            return false;
+        }
+        OH_AudioStreamBuilder_SetSamplingRate(builder, _spec.freq);
+        OH_AudioStreamBuilder_SetChannelCount(builder, _spec.channels);
+        OH_AudioStreamBuilder_SetSampleFormat(builder,
+                                              AUDIOSTREAM_SAMPLE_S16LE);
+        OH_AudioStreamBuilder_SetLatencyMode(builder,
+                                             AUDIOSTREAM_LATENCY_MODE_FAST);
+        OH_AudioRenderer_Callbacks callbacks{};
+        callbacks.OH_AudioRenderer_OnWriteData =
+            &tTVPAudioRendererOHOS::OnWriteData;
+        OH_AudioStreamBuilder_SetRendererCallback(builder, callbacks, this);
+        OH_AudioStream_Result result =
+            OH_AudioStreamBuilder_GenerateRenderer(builder, &_renderer);
+        OH_AudioStreamBuilder_Destroy(builder);
+        if(result != AUDIOSTREAM_SUCCESS || !_renderer) {
+            SDL_Log("Fail to open OHAudio renderer");
+            return false;
+        }
+        _spec.format = AUDIO_S16LSB;
+        _frame_size = SDL_AUDIO_BITSIZE(_spec.format) / 8 * _spec.channels;
+        OH_AudioRenderer_Start(_renderer);
+        SDL_Log("Audio Device: OHAudio @%dHz", _spec.freq);
+        SetupMixer();
+        return true;
+    }
+
+    virtual int32_t GetUnprocessedSamples() {
+        if(!_renderer)
+            return 0;
+        int64_t framePosition = 0, timestampNs = 0;
+        if(OH_AudioRenderer_GetAudioTimestampInfo(
+               _renderer, &framePosition, &timestampNs) != AUDIOSTREAM_SUCCESS)
+            return 0;
+        int64_t unprocessed = _framesWritten.load() - framePosition;
+        return unprocessed > 0 ? static_cast<int32_t>(unprocessed) : 0;
+    }
+};
+
+#endif
+
 class tTVPSoundBufferAL : public tTVPSoundBuffer {
     typedef tTVPSoundBuffer inherit;
 
@@ -770,6 +849,11 @@ static iTVPAudioRenderer *CreateAudioRenderer() {
     iTVPAudioRenderer *renderer = nullptr;
 #ifdef __ANDROID__
     renderer = new tTVPAudioRendererOboe;
+    if(renderer->Init())
+        return renderer;
+    delete renderer;
+#elif defined(__OHOS__)
+    renderer = new tTVPAudioRendererOHOS;
     if(renderer->Init())
         return renderer;
     delete renderer;

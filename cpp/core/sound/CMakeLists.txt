@@ -60,6 +60,12 @@ if(ANDROID)
     )
 endif()
 
+if(OHOS)
+    # WaveMixer.cpp builds tTVPAudioRendererOHOS on top of the system
+    # OHAudio C API (libohaudio.so ships with the OHOS sysroot).
+    target_link_libraries(${PROJECT_NAME} PRIVATE ohaudio)
+endif()
+
 find_package(OpenAL CONFIG REQUIRED)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
