@@ -632,7 +632,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
             ),
           ],
           const SizedBox(height: 8),
-          _infoRow(LucideIcons.package, _isXp3 ? 'XP3 Archive' : 'Directory'),
+          _infoRow(
+            LucideIcons.package,
+            _isXp3 ? l10n.gameTypeXp3 : l10n.gameTypeDirectory,
+          ),
         ],
       ),
     );

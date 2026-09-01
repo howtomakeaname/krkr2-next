@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import '../engine/engine_bridge.dart';
 import '../engine/flutter_engine_bridge_adapter.dart';
 import '../constants/prefs_keys.dart';
+import '../l10n/app_localizations.dart';
 import '../services/game_manager.dart';
 import '../widgets/engine_surface.dart';
 import '../ui/ui.dart';
@@ -322,18 +323,19 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   Future<String?> _preflightGamePath(String path) async {
+    final l10n = AppLocalizations.of(context);
     try {
       if (_isArchivePath(path)) {
         final file = File(path);
         if (!await file.exists()) {
-          return 'Archive file does not exist: $path';
+          return l10n?.archiveNotExist(path);
         }
         return null;
       }
 
       final dir = Directory(path);
       if (!await dir.exists()) {
-        return 'Game path does not exist: $path';
+        return l10n?.gamePathNotExist(path);
       }
 
       // Accept either startup.tjs in root or data/system/initialize.tjs
@@ -343,11 +345,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       if (!await startup.exists() &&
           !await init.exists() &&
           !await initUpper.exists()) {
-        return 'Missing startup script in: $path\n'
-            '(looked for startup.tjs and data/system/initialize.tjs)';
+        return l10n?.missingStartupScript(path);
       }
     } catch (e) {
-      return 'Game path check failed: $e';
+      return AppLocalizations.of(context)?.gamePathCheckFailed(e.toString());
     }
     return null;
   }
@@ -357,8 +358,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       final granted = await _ensureAndroidAllFilesAccess();
       if (!granted) {
         _fail(
-          'All files access is required on Android. '
-          'Please grant permission and open the game again.',
+          AppLocalizations.of(context)?.androidAllFilesAccess ??
+              'All files access is required on Android. '
+                  'Please grant permission and open the game again.',
         );
         return;
       }
@@ -874,8 +876,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         '${now.second.toString().padLeft(2, '0')}';
     unawaited(() async {
       try {
-        await File('$dir/perf-dart.log')
-            .writeAsString('[$stamp] $line\n', mode: FileMode.append);
+        await File(
+          '$dir/perf-dart.log',
+        ).writeAsString('[$stamp] $line\n', mode: FileMode.append);
       } catch (_) {}
     }());
   }
@@ -1148,6 +1151,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   Widget _buildErrorView() {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -1160,9 +1164,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               size: 64,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Engine Error',
-              style: TextStyle(
+            Text(
+              l10n.gameEngineError,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -1176,7 +1180,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SelectableText(
-                _errorMessage ?? 'Unknown error',
+                _errorMessage ?? l10n.unknownError,
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 13,
@@ -1189,14 +1193,14 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               children: [
                 UiButton(
-                  label: 'Back',
+                  label: l10n.back,
                   leadingIcon: LucideIcons.chevronLeft,
                   variant: UiButtonVariant.outline,
                   onPressed: _exitGame,
                 ),
                 const SizedBox(width: UiSpacing.lg),
                 UiButton(
-                  label: 'Retry',
+                  label: l10n.retry,
                   leadingIcon: LucideIcons.refreshCw,
                   onPressed: () {
                     setState(() {
@@ -1221,6 +1225,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   Widget _buildOverlay() {
     final colors = context.uiColors;
+    final l10n = AppLocalizations.of(context)!;
     return Positioned(
       right: 16,
       top: MediaQuery.of(context).padding.top + 52,
@@ -1237,12 +1242,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               children: [
                 _overlayItem(
                   icon: LucideIcons.bug,
-                  label: _showDebug ? 'Hide Debug' : 'Show Debug',
+                  label: _showDebug ? l10n.hideDebug : l10n.showDebug,
                   onTap: _toggleDebug,
                 ),
                 _overlayItem(
                   icon: LucideIcons.pause,
-                  label: _isTicking ? 'Pause' : 'Resume',
+                  label: _isTicking ? l10n.pause : l10n.resume,
                   onTap: () async {
                     if (_isTicking) {
                       _stopTickLoop();
@@ -1259,7 +1264,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                 Divider(color: colors.separator, height: 1),
                 _overlayItem(
                   icon: LucideIcons.logOut,
-                  label: 'Exit Game',
+                  label: l10n.exitGame,
                   onTap: _exitGame,
                   destructive: true,
                 ),
