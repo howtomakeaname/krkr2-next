@@ -15,11 +15,11 @@
 
 **语言 / Language**: 中文 | [English](README_EN.md)
 
-> 🙏 本项目基于 [krkr2](https://github.com/2468785842/krkr2) 重构，感谢原作者的贡献。
+> 🙏 本仓库（HarmonyOS 适配版）基于 [reAAAq/KrKr2-Next](https://github.com/reAAAq/KrKr2-Next) 二次开发而来，在其基础上新增了 HarmonyOS/OpenHarmony（原生鸿蒙）支持，感谢原作者的贡献。上游项目又是基于 [krkr2](https://github.com/2468785842/krkr2) 重构的，一并致谢。
 
 ## 简介
 
-**KrKr2 Next** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它完全兼容原版游戏脚本，使用现代图形接口进行硬件加速渲染，并在渲染性能和脚本执行效率上做了大量优化。基于 Flutter 构建统一的跨平台界面，支持 macOS · iOS · Windows · Linux · Android 五大平台。
+**KrKr2 Next** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它完全兼容原版游戏脚本，使用现代图形接口进行硬件加速渲染，并在渲染性能和脚本执行效率上做了大量优化。基于 Flutter 构建统一的跨平台界面，支持 macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony 六大平台。
 
 下图为当前在 macOS 上通过 Metal 后端运行的实际效果：
 
@@ -62,6 +62,36 @@
 | Windows | 📋 计划中 | Direct3D 11 | D3D11 Texture |
 | Linux | 📋 计划中 | Vulkan / Desktop GL | DMA-BUF |
 | Android | 🔨 流程跑通，优化中 | OpenGL ES / Vulkan | HardwareBuffer |
+| HarmonyOS / OpenHarmony | 🔨 流程跑通（模拟器实测可玩），优化中 | 系统 EGL (GLES) / 软件合成 | OHNativeWindow / RawImage 读回 |
+
+## HarmonyOS / OpenHarmony（原生鸿蒙）支持
+
+本仓库在 upstream 基础上新增了原生鸿蒙（HarmonyOS / OpenHarmony，API 20 / SDK 5.x）支持：引擎 C++ 核心经 OHOS NDK（llvm + musl）交叉编译为 `libengine_api.so` 打入 HAP，由 Flutter OHOS 宿主加载；音频走系统 OHAudio；字体直接注册 `/system/fonts` 下的 NotoSansCJK 等系统字体。
+
+### 环境准备
+
+1. [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/)（含 OpenHarmony SDK，实测用 API 20）
+2. Flutter OHOS fork：[flutter_flutter_ohos](https://gitcode.com/openharmony-sig/flutter_flutter)（实测 `oh-3.41.9-release` 分支），检出后将其 `bin` 加入 PATH
+3. [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) 检出到与本仓库**同级**的 `ohos_flutter_packages/` 目录（`pubspec.yaml` 的 `dependency_overrides` 以相对路径引用）
+4. vcpkg 依赖按仓库根 `vcpkg.json` 拉取，triplet 使用 `vcpkg/triplets/arm64-ohos.cmake`
+
+### 构建与安装
+
+```bash
+./build/build_ohos.sh release     # 交叉编译引擎 + flutter build hap
+hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
+```
+
+> ⚠️ 性能相关：请勿用 `debug` 产物评估性能——CMake Debug 为 `-O0`，Highway SIMD
+> 混合内核退化为每 16 像素多次跨函数调用，整帧合成慢约两个数量级。release 为
+> `-O2 -DNDEBUG` + Flutter AOT。
+
+### 运行说明与已知限制
+
+- 模拟器上建议在应用设置中切换 **renderer=software**（软件渲染 + RawImage 帧路径）；模拟器 GPU 对高频纹理上传不稳定，实机可尝试默认 GL 路径
+- 游戏导入：系统文件选择器只返回 `docs://` URI（fopen 引擎无法消费），应用内提供沙箱目录扫描与 URL 网络导入（支持断点续传）；也可 `hdc file send` 直接送入应用沙箱
+- Cubism Live2D 插件因无 OHOS 预编译 Core 暂未编入；layerex_draw（libgdiplus 依赖）同
+- 引擎日志：hilog（tag `krkr2`）与应用沙箱内 `files/flutter/krkr2-engine.log` 双通道
 
 ## 引擎性能优化
 
