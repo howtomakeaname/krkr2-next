@@ -9,6 +9,10 @@ vcpkg_from_github(
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        # libarchive defaults ENABLE_WERROR to ON for Debug builds; the OHOS
+        # toolchain's --gcc-toolchain then trips -Werror=unused-command-line-
+        # argument in every try-compile (pid_t size check aborts configure).
+        -DENABLE_WERROR=OFF
         -DENABLE_OPENSSL=OFF
         -DENABLE_TEST=OFF
         -DENABLE_TAR=OFF
