@@ -161,6 +161,7 @@ private:
     static int l_tag(lua_State *L);
     static int l_var(lua_State *L);
     static int l_isFileExists(lua_State *L);
+    static int l_loadPngComments(lua_State *L);   // KrKr2-Next addition
     static int l_include(lua_State *L);
     static int l_file(lua_State *L);
     static int l_setMagicPath(lua_State *L);

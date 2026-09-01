@@ -161,6 +161,11 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
         {"getScriptWaitReason", l_getScriptWaitReason},
         {"bindSurface", l_noop},
         {"clearSurfaceLoadQueue", l_noop},
+        // KrKr2-Next: surface cache release is a no-op without a surface
+        // cache; PNG text chunks carry the face-part anchors (image_fg.lua
+        // getfgfilepos → "pos,x,y[,w,h,frames,com]").
+        {"unbindSurface", l_noop},
+        {"loadPngComments", l_loadPngComments},
     };
     for (const auto &m : methods) {
         lua_pushcfunction(L_, m.fn);
@@ -691,6 +696,73 @@ int LuaEngine::l_isFileExists(lua_State *L) {
     lua_pop(L, 1);
     const char *path = luaL_checkstring(L, 2);
     lua_pushboolean(L, packs && packs->Exists(self->ResolvePackPath(path)) ? 1 : 0);
+    return 1;
+}
+
+// e:loadPngComments(path) — KrKr2-Next addition. Returns a table mapping each
+// PNG text-chunk keyword to its text (tEXt and uncompressed iTXt; zTXt is
+// skipped), or nil when the file is missing / not a PNG. The adv framework
+// reads `comment` = "pos,x,y[,w,h,frames,com]" from face-part sprites to
+// anchor them on the body (image_fg.lua getfgfilepos); without it every face
+// lands at 0,0 and vanishes above the body's visible area.
+int LuaEngine::l_loadPngComments(lua_State *L) {
+    LuaEngine *self = Self(L);
+    lua_pushlightuserdata(L, reinterpret_cast<void *>(&kPackKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    PackManager *packs = static_cast<PackManager *>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    const char *path = luaL_checkstring(L, 2);
+    std::string resolved = self->ResolvePackPath(path);
+    std::vector<uint8_t> bytes;
+    bool ok = packs && packs->Read(resolved, bytes);
+    if (!ok && packs) {   // scripts may omit the extension
+        resolved += ".png";
+        ok = packs->Read(resolved, bytes);
+    }
+    static const uint8_t kSig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    if (!ok || bytes.size() < 8 || std::memcmp(bytes.data(), kSig, 8) != 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_newtable(L);
+    size_t i = 8;
+    int found = 0;
+    while (i + 12 <= bytes.size()) {
+        const uint32_t len = (uint32_t(bytes[i]) << 24) | (uint32_t(bytes[i + 1]) << 16) |
+                             (uint32_t(bytes[i + 2]) << 8) | uint32_t(bytes[i + 3]);
+        const std::string type(reinterpret_cast<const char *>(&bytes[i + 4]), 4);
+        const size_t data = i + 8;
+        if (data + len > bytes.size()) break;
+        if (type == "tEXt" || type == "iTXt") {
+            const uint8_t *p = &bytes[data];
+            size_t k = 0;
+            while (k < len && p[k] != 0) ++k;
+            const std::string key(reinterpret_cast<const char *>(p), k);
+            std::string text;
+            if (type == "tEXt") {
+                if (k < len) text.assign(reinterpret_cast<const char *>(p + k + 1), len - k - 1);
+            } else if (k + 2 < len && p[k + 1] == 0) {   // iTXt, compression flag 0
+                // keyword\0 flag method language\0 translated\0 text
+                size_t q = k + 3;
+                while (q < len && p[q] != 0) ++q;   // language tag
+                ++q;
+                while (q < len && p[q] != 0) ++q;   // translated keyword
+                ++q;
+                if (q <= len) text.assign(reinterpret_cast<const char *>(p + q), len - q);
+            }
+            if (!key.empty()) {
+                lua_pushlstring(L, text.data(), text.size());
+                lua_setfield(L, -2, key.c_str());
+                ++found;
+            }
+        }
+        if (type == "IEND" || type == "IDAT") break;   // text chunks precede image data here
+        i = data + len + 4;   // + CRC
+    }
+    if (found == 0) {
+        lua_pop(L, 1);
+        lua_pushnil(L);
+    }
     return 1;
 }
 

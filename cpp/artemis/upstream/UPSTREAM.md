@@ -23,3 +23,7 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   (C `rand()` semantics) instead of a `[0,1)` float; the adv framework uses
   `e:random() % n + 1` (sysvo.lua / config.lua / image.lua), which needs an
   integer to index tables (START on the title screen aborted otherwise).
+- `src/script/lua_engine.{h,cpp}` — new `e:loadPngComments(path)` (PNG tEXt /
+  iTXt keyword→text table; the framework's `getfgfilepos` reads the
+  `comment` = "pos,x,y,…" anchor of face-part sprites, which were otherwise
+  drawn at 0,0 and invisible) and a no-op `e:unbindSurface`.
