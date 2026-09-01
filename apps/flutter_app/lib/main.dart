@@ -5,6 +5,7 @@ import 'config/stats_base_url.dart' if (dart.library.io) 'config/stats_base_url_
 import 'l10n/app_localizations.dart';
 import 'pages/home_page.dart';
 import 'services/first_open_analytics.dart';
+import 'ui/ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +41,11 @@ class _Krkr2AppState extends State<Krkr2App> {
   Locale? _locale; // null = follow system
   ThemeMode _themeMode = ThemeMode.dark; // default to dark
 
+  final UiThemeController _uiTheme = UiThemeController(
+    seed: UiSeedPalette.pink,
+    mode: ThemeMode.dark,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +75,7 @@ class _Krkr2AppState extends State<Krkr2App> {
             _themeMode = ThemeMode.dark;
         }
       });
+      _uiTheme.updateMode(_themeMode);
     }
   }
 
@@ -78,44 +85,30 @@ class _Krkr2AppState extends State<Krkr2App> {
 
   void _setThemeMode(ThemeMode mode) {
     setState(() => _themeMode = mode);
+    _uiTheme.updateMode(mode);
+  }
+
+  @override
+  void dispose() {
+    _uiTheme.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'KrKr2 Next',
-      debugShowCheckedModeBanner: false,
-      locale: _locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      themeMode: _themeMode,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.pink,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        cardTheme: CardThemeData(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+    return UiThemeScope(
+      controller: _uiTheme,
+      child: MaterialApp(
+        title: 'KrKr2 Next',
+        debugShowCheckedModeBanner: false,
+        locale: _locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        themeMode: _themeMode,
+        theme: UiTheme.light(seed: _uiTheme.seed),
+        darkTheme: UiTheme.dark(seed: _uiTheme.seed),
+        home: const HomePage(),
       ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.pink,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        cardTheme: CardThemeData(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      home: const HomePage(),
     );
   }
 }

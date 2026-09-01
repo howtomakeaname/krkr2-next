@@ -48,6 +48,8 @@ dependencies:
   flutter_svg: ^2.0.17
   url_launcher: ^6.2.0
   http: ^1.2.0
+  # iOS18 风格自研 UI 库（lib/ui/）使用的线性图标库
+  lucide_icons_flutter: ^3.0.0
 
 # OHOS 依赖覆盖放在 pubspec_overrides.ohos.yaml（按需拷成
 # pubspec_overrides.yaml 启用），避免其他平台在没有
