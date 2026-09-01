@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+// OHOS 系统选择器适配实现：与主包同名 FilePicker 类，需前缀区分。
+import 'package:file_picker_ohos/file_picker_ohos.dart' as fp_ohos;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
@@ -344,7 +346,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     if (Platform.operatingSystem == 'ohos') {
-      await _addGameFromSandbox(pickDirectory: false);
+      await _addGameArchiveOhos();
       return;
     }
 
@@ -413,6 +415,61 @@ class _HomePageState extends State<HomePage> {
     // app sandbox, so the engine can always read it.
     '/data/storage/el2/base/files',
   ];
+
+  /// OHOS 导入：系统 DocumentViewPicker 选 .xp3。
+  ///
+  /// file_picker_ohos 的实现会把选中文件拷贝到应用 cache（`cache/file_picker/`）
+  /// 再返回路径；cache 可能被系统清理，所以这里把副本改名移入应用 files 目录
+  /// 后再注册（同卷 rename 瞬时完成，失败时回退拷贝）。
+  Future<void> _addGameArchiveOhos() async {
+    final l10n = AppLocalizations.of(context)!;
+    // .xp3 不是常见后缀，且该 fork 把无点号扩展名直接传给 OHOS 的
+    // fileSuffixFilters（格式不符会过滤失败），因此用 any 选择 + 自行校验。
+    final result = await fp_ohos.FilePicker.platform.pickFiles();
+    if (result == null || result.files.isEmpty || !mounted) return;
+    final cachePath = result.files.single.path;
+    if (cachePath == null || !mounted) return;
+    if (!cachePath.toLowerCase().endsWith('.xp3')) {
+      UiSnackbar.show(
+        context,
+        message: l10n.selectGameArchive,
+        type: UiSnackbarType.warning,
+      );
+      return;
+    }
+
+    final docDir = await getApplicationDocumentsDirectory();
+    final destPath = p.join(docDir.path, p.basename(cachePath));
+    final picked = File(cachePath);
+    try {
+      if (destPath != cachePath) {
+        await picked.rename(destPath);
+      }
+    } on FileSystemException {
+      // 跨卷 rename 等异常时退回拷贝。
+      try {
+        await File(destPath).delete();
+      } catch (_) {}
+      await picked.copy(destPath);
+      try {
+        await picked.delete();
+      } catch (_) {}
+    }
+
+    final game = GameInfo(path: destPath);
+    final added = await _gameManager.addGame(game);
+    if (!mounted) return;
+    if (added) {
+      setState(() {});
+      _offerScrapeAfterAdd(destPath);
+    } else {
+      UiSnackbar.show(
+        context,
+        message: l10n.gameAlreadyExists(p.basename(destPath)),
+        type: UiSnackbarType.warning,
+      );
+    }
+  }
 
   Future<void> _addGameFromSandbox({required bool pickDirectory}) async {
     final l10n = AppLocalizations.of(context)!;

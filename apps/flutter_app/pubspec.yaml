@@ -41,6 +41,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.5.0
   file_picker: ^9.2.0
+  # OHOS 系统文件选择器（DocumentViewPicker）适配实现，仅 OHOS 分支 import。
+  # 返回路径是拷贝进应用 cache 的副本，调用方需移入 files 目录再注册。
+  file_picker_ohos: ^1.0.1
   path_provider: ^2.1.0
   flutter_engine_bridge:
     path: ../../bridge/flutter_engine_bridge
@@ -54,6 +57,12 @@ dependencies:
 # OHOS 依赖覆盖放在 pubspec_overrides.ohos.yaml（按需拷成
 # pubspec_overrides.yaml 启用），避免其他平台在没有
 # ohos_flutter_packages 同级检出时 pub get 失败。
+
+dependency_overrides:
+  # file_picker_ohos 1.0.1 声明 win32 ^4.1.3（继承自上游旧版的残留，
+  # 其 OHOS 实现并不使用），与 file_picker 9.x 要求的 ^5.9.0 冲突；
+  # 放宽到主包同一版本线，各平台解析结果不变。
+  win32: ^5.9.0
 
 dev_dependencies:
   flutter_test:

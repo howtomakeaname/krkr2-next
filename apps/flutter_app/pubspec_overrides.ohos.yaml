@@ -25,3 +25,7 @@ dependency_overrides:
     path: ../../../ohos_flutter_packages/packages/image_picker/image_picker
   image_picker_ohos:
     path: ../../../ohos_flutter_packages/packages/image_picker/image_picker_ohos
+  # file_picker_ohos 1.0.1 声明 win32 ^4.1.3（继承自上游旧版的残留，
+  # 其 OHOS 实现并不使用），与 file_picker 9.x 要求的 ^5.9.0 冲突；
+  # 放宽到主包同一版本线，各平台解析结果不变。
+  win32: ^5.9.0
