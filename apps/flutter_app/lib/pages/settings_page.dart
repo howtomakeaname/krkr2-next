@@ -3,13 +3,14 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../constants/prefs_keys.dart';
+import '../ui/ui.dart';
 import 'home_page.dart';
 
 /// Standalone settings page with MD3 styling and i18n support.
@@ -116,7 +117,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       PrefsKeys.engineMode,
-      _engineMode == EngineMode.custom ? PrefsKeys.engineModeCustom : PrefsKeys.engineModeBuiltIn,
+      _engineMode == EngineMode.custom
+          ? PrefsKeys.engineModeCustom
+          : PrefsKeys.engineModeBuiltIn,
     );
     if (_customDylibPath != null) {
       await prefs.setString(PrefsKeys.dylibPath, _customDylibPath!);
@@ -179,28 +182,23 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final colorScheme = Theme.of(context).colorScheme;
 
     return PopScope(
       canPop: !_dirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final discard = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(l10n.settings),
-            content: const Text('Discard unsaved changes?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(l10n.cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
+        final discard = await UiDialog.show<bool>(
+          context,
+          title: l10n.settings,
+          message: 'Discard unsaved changes?',
+          actions: [
+            UiDialogAction(label: l10n.cancel, returnValue: false),
+            UiDialogAction(
+              label: 'Discard',
+              isDestructive: true,
+              returnValue: true,
+            ),
+          ],
         );
         if (discard == true && context.mounted) {
           Navigator.pop(context);
@@ -211,443 +209,301 @@ class _SettingsPageState extends State<SettingsPage> {
           title: Text(l10n.settings),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilledButton.icon(
+              padding: const EdgeInsets.only(right: UiSpacing.md),
+              child: UiButton(
+                label: l10n.save,
+                leadingIcon: LucideIcons.save,
+                size: UiButtonSize.small,
                 onPressed: _dirty ? _save : null,
-                icon: const Icon(Icons.save, size: 18),
-                label: Text(l10n.save),
               ),
             ),
           ],
         ),
         body: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
           children: [
             // ── Engine section (desktop only) ──
             // On Android/iOS the engine is always bundled; no switching needed.
-            if (!Platform.isAndroid && !Platform.isIOS) ...[
-              _SectionHeader(
-                icon: Icons.settings_applications,
-                label: l10n.settingsEngine,
-              ),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(l10n.engineMode,
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: SegmentedButton<EngineMode>(
-                          segments: [
-                            ButtonSegment<EngineMode>(
-                              value: EngineMode.builtIn,
-                              label: Text(l10n.builtIn),
-                              icon: const Icon(Icons.inventory_2),
-                            ),
-                            ButtonSegment<EngineMode>(
-                              value: EngineMode.custom,
-                              label: Text(l10n.custom),
-                              icon: const Icon(Icons.folder_open),
-                            ),
-                          ],
-                          selected: {_engineMode},
-                          onSelectionChanged: (Set<EngineMode> selected) {
-                            setState(() => _engineMode = selected.first);
-                            _markDirty();
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_engineMode == EngineMode.builtIn)
-                        _buildBuiltInStatus(context, l10n, colorScheme),
-                      if (_engineMode == EngineMode.custom)
-                        _buildCustomDylibPicker(context, l10n, colorScheme),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // ── Rendering section ──
-            _SectionHeader(
-              icon: Icons.brush,
-              label: l10n.settingsRendering,
-            ),
-            Card(
-              child: Column(
+            if (!Platform.isAndroid && !Platform.isIOS)
+              UiListSection(
+                header: l10n.settingsEngine,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  UiCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(l10n.renderPipeline,
-                            style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 4),
-                        Text(
-                          l10n.renderPipelineHint,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.6),
-                              ),
-                        ),
-                        const SizedBox(height: 8),
+                        Text(l10n.engineMode, style: context.uiType.title3),
+                        const SizedBox(height: UiSpacing.sm),
                         SizedBox(
                           width: double.infinity,
-                          child: SegmentedButton<String>(
-                            showSelectedIcon: false,
-                            segments: [
-                              ButtonSegment<String>(
-                                value: 'opengl',
-                                label: SvgPicture.asset(
-                                  'assets/icons/opengl.svg',
-                                  height: 20,
-                                  colorFilter: ColorFilter.mode(
-                                    Theme.of(context).colorScheme.onSurface,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
+                          child: UiSegmented<EngineMode>(
+                            value: _engineMode,
+                            items: [
+                              UiSegmentedItem(
+                                value: EngineMode.builtIn,
+                                label: l10n.builtIn,
+                                icon: LucideIcons.packageOpen,
                               ),
-                              ButtonSegment<String>(
-                                value: 'software',
-                                label: Text(l10n.software),
-                                icon: const Icon(Icons.computer),
+                              UiSegmentedItem(
+                                value: EngineMode.custom,
+                                label: l10n.custom,
+                                icon: LucideIcons.folderOpen,
                               ),
                             ],
-                            selected: {_renderer},
-                            onSelectionChanged: (Set<String> selected) {
-                              setState(() => _renderer = selected.first);
+                            onChanged: (value) {
+                              setState(() => _engineMode = value);
                               _markDirty();
                             },
                           ),
                         ),
+                        const SizedBox(height: UiSpacing.md),
+                        if (_engineMode == EngineMode.builtIn)
+                          _buildBuiltInStatus(context, l10n),
+                        if (_engineMode == EngineMode.custom)
+                          _buildCustomDylibPicker(context, l10n),
                       ],
                     ),
                   ),
-                  // ── Graphics Backend (Android only) ──
-                  if (Platform.isAndroid) ...[                  
-                    const Divider(height: 24),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(l10n.graphicsBackend,
-                              style: Theme.of(context).textTheme.titleSmall),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.graphicsBackendHint,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurface
-                                      .withValues(alpha: 0.6),
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: SegmentedButton<String>(
-                              showSelectedIcon: false,
-                              segments: [
-                                ButtonSegment<String>(
-                                  value: 'gles',
-                                  label: SvgPicture.asset(
-                                    'assets/icons/opengles.svg',
-                                    height: 20,
-                                    colorFilter: ColorFilter.mode(
-                                      Theme.of(context).colorScheme.onSurface,
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                ),
-                                ButtonSegment<String>(
-                                  value: 'vulkan',
-                                  label: SvgPicture.asset(
-                                    'assets/icons/vulkan.svg',
-                                    height: 20,
-                                    colorFilter: ColorFilter.mode(
-                                      Theme.of(context).colorScheme.onSurface,
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              selected: {_angleBackend},
-                              onSelectionChanged: (Set<String> selected) {
-                                setState(() => _angleBackend = selected.first);
-                                _markDirty();
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                ],
+              ),
+
+            // ── Rendering section ──
+            UiListSection(
+              header: l10n.settingsRendering,
+              footer: l10n.renderPipelineHint,
+              children: [
+                UiListTile(
+                  title: l10n.renderPipeline,
+                  subtitle: l10n.renderPipelineHint,
+                  trailing: UiSegmented<String>(
+                    value: _renderer,
+                    items: [
+                      const UiSegmentedItem(value: 'opengl', label: 'OpenGL'),
+                      UiSegmentedItem(value: 'software', label: l10n.software),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _renderer = value);
+                      _markDirty();
+                    },
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: UiSpacing.lg,
+                    vertical: UiSpacing.sm,
+                  ),
+                ),
+                if (Platform.isAndroid)
+                  UiListTile(
+                    title: l10n.graphicsBackend,
+                    subtitle: l10n.graphicsBackendHint,
+                    trailing: UiSegmented<String>(
+                      value: _angleBackend,
+                      items: const [
+                        UiSegmentedItem(value: 'gles', label: 'GLES'),
+                        UiSegmentedItem(value: 'vulkan', label: 'Vulkan'),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _angleBackend = value);
+                        _markDirty();
+                      },
                     ),
-                  ],
-                  const Divider(height: 24),
-                  SwitchListTile(
-                    title: Text(l10n.performanceOverlay),
-                    subtitle: Text(l10n.performanceOverlayDesc),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: UiSpacing.lg,
+                      vertical: UiSpacing.sm,
+                    ),
+                  ),
+                UiListTile(
+                  title: l10n.performanceOverlay,
+                  subtitle: l10n.performanceOverlayDesc,
+                  trailing: UiSwitch(
                     value: _perfOverlay,
                     onChanged: (value) {
                       setState(() => _perfOverlay = value);
                       _markDirty();
                     },
                   ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: Text(l10n.fpsLimitEnabled),
-                    subtitle: Text(
-                      _fpsLimitEnabled
-                          ? l10n.fpsLimitEnabledDesc
-                          : l10n.fpsLimitOff,
-                    ),
+                ),
+                UiListTile(
+                  title: l10n.fpsLimitEnabled,
+                  subtitle: _fpsLimitEnabled
+                      ? l10n.fpsLimitEnabledDesc
+                      : l10n.fpsLimitOff,
+                  trailing: UiSwitch(
                     value: _fpsLimitEnabled,
                     onChanged: (value) {
                       setState(() => _fpsLimitEnabled = value);
                       _markDirty();
                     },
                   ),
-                  if (_fpsLimitEnabled) ...[
-                    const Divider(height: 1),
-                    ListTile(
-                      title: Text(l10n.targetFrameRate),
-                      subtitle: Text(l10n.targetFrameRateDesc),
-                      trailing: DropdownButton<int>(
-                        value: _targetFps,
-                        items: PrefsKeys.fpsOptions
-                            .map((fps) => DropdownMenuItem<int>(
-                                  value: fps,
-                                  child: Text(l10n.fpsLabel(fps)),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _targetFps = value);
-                            _markDirty();
-                          }
-                        },
-                      ),
+                ),
+                if (_fpsLimitEnabled)
+                  UiListTile(
+                    title: l10n.targetFrameRate,
+                    subtitle: l10n.targetFrameRateDesc,
+                    trailing: UiDropdown<int>(
+                      value: _targetFps,
+                      items: PrefsKeys.fpsOptions
+                          .map(
+                            (fps) => UiDropdownItem(
+                              value: fps,
+                              label: l10n.fpsLabel(fps),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() => _targetFps = value);
+                        _markDirty();
+                      },
                     ),
-                  ],
-                  if (Platform.isAndroid || Platform.isIOS) ...[
-                    const Divider(height: 1),
-                    SwitchListTile(
-                      title: Text(l10n.forceLandscape),
-                      subtitle: Text(l10n.forceLandscapeDesc),
+                  ),
+                if (Platform.isAndroid || Platform.isIOS)
+                  UiListTile(
+                    title: l10n.forceLandscape,
+                    subtitle: l10n.forceLandscapeDesc,
+                    trailing: UiSwitch(
                       value: _forceLandscape,
                       onChanged: (value) {
                         setState(() => _forceLandscape = value);
                         _markDirty();
                       },
                     ),
-                  ],
-                ],
-              ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 16),
 
             // ── General section ──
-            _SectionHeader(
-              icon: Icons.language,
-              label: l10n.settingsGeneral,
-            ),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    title: Text(l10n.themeMode),
-                    trailing: SegmentedButton<String>(
-                      segments: [
-                        ButtonSegment<String>(
-                          value: 'dark',
-                          label: Text(l10n.themeDark),
-                          icon: const Icon(Icons.dark_mode, size: 18),
-                        ),
-                        ButtonSegment<String>(
-                          value: 'light',
-                          label: Text(l10n.themeLight),
-                          icon: const Icon(Icons.light_mode, size: 18),
-                        ),
-                      ],
-                      selected: {_themeModeCode},
-                      onSelectionChanged: (Set<String> selected) {
-                        _changeThemeMode(selected.first);
-                      },
-                    ),
+            UiListSection(
+              header: l10n.settingsGeneral,
+              children: [
+                UiListTile(
+                  title: l10n.themeMode,
+                  trailing: UiSegmented<String>(
+                    value: _themeModeCode,
+                    items: [
+                      UiSegmentedItem(
+                        value: 'dark',
+                        label: l10n.themeDark,
+                        icon: LucideIcons.moon,
+                      ),
+                      UiSegmentedItem(
+                        value: 'light',
+                        label: l10n.themeLight,
+                        icon: LucideIcons.sun,
+                      ),
+                    ],
+                    onChanged: _changeThemeMode,
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    title: Text(l10n.language),
-                    trailing: DropdownButton<String>(
-                      value: _localeCode,
-                      items: [
-                        DropdownMenuItem(
-                          value: 'system',
-                          child: Text(l10n.languageSystem),
-                        ),
-                        DropdownMenuItem(
-                          value: 'en',
-                          child: Text(l10n.languageEn),
-                        ),
-                        DropdownMenuItem(
-                          value: 'zh',
-                          child: Text(l10n.languageZh),
-                        ),
-                        DropdownMenuItem(
-                          value: 'ja',
-                          child: Text(l10n.languageJa),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          _changeLocale(value);
-                        }
-                      },
-                    ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: UiSpacing.lg,
+                    vertical: UiSpacing.sm,
                   ),
-                ],
-              ),
+                ),
+                UiListTile(
+                  title: l10n.language,
+                  trailing: UiDropdown<String>(
+                    value: _localeCode,
+                    items: [
+                      UiDropdownItem(
+                        value: 'system',
+                        label: l10n.languageSystem,
+                      ),
+                      UiDropdownItem(value: 'en', label: l10n.languageEn),
+                      UiDropdownItem(value: 'zh', label: l10n.languageZh),
+                      UiDropdownItem(value: 'ja', label: l10n.languageJa),
+                    ],
+                    onChanged: _changeLocale,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
 
             // ── About section ──
-            _SectionHeader(
-              icon: Icons.info_outline,
-              label: l10n.settingsAbout,
+            UiListSection(
+              header: l10n.settingsAbout,
+              children: [
+                UiListTile(
+                  icon: LucideIcons.flaskConical,
+                  title: l10n.version,
+                  subtitle: l10n.aboutVersionDesc,
+                ),
+                UiListTile(
+                  icon: LucideIcons.user,
+                  title: l10n.aboutAuthor,
+                  trailingText: 'reAAAq',
+                ),
+                UiListTile(
+                  icon: LucideIcons.mail,
+                  title: l10n.aboutEmail,
+                  trailingText: 'wangguanzhiabcd@126.com',
+                  onTap: () {
+                    Clipboard.setData(
+                      const ClipboardData(text: 'wangguanzhiabcd@126.com'),
+                    );
+                    UiSnackbar.show(
+                      context,
+                      message: l10n.aboutEmailCopied,
+                      type: UiSnackbarType.success,
+                      duration: const Duration(seconds: 2),
+                    );
+                  },
+                ),
+                UiListTile(
+                  icon: LucideIcons.code,
+                  title: 'GitHub',
+                  subtitle: 'github.com/reAAAq/KrKr2-Next',
+                  showChevron: true,
+                  onTap: () {
+                    launchUrl(
+                      Uri.parse('https://github.com/reAAAq/KrKr2-Next'),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                ),
+              ],
             ),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.science_outlined),
-                    title: Text(l10n.version),
-                    subtitle: Text(
-                      l10n.aboutVersionDesc,
-                      style: TextStyle(
-                        color: colorScheme.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(l10n.aboutAuthor),
-                    trailing: Text(
-                      'reAAAq',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.email_outlined),
-                    title: Text(l10n.aboutEmail),
-                    trailing: Text(
-                      'wangguanzhiabcd@126.com',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    onTap: () {
-                      Clipboard.setData(
-                        const ClipboardData(text: 'wangguanzhiabcd@126.com'),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.aboutEmailCopied),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.code),
-                    title: const Text('GitHub'),
-                    subtitle: const Text(
-                      'github.com/reAAAq/KrKr2-Next',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    trailing: Icon(
-                      Icons.open_in_new,
-                      size: 18,
-                      color: colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    onTap: () {
-                      launchUrl(
-                        Uri.parse('https://github.com/reAAAq/KrKr2-Next'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
+            const SizedBox(height: UiSpacing.xxl),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBuiltInStatus(
-      BuildContext context, AppLocalizations l10n, ColorScheme colorScheme) {
+  Widget _buildBuiltInStatus(BuildContext context, AppLocalizations l10n) {
+    final colors = context.uiColors;
+    final ok = widget.builtInAvailable;
+    final tint = ok ? colors.success : colors.danger;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(UiSpacing.md),
       decoration: BoxDecoration(
-        color: widget.builtInAvailable
-            ? Colors.green.withValues(alpha: 0.1)
-            : colorScheme.errorContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: widget.builtInAvailable
-              ? Colors.green.withValues(alpha: 0.3)
-              : colorScheme.error.withValues(alpha: 0.3),
-        ),
+        color: tint.withValues(alpha: 0.1),
+        borderRadius: UiRadius.brSm,
+        border: Border.all(color: tint.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Icon(
-            widget.builtInAvailable ? Icons.check_circle : Icons.warning_amber,
-            color: widget.builtInAvailable
-                ? Colors.green
-                : colorScheme.error,
+            ok ? LucideIcons.circleCheck : LucideIcons.triangleAlert,
+            color: tint,
             size: 20,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: UiSpacing.sm + 2),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.builtInAvailable
-                      ? l10n.builtInEngineAvailable
-                      : l10n.builtInEngineNotFound,
-                  style: TextStyle(
-                    fontSize: 13,
+                  ok ? l10n.builtInEngineAvailable : l10n.builtInEngineNotFound,
+                  style: context.uiType.footnote.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: widget.builtInAvailable
-                        ? Colors.green
-                        : colorScheme.error,
+                    color: tint,
                   ),
                 ),
-                if (!widget.builtInAvailable)
+                if (!ok)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       l10n.builtInEngineHint,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurface.withValues(alpha: 0.6),
+                      style: context.uiType.caption.copyWith(
+                        color: colors.textSecondary,
                       ),
                     ),
                   ),
@@ -659,31 +515,29 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildCustomDylibPicker(
-      BuildContext context, AppLocalizations l10n, ColorScheme colorScheme) {
+  Widget _buildCustomDylibPicker(BuildContext context, AppLocalizations l10n) {
+    final colors = context.uiColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l10n.engineDylibPath,
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
+        Text(l10n.engineDylibPath, style: context.uiType.title3),
+        const SizedBox(height: UiSpacing.sm),
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(UiSpacing.md),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            color: colors.surfaceElevated,
+            borderRadius: UiRadius.brSm,
           ),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   _customDylibPath ?? l10n.notSetRequired,
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: context.uiType.footnote.copyWith(
                     fontFamily: 'monospace',
                     color: _customDylibPath != null
-                        ? null
-                        : colorScheme.error.withValues(alpha: 0.7),
+                        ? colors.textPrimary
+                        : colors.danger.withValues(alpha: 0.7),
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -691,7 +545,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               if (_customDylibPath != null)
                 IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
+                  icon: const Icon(LucideIcons.x, size: 18),
                   tooltip: l10n.clearPath,
                   onPressed: () {
                     setState(() => _customDylibPath = null);
@@ -701,10 +555,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: UiSpacing.md),
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
+          child: UiButton(
+            label: l10n.browse,
+            leadingIcon: LucideIcons.folderOpen,
+            variant: UiButtonVariant.outline,
             onPressed: () async {
               final result = await FilePicker.platform.pickFiles(
                 dialogTitle: l10n.selectEngineDylib,
@@ -715,39 +572,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 _markDirty();
               }
             },
-            icon: const Icon(Icons.folder_open),
-            label: Text(l10n.browse),
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Section header widget for settings groups.
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-        ],
-      ),
     );
   }
 }
