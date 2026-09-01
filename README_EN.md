@@ -62,7 +62,7 @@ The screenshot below shows the current running state on macOS with the Metal bac
 | Windows | 📋 Planned | Direct3D 11 | D3D11 Texture |
 | Linux | 📋 Planned | Vulkan / Desktop GL | DMA-BUF |
 | Android | 🔨 Pipeline Working, Optimizing | OpenGL ES / Vulkan | HardwareBuffer |
-| HarmonyOS / OpenHarmony | 🔨 Pipeline Working (playable on the emulator), Optimizing | System EGL (GLES) / software compositing | OHNativeWindow / RawImage readback |
+| HarmonyOS / OpenHarmony | 🔨 Pipeline Working (playable on the emulator), Optimizing; also runs Artemis Engine games (.pfs) | System EGL (GLES) / software compositing | OHNativeWindow / RawImage readback |
 
 ## HarmonyOS / OpenHarmony Support
 
@@ -93,6 +93,16 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 - Game import: the system picker only returns `docs://` URIs (unusable by the fopen-based engine), so the app offers sandbox-directory scanning and URL network import (resumable); `hdc file send` into the app sandbox also works
 - The Cubism Live2D plugin is not built on OHOS yet (no prebuilt Core); layerex_draw (libgdiplus) likewise
 - Engine logs go to both hilog (tag `krkr2`) and `files/flutter/krkr2-engine.log` inside the app sandbox
+- The game page supports landscape/portrait switching: pick the default in Settings → "Screen Orientation" (landscape / portrait / follow system) and flip it at any time from the in-game overlay menu ("Rotate Screen")
+
+### Artemis Engine games (.pfs)
+
+The OHOS build additionally bundles [artemis-compat](https://github.com/Weiss-UltimateSavior/artemis-compat) (a clean-room Artemis Engine compatible runtime, GPL-3.0, vendored under `cpp/artemis/`; pinned commit in `cpp/artemis/upstream/UPSTREAM.md`). The single `libengine_api.so` dispatches on the game path: a `.pfs` pack or a directory holding one goes to the Artemis backend, everything else to KiriKiri2.
+
+- Rendering: the GLES2 layer compositor draws into the same EGL pbuffer krkr2 uses and frames are presented through the RawImage readback (static frames skip the readback based on the layer revision counter); audio goes through OHAudio (one renderer per voice)
+- Import: the game directory must contain the base pack `root.pfs` plus its patch volumes `root.pfs.000/.001…`; saves (`*.dat`) are written next to it. Recommended: `hdc file send` the folder into the sandbox and register it with "Add game → Scan App Sandbox"; the picker's "Select Game Directory" also handles Artemis folders (the ArkTS layer copies the pack chain and saves into the cache, the app then moves them into `files`)
+- Compatibility follows upstream: verified on Madosoft titles (1280×720 framework) through title → story → choices; E-mote, tween transitions and video are not supported yet
+- Logs: hilog tag `Artemis` (domain `0x0207`), mirrored into `krkr2-engine.log` with an `[artemis]` prefix
 
 ## Building from Source on macOS
 

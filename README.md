@@ -62,7 +62,7 @@
 | Windows | 📋 计划中 | Direct3D 11 | D3D11 Texture |
 | Linux | 📋 计划中 | Vulkan / Desktop GL | DMA-BUF |
 | Android | 🔨 流程跑通，优化中 | OpenGL ES / Vulkan | HardwareBuffer |
-| HarmonyOS / OpenHarmony | 🔨 流程跑通（模拟器实测可玩），优化中 | 系统 EGL (GLES) / 软件合成 | OHNativeWindow / RawImage 读回 |
+| HarmonyOS / OpenHarmony | 🔨 流程跑通（模拟器实测可玩），优化中；额外支持 Artemis 引擎（.pfs） | 系统 EGL (GLES) / 软件合成 | OHNativeWindow / RawImage 读回 |
 
 ## HarmonyOS / OpenHarmony（原生鸿蒙）支持
 
@@ -92,6 +92,16 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 - 游戏导入：系统文件选择器只返回 `docs://` URI（fopen 引擎无法消费），应用内提供沙箱目录扫描与 URL 网络导入（支持断点续传）；也可 `hdc file send` 直接送入应用沙箱
 - Cubism Live2D 插件因无 OHOS 预编译 Core 暂未编入；layerex_draw（libgdiplus 依赖）同
 - 引擎日志：hilog（tag `krkr2`）与应用沙箱内 `files/flutter/krkr2-engine.log` 双通道
+- 游戏页支持横竖屏切换：设置页「屏幕方向」选择默认方向（横屏 / 竖屏 / 跟随系统），游戏内覆盖层菜单可随时「旋转屏幕」
+
+### Artemis 引擎游戏（.pfs）
+
+OHOS 版额外内置了 [artemis-compat](https://github.com/Weiss-UltimateSavior/artemis-compat)（clean-room 的 Artemis Engine 兼容运行时，GPL-3.0，vendored 于 `cpp/artemis/`，pin 见 `cpp/artemis/upstream/UPSTREAM.md`），同一个 `libengine_api.so` 按游戏路径自动分发：`.pfs` 封包或含 `.pfs` 的目录走 Artemis 后端，其余走 KiriKiri2。
+
+- 渲染：GLES2 图层合成器绘制到与 krkr2 共用的 EGL pbuffer，经 RawImage 读回呈现（静态帧按图层修订号跳过读回）；音频走 OHAudio（每声部独立 renderer）
+- 导入：游戏目录需包含主包 `root.pfs` 及其补丁卷 `root.pfs.000/.001…`，存档 `*.dat` 写在同目录。推荐 `hdc file send` 送入沙箱后用「添加游戏 → 扫描应用沙箱」注册；文件选择器的「选择游戏目录」也支持 Artemis 目录（适配层会把封包链与存档整体拷入 cache 再迁入 files）
+- 兼容范围沿用上游：已验证 Madosoft 系列（1280×720 框架）标题→剧情→选项流程；E-mote、tween 过渡动画、视频等暂不支持
+- 日志：hilog tag `Artemis`（domain `0x0207`），同时写入 `krkr2-engine.log`（前缀 `[artemis]`）
 
 ## macOS 源码构建
 
