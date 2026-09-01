@@ -12,6 +12,8 @@
  */
 
 #include <spdlog/spdlog.h>
+#include <chrono>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -36,6 +38,28 @@
 // ---------------------------------------------------------------------------
 static void (*g_postDrawHook)() = nullptr;
 void TVPSetPostDrawHook(void (*hook)()) { g_postDrawHook = hook; }
+
+// ---------------------------------------------------------------------------
+// Static-frame gate perf counters (see the gate inside
+// FlutterWindowLayer::UpdateDrawBuffer). engine_api's periodic perf log
+// reads them via TVPGetBlitPerf().
+// ---------------------------------------------------------------------------
+static struct {
+    uint64_t calls = 0;        // CPU-path UpdateDrawBuffer invocations
+    uint64_t skipped = 0;      // identical composited frames skipped
+    uint64_t compare_us = 0;   // time spent comparing frames
+    uint64_t gl_us = 0;        // time spent in upload+blit (non-skipped)
+} g_blitPerf;
+
+void TVPGetBlitPerf(uint64_t &calls, uint64_t &skipped, uint64_t &compare_us,
+                    uint64_t &gl_us) {
+    calls = g_blitPerf.calls;
+    skipped = g_blitPerf.skipped;
+    compare_us = g_blitPerf.compare_us;
+    gl_us = g_blitPerf.gl_us;
+    // Fetch-and-clear: callers log these periodically.
+    g_blitPerf = {};
+}
 
 // ---------------------------------------------------------------------------
 // FlutterWindowLayer — concrete iWindowLayer for Flutter host mode.
@@ -186,6 +210,11 @@ public:
 
         auto& egl = krkr::GetEngineEGLContext();
 
+        // Start of the GL work section (skipped entirely by the
+        // static-frame gate when the composited bitmap is unchanged).
+        std::chrono::steady_clock::time_point blit_gl_t0;
+        bool blit_gl_timed = false;
+
         // ── Phase 1: Prepare the blit source texture ──────────────
         // This MUST happen BEFORE BindRenderTarget(), because
         // GetScanLineForRead() internally calls TVPSetRenderTarget()
@@ -202,6 +231,8 @@ public:
             // TVPSetRenderTarget(0) will unbind any texture from the engine FBO.
             extern void TVPSetRenderTarget(GLuint);
 
+            blit_gl_t0 = std::chrono::steady_clock::now();
+            blit_gl_timed = true;
             TVPSetRenderTarget(0);
             blitSrcTexture = static_cast<GLuint>(nativeGLTex);
         } else {
@@ -225,6 +256,64 @@ public:
                 }
                 pixelData = blit_pixel_buf_.data();
             }
+
+            // ── Static-frame gate ────────────────────────────────────
+            // A halted VN scene re-presents the identical composited
+            // bitmap every tick; uploading + blitting it and then reading
+            // it back costs ~4 full-frame copies per vsync for nothing.
+            // When the bitmap is unchanged since the last upload, skip
+            // the GL work entirely — the frame-dirty flag then stays
+            // clear and engine_tick skips its glReadPixels readback too.
+            {
+                const auto cmp_t0 = std::chrono::steady_clock::now();
+                // The scanline fallback above packs rows contiguously
+                // regardless of the source texture's pitch.
+                const tjs_int src_stride =
+                    (pixelData == blit_pixel_buf_.data())
+                        ? static_cast<tjs_int>(tw * 4)
+                        : pitch;
+                const size_t row_bytes = static_cast<size_t>(tw) * 4;
+                bool identical = last_frame_w_ == tw && last_frame_h_ == th &&
+                    last_frame_.size() == row_bytes * th;
+                if (identical) {
+                    const uint8_t *src = static_cast<const uint8_t *>(pixelData);
+                    if (src_stride == static_cast<tjs_int>(row_bytes)) {
+                        identical = std::memcmp(last_frame_.data(), src,
+                                                row_bytes * th) == 0;
+                    } else {
+                        for (tjs_uint y = 0; y < th && identical; ++y) {
+                            identical = std::memcmp(
+                                last_frame_.data() + y * row_bytes,
+                                src + static_cast<size_t>(y) * src_stride,
+                                row_bytes) == 0;
+                        }
+                    }
+                }
+                const auto cmp_t1 = std::chrono::steady_clock::now();
+                g_blitPerf.compare_us += std::chrono::duration_cast<
+                    std::chrono::microseconds>(cmp_t1 - cmp_t0).count();
+                g_blitPerf.calls++;
+                if (identical) {
+                    g_blitPerf.skipped++;
+                    return;
+                }
+                // Remember this frame with normalized (tw*4) rows.
+                last_frame_w_ = tw;
+                last_frame_h_ = th;
+                last_frame_.resize(row_bytes * th);
+                if (src_stride == static_cast<tjs_int>(row_bytes)) {
+                    std::memcpy(last_frame_.data(), pixelData, row_bytes * th);
+                } else {
+                    const uint8_t *src = static_cast<const uint8_t *>(pixelData);
+                    for (tjs_uint y = 0; y < th; ++y) {
+                        std::memcpy(last_frame_.data() + y * row_bytes,
+                                    src + static_cast<size_t>(y) * src_stride,
+                                    row_bytes);
+                    }
+                }
+            }
+            blit_gl_t0 = std::chrono::steady_clock::now();
+            blit_gl_timed = true;
 
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, blit_texture_);
@@ -378,6 +467,12 @@ public:
         // double-buffer flicker (alternating between current and stale
         // back-buffer contents).
         egl.MarkFrameDirty();
+
+        const auto blit_gl_t1 = std::chrono::steady_clock::now();
+        if (blit_gl_timed) {
+            g_blitPerf.gl_us += std::chrono::duration_cast<
+                std::chrono::microseconds>(blit_gl_t1 - blit_gl_t0).count();
+        }
     }
 
     void InvalidateClose() override {
@@ -556,6 +651,12 @@ private:
     GLint  blit_flipy_uniform_ = -1;
     GLint  blit_uvscale_uniform_ = -1;
     std::vector<uint8_t> blit_pixel_buf_;
+
+    // Static-frame gate state: last uploaded composited bitmap with
+    // normalized (width*4) rows. Identical frames skip the GL upload.
+    std::vector<uint8_t> last_frame_;
+    tjs_uint last_frame_w_ = 0;
+    tjs_uint last_frame_h_ = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -658,10 +759,30 @@ const std::string &TVPGetInternalPreferencePath() {
             // Fallback: use a path that Android apps can typically write to
             s_internalPreferencePath = "/data/local/tmp/krkr2/";
         }
+#elif defined(__OHOS__)
+        // /tmp does not exist (and / is not writable) on OHOS. Keep engine
+        // preferences next to the engine files dir; KRKR_FILES_DIR is set by
+        // the Flutter embedder (engine_api.cpp) before engine_create, and its
+        // writability is already proven by the krkr2-engine.log funnel.
+        if (const char *filesDir = getenv("KRKR_FILES_DIR");
+            filesDir && *filesDir) {
+            s_internalPreferencePath = std::string(filesDir) + "/krkr2/";
+        } else {
+            s_internalPreferencePath = "/data/local/tmp/krkr2/";
+        }
 #else
         s_internalPreferencePath = "/tmp/krkr2/";
 #endif
-        std::filesystem::create_directories(s_internalPreferencePath);
+        // Non-throwing variant: an unwritable path must not take down the
+        // engine at boot (this exact throw once aborted EngineBootstrap on
+        // OHOS with SIGABRT via std::terminate).
+        std::error_code fsEc;
+        std::filesystem::create_directories(s_internalPreferencePath, fsEc);
+        if (fsEc) {
+            spdlog::warn("TVPGetInternalPreferencePath: create_directories({}) "
+                         "failed: {} (continuing with the path anyway)",
+                         s_internalPreferencePath, fsEc.message());
+        }
     }
     return s_internalPreferencePath;
 }
@@ -680,7 +801,11 @@ const std::vector<std::string> &TVPGetApplicationHomeDirectory() {
                 dir.pop_back();
             s_appHomeDirs.push_back(dir);
         } else {
-            s_appHomeDirs.push_back(std::filesystem::current_path().string());
+            // current_path() throws if the CWD has been deleted or is
+            // unreadable — fall back to a relative root instead of aborting.
+            std::error_code cwdEc;
+            const auto cwd = std::filesystem::current_path(cwdEc);
+            s_appHomeDirs.push_back(cwdEc ? "." : cwd.string());
         }
     }
     return s_appHomeDirs;
