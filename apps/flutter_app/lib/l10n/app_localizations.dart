@@ -652,6 +652,60 @@ abstract class AppLocalizations {
   /// **'Exit Game'**
   String get exitGame;
 
+  /// No description provided for @discard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// No description provided for @discardChangesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved changes?'**
+  String get discardChangesMessage;
+
+  /// No description provided for @gameTypeXp3.
+  ///
+  /// In en, this message translates to:
+  /// **'XP3 archive'**
+  String get gameTypeXp3;
+
+  /// No description provided for @gameTypeDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory'**
+  String get gameTypeDirectory;
+
+  /// No description provided for @archiveNotExist.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive file does not exist: {path}'**
+  String archiveNotExist(String path);
+
+  /// No description provided for @gamePathNotExist.
+  ///
+  /// In en, this message translates to:
+  /// **'Game path does not exist: {path}'**
+  String gamePathNotExist(String path);
+
+  /// No description provided for @missingStartupScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing startup script in: {path}\n(looked for startup.tjs and data/system/initialize.tjs)'**
+  String missingStartupScript(String path);
+
+  /// No description provided for @gamePathCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Game path check failed: {error}'**
+  String gamePathCheckFailed(String error);
+
+  /// No description provided for @androidAllFilesAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'All files access is required on Android. Please grant permission and open the game again.'**
+  String get androidAllFilesAccess;
+
   /// No description provided for @selectGameDirectory.
   ///
   /// In en, this message translates to:

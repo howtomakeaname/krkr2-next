@@ -131,6 +131,35 @@
   "pause": "Pause",
   "resume": "Resume",
   "exitGame": "Exit Game",
+  "discard": "Discard",
+  "discardChangesMessage": "Discard unsaved changes?",
+  "gameTypeXp3": "XP3 archive",
+  "gameTypeDirectory": "Directory",
+  "archiveNotExist": "Archive file does not exist: {path}",
+  "@archiveNotExist": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "gamePathNotExist": "Game path does not exist: {path}",
+  "@gamePathNotExist": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "missingStartupScript": "Missing startup script in: {path}\n(looked for startup.tjs and data/system/initialize.tjs)",
+  "@missingStartupScript": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "gamePathCheckFailed": "Game path check failed: {error}",
+  "@gamePathCheckFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "androidAllFilesAccess": "All files access is required on Android. Please grant permission and open the game again.",
   "selectGameDirectory": "Select Game Directory",
   "selectGameArchive": "Select XP3 Archive",
   "addArchive": "Add XP3",

@@ -299,6 +299,42 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exitGame => 'ゲームを終了';
 
   @override
+  String get discard => '破棄';
+
+  @override
+  String get discardChangesMessage => '未保存の変更を破棄しますか？';
+
+  @override
+  String get gameTypeXp3 => 'XP3 アーカイブ';
+
+  @override
+  String get gameTypeDirectory => 'フォルダ';
+
+  @override
+  String archiveNotExist(String path) {
+    return 'アーカイブが存在しません: $path';
+  }
+
+  @override
+  String gamePathNotExist(String path) {
+    return 'ゲームパスが存在しません: $path';
+  }
+
+  @override
+  String missingStartupScript(String path) {
+    return '起動スクリプトが見つかりません: $path\n（startup.tjs と data/system/initialize.tjs を確認済み）';
+  }
+
+  @override
+  String gamePathCheckFailed(String error) {
+    return 'ゲームパスの確認に失敗しました: $error';
+  }
+
+  @override
+  String get androidAllFilesAccess =>
+      'Android では「すべてのファイル」へのアクセス権が必要です。許可してからゲームをもう一度開いてください。';
+
+  @override
   String get selectGameDirectory => 'ゲームディレクトリを選択';
 
   @override

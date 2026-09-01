@@ -297,6 +297,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exitGame => '退出游戏';
 
   @override
+  String get discard => '放弃';
+
+  @override
+  String get discardChangesMessage => '放弃未保存的修改？';
+
+  @override
+  String get gameTypeXp3 => 'XP3 归档';
+
+  @override
+  String get gameTypeDirectory => '文件夹';
+
+  @override
+  String archiveNotExist(String path) {
+    return '归档文件不存在：$path';
+  }
+
+  @override
+  String gamePathNotExist(String path) {
+    return '游戏路径不存在：$path';
+  }
+
+  @override
+  String missingStartupScript(String path) {
+    return '未找到启动脚本：$path\n（已查找 startup.tjs 与 data/system/initialize.tjs）';
+  }
+
+  @override
+  String gamePathCheckFailed(String error) {
+    return '游戏路径检查失败：$error';
+  }
+
+  @override
+  String get androidAllFilesAccess => 'Android 上需要“所有文件”访问权限。请授予权限后重新打开游戏。';
+
+  @override
   String get selectGameDirectory => '选择游戏目录';
 
   @override

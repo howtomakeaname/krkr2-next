@@ -308,6 +308,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exitGame => 'Exit Game';
 
   @override
+  String get discard => 'Discard';
+
+  @override
+  String get discardChangesMessage => 'Discard unsaved changes?';
+
+  @override
+  String get gameTypeXp3 => 'XP3 archive';
+
+  @override
+  String get gameTypeDirectory => 'Directory';
+
+  @override
+  String archiveNotExist(String path) {
+    return 'Archive file does not exist: $path';
+  }
+
+  @override
+  String gamePathNotExist(String path) {
+    return 'Game path does not exist: $path';
+  }
+
+  @override
+  String missingStartupScript(String path) {
+    return 'Missing startup script in: $path\n(looked for startup.tjs and data/system/initialize.tjs)';
+  }
+
+  @override
+  String gamePathCheckFailed(String error) {
+    return 'Game path check failed: $error';
+  }
+
+  @override
+  String get androidAllFilesAccess =>
+      'All files access is required on Android. Please grant permission and open the game again.';
+
+  @override
   String get selectGameDirectory => 'Select Game Directory';
 
   @override
