@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -12,6 +13,7 @@ import '../models/game_info.dart';
 import '../models/game_metadata_candidate.dart';
 import '../services/game_manager.dart';
 import '../services/game_metadata_scraper.dart';
+import '../ui/ui.dart';
 import '../utils/xp3_utils.dart';
 import 'scrape_select_page.dart';
 
@@ -37,6 +39,7 @@ class GameDetailPage extends StatefulWidget {
 
   final GameInfo game;
   final GameManager gameManager;
+
   /// When true, open the scrape dialog automatically after the first frame (e.g. after adding a game).
   final bool openScrapeOnLoad;
 
@@ -59,6 +62,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
       });
     }
   }
+
   GameManager get gm => widget.gameManager;
   bool get _isXp3 => game.path.toLowerCase().endsWith('.xp3');
   bool get _hasCover =>
@@ -72,32 +76,29 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
   Future<void> _setCover() async {
     final l10n = AppLocalizations.of(context)!;
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: Text(l10n.coverFromGallery),
-              onTap: () => Navigator.pop(ctx, 'gallery'),
+    final source = await UiBottomSheet.show<String>(
+      context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          UiListTile(
+            icon: LucideIcons.image,
+            title: l10n.coverFromGallery,
+            onTap: () => Navigator.pop(context, 'gallery'),
+          ),
+          UiListTile(
+            icon: LucideIcons.camera,
+            title: l10n.coverFromCamera,
+            onTap: () => Navigator.pop(context, 'camera'),
+          ),
+          if (game.coverPath != null)
+            UiListTile(
+              icon: LucideIcons.trash2,
+              iconColor: context.uiColors.danger,
+              title: l10n.coverRemove,
+              onTap: () => Navigator.pop(context, 'remove'),
             ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: Text(l10n.coverFromCamera),
-              onTap: () => Navigator.pop(ctx, 'camera'),
-            ),
-            if (game.coverPath != null)
-              ListTile(
-                leading:
-                    const Icon(Icons.delete_outline, color: Colors.redAccent),
-                title: Text(l10n.coverRemove,
-                    style: const TextStyle(color: Colors.redAccent)),
-                onTap: () => Navigator.pop(ctx, 'remove'),
-              ),
-          ],
-        ),
+        ],
       ),
     );
     if (source == null || !mounted) return;
@@ -144,32 +145,28 @@ class _GameDetailPageState extends State<GameDetailPage> {
   Future<void> _rename() async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: game.displayTitle);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.renameGame),
-        content: TextField(
+    final newName = await UiDialog.show<String>(
+      context,
+      title: l10n.renameGame,
+      content: Builder(
+        builder: (ctx) => UiInput(
           controller: controller,
           autofocus: true,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            labelText: l10n.displayTitle,
-          ),
+          label: l10n.displayTitle,
           onSubmitted: (value) => Navigator.pop(ctx, value),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: Text(l10n.save),
-          ),
-        ],
       ),
+      actions: [
+        UiDialogAction(label: l10n.cancel),
+        UiDialogAction(
+          label: l10n.save,
+          isDefault: true,
+          onPressed: () => Navigator.pop(context, controller.text),
+        ),
+      ],
     );
-    controller.dispose();
+    // 等对话框退场动画结束再释放，避免输入框在动画中访问已释放的 controller。
+    Future<void>.delayed(const Duration(milliseconds: 500), controller.dispose);
     if (newName != null && newName.isNotEmpty && mounted) {
       await gm.renameGame(game.path, newName);
       _changed = true;
@@ -180,39 +177,55 @@ class _GameDetailPageState extends State<GameDetailPage> {
   Future<void> _openScrape() async {
     final l10n = AppLocalizations.of(context)!;
 
-    final keyword = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _ScrapeSearchDialog(
-        l10n: l10n,
-        initialKeyword: game.displayTitle,
+    final controller = TextEditingController(text: game.displayTitle);
+    final keyword = await UiDialog.show<String>(
+      context,
+      title: l10n.scrapeMetadataDialogTitle,
+      content: Builder(
+        builder: (ctx) => UiInput(
+          controller: controller,
+          autofocus: true,
+          placeholder: l10n.scrapeMetadataSearchHint,
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
       ),
+      actions: [
+        UiDialogAction(label: l10n.cancel),
+        UiDialogAction(
+          label: l10n.scrapeMetadataSearch,
+          isDefault: true,
+          onPressed: () => Navigator.pop(context, controller.text),
+        ),
+      ],
     );
+    // 等对话框退场动画结束再释放，避免输入框在动画中访问已释放的 controller。
+    Future<void>.delayed(const Duration(milliseconds: 500), controller.dispose);
     if (keyword == null || !mounted) return;
     final trimmed = keyword.trim();
     if (trimmed.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.scrapeMetadataEnterName)),
+      UiSnackbar.show(
+        context,
+        message: l10n.scrapeMetadataEnterName,
+        type: UiSnackbarType.warning,
       );
       return;
     }
 
-    showDialog<void>(
-      context: context,
+    UiDialog.show<void>(
+      context,
       barrierDismissible: false,
-      builder: (ctx) => Center(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(l10n.scrapeMetadataSearch),
-              ],
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const UiLoader(),
+          const SizedBox(height: UiSpacing.md),
+          Text(
+            l10n.scrapeMetadataSearch,
+            style: context.uiType.subheadline.copyWith(
+              color: context.uiColors.textSecondary,
             ),
           ),
-        ),
+        ],
       ),
     );
 
@@ -223,8 +236,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
       if (!mounted) return;
       Navigator.of(context).pop(); // close loading dialog
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.scrapeMetadataSourceError)),
+      UiSnackbar.show(
+        context,
+        message: l10n.scrapeMetadataSourceError,
+        type: UiSnackbarType.error,
       );
       return;
     }
@@ -255,33 +270,35 @@ class _GameDetailPageState extends State<GameDetailPage> {
     final progress = ValueNotifier<double>(0.0);
     final currentFile = ValueNotifier<String>('');
 
-    showDialog<void>(
-      context: context,
+    UiDialog.show<void>(
+      context,
       barrierDismissible: false,
-      builder: (ctx) => PopScope(
+      title: isXp3 ? l10n.unpackingProgress : l10n.packingProgress,
+      content: PopScope(
+        // 操作进行中禁止返回键/手势关闭进度弹窗。
         canPop: false,
-        child: AlertDialog(
-          title: Text(isXp3 ? l10n.unpackingProgress : l10n.packingProgress),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ValueListenableBuilder<double>(
-                valueListenable: progress,
-                builder: (_, value, __) =>
-                    LinearProgressIndicator(value: value),
-              ),
-              const SizedBox(height: 12),
-              ValueListenableBuilder<String>(
-                valueListenable: currentFile,
-                builder: (_, value, __) => Text(
-                  value,
-                  style: Theme.of(ctx).textTheme.bodySmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, __) => UiProgress(value: value),
+            ),
+            const SizedBox(height: UiSpacing.md),
+            ValueListenableBuilder<String>(
+              valueListenable: currentFile,
+              builder: (ctx, value, __) => Text(
+                value,
+                style: ctx.uiType.footnote.copyWith(
+                  fontFamily: 'monospace',
+                  color: ctx.uiColors.textTertiary,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -292,44 +309,55 @@ class _GameDetailPageState extends State<GameDetailPage> {
           p.dirname(game.path),
           p.basenameWithoutExtension(game.path),
         );
-        await xp3Extract(game.path, destDir, onProgress: (prog, file) {
-          progress.value = prog;
-          currentFile.value = file;
-        });
+        await xp3Extract(
+          game.path,
+          destDir,
+          onProgress: (prog, file) {
+            progress.value = prog;
+            currentFile.value = file;
+          },
+        );
         if (mounted) {
           Navigator.of(context).pop();
           final newGame = GameInfo(path: destDir);
           await gm.addGame(newGame);
           _changed = true;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l10n.unpackComplete),
-            behavior: SnackBarBehavior.floating,
-          ));
+          UiSnackbar.show(
+            context,
+            message: l10n.unpackComplete,
+            type: UiSnackbarType.success,
+          );
         }
       } else {
         final xp3Path = '${game.path}.xp3';
-        await xp3Pack(game.path, xp3Path, onProgress: (prog, file) {
-          progress.value = prog;
-          currentFile.value = file;
-        });
+        await xp3Pack(
+          game.path,
+          xp3Path,
+          onProgress: (prog, file) {
+            progress.value = prog;
+            currentFile.value = file;
+          },
+        );
         if (mounted) {
           Navigator.of(context).pop();
           final newGame = GameInfo(path: xp3Path);
           await gm.addGame(newGame);
           _changed = true;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l10n.packComplete),
-            behavior: SnackBarBehavior.floating,
-          ));
+          UiSnackbar.show(
+            context,
+            message: l10n.packComplete,
+            type: UiSnackbarType.success,
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l10n.xp3OperationFailed(e.toString())),
-          behavior: SnackBarBehavior.floating,
-        ));
+        UiSnackbar.show(
+          context,
+          message: l10n.xp3OperationFailed(e.toString()),
+          type: UiSnackbarType.error,
+        );
       }
     } finally {
       progress.dispose();
@@ -339,25 +367,18 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
   Future<void> _remove() async {
     final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.removeGame),
-        content: Text(l10n.removeGameConfirm(game.displayTitle)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            child: Text(l10n.remove),
-          ),
-        ],
-      ),
+    final confirmed = await UiDialog.show<bool>(
+      context,
+      title: l10n.removeGame,
+      message: l10n.removeGameConfirm(game.displayTitle),
+      actions: [
+        UiDialogAction(label: l10n.cancel, returnValue: false),
+        UiDialogAction(
+          label: l10n.remove,
+          isDestructive: true,
+          returnValue: true,
+        ),
+      ],
     );
     if (confirmed == true && mounted) {
       await gm.removeGame(game.path);
@@ -368,8 +389,6 @@ class _GameDetailPageState extends State<GameDetailPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
     return PopScope(
       canPop: false,
@@ -383,12 +402,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(LucideIcons.arrowLeft),
             onPressed: _pop,
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.image_outlined),
+              icon: const Icon(LucideIcons.image),
               tooltip: l10n.setCover,
               onPressed: _setCover,
             ),
@@ -398,10 +417,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildTopHeroSection(colorScheme, textTheme),
+              _buildTopHeroSection(),
               Transform.translate(
                 offset: const Offset(0, -_sheetRadius),
-                child: _buildBottomSheet(colorScheme, l10n, textTheme),
+                child: _buildBottomSheet(l10n),
               ),
             ],
           ),
@@ -417,13 +436,13 @@ class _GameDetailPageState extends State<GameDetailPage> {
   static const double _sheetRadius = 24;
 
   /// 顶部一块：高度由内容决定（卡片+标题+开发者），背景毛玻璃随该区域动态填充
-  Widget _buildTopHeroSection(ColorScheme colorScheme, TextTheme textTheme) {
+  Widget _buildTopHeroSection() {
+    final colors = context.uiColors;
+    final typography = context.uiType;
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Positioned.fill(
-          child: _buildBlurredBlock(colorScheme),
-        ),
+        Positioned.fill(child: _buildBlurredBlock()),
         Padding(
           padding: EdgeInsets.only(
             top: MediaQuery.paddingOf(context).top + kToolbarHeight + 24,
@@ -434,14 +453,14 @@ class _GameDetailPageState extends State<GameDetailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(child: _buildTopCoverCard(colorScheme)),
+              Center(child: _buildTopCoverCard()),
               const SizedBox(height: 16),
               Center(
                 child: Text(
                   game.displayTitle,
-                  style: textTheme.titleLarge?.copyWith(
+                  style: typography.title2.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
+                    color: colors.textPrimary,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 3,
@@ -453,8 +472,8 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 Center(
                   child: Text(
                     game.developer!,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                    style: typography.body.copyWith(
+                      color: colors.textSecondary,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -470,7 +489,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   }
 
   /// 仅顶部一块的放大封面 + 毛玻璃
-  Widget _buildBlurredBlock(ColorScheme colorScheme) {
+  Widget _buildBlurredBlock() {
     return _hasCover
         ? Stack(
             fit: StackFit.expand,
@@ -479,8 +498,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 child: Image.file(
                   File(game.coverPath!),
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      _buildPlaceholderBackground(colorScheme),
+                  errorBuilder: (_, __, ___) => _buildPlaceholderBackground(),
                 ),
               ),
               Positioned.fill(
@@ -488,41 +506,37 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   child: BackdropFilter(
                     filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                     child: Container(
-                      color: colorScheme.shadow.withValues(alpha: 0.35),
+                      color: Colors.black.withValues(alpha: 0.35),
                     ),
                   ),
                 ),
               ),
             ],
           )
-        : _buildPlaceholderBackground(colorScheme);
+        : _buildPlaceholderBackground();
   }
 
-  Widget _buildPlaceholderBackground(ColorScheme colorScheme) {
+  Widget _buildPlaceholderBackground() {
+    final colors = context.uiColors;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            colorScheme.surfaceContainerHigh,
-            colorScheme.surfaceContainerHighest,
-          ],
+          colors: [colors.surfaceElevated, colors.separator],
         ),
       ),
     );
   }
 
   /// 顶部居中卡片：仅封面
-  Widget _buildTopCoverCard(ColorScheme colorScheme) {
+  Widget _buildTopCoverCard() {
     final height = _coverCardWidth / _coverCardAspectRatio;
     return Card(
       elevation: 12,
-      shadowColor: colorScheme.shadow.withValues(alpha: 0.4),
+      shadowColor: Colors.black.withValues(alpha: 0.4),
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: UiRadius.brLg),
       child: SizedBox(
         width: _coverCardWidth,
         height: height,
@@ -530,41 +544,40 @@ class _GameDetailPageState extends State<GameDetailPage> {
             ? Image.file(
                 File(game.coverPath!),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    _buildCoverPlaceholder(colorScheme, height),
+                errorBuilder: (_, __, ___) => _buildCoverPlaceholder(height),
               )
-            : _buildCoverPlaceholder(colorScheme, height),
+            : _buildCoverPlaceholder(height),
       ),
     );
   }
 
-  Widget _buildCoverPlaceholder(ColorScheme colorScheme, double height) {
+  Widget _buildCoverPlaceholder(double height) {
+    final colors = context.uiColors;
     return Container(
       width: _coverCardWidth,
       height: height,
-      color: colorScheme.surfaceContainerHigh,
+      color: colors.surfaceElevated,
       child: Icon(
-        Icons.videogame_asset,
+        LucideIcons.gamepad2,
         size: 48,
-        color: colorScheme.primary.withValues(alpha: 0.5),
+        color: colors.brand.withValues(alpha: 0.5),
       ),
     );
   }
 
   /// 下方信息区：实色背景保证可读
-  Widget _buildBottomSheet(
-    ColorScheme colorScheme,
-    AppLocalizations l10n,
-    TextTheme textTheme,
-  ) {
+  Widget _buildBottomSheet(AppLocalizations l10n) {
+    final colors = context.uiColors;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(_sheetRadius)),
+        color: colors.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(_sheetRadius),
+        ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, -4),
           ),
@@ -572,18 +585,17 @@ class _GameDetailPageState extends State<GameDetailPage> {
       ),
       child: Column(
         children: [
-          _buildInfoSection(l10n, textTheme, colorScheme),
+          _buildInfoSection(l10n),
           _buildLaunchButton(l10n),
-          _buildManageSection(l10n, colorScheme),
-          _buildDangerSection(l10n, colorScheme),
+          _buildManageSection(l10n),
+          _buildDangerSection(l10n),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildInfoSection(
-      AppLocalizations l10n, TextTheme textTheme, ColorScheme colorScheme) {
+  Widget _buildInfoSection(AppLocalizations l10n) {
     final lastPlayed = game.lastPlayed;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
@@ -591,61 +603,54 @@ class _GameDetailPageState extends State<GameDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _infoRow(
-            Icons.folder_outlined,
+            LucideIcons.folder,
             game.path,
-            colorScheme,
             onLongPress: () {
               Clipboard.setData(ClipboardData(text: game.path));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(l10n.copiedToClipboard),
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 1),
-                ),
+              UiSnackbar.show(
+                context,
+                message: l10n.copiedToClipboard,
+                type: UiSnackbarType.success,
+                duration: const Duration(seconds: 1),
               );
             },
           ),
           if (lastPlayed != null) ...[
             const SizedBox(height: 8),
             _infoRow(
-              Icons.schedule,
+              LucideIcons.clock,
               l10n.lastPlayed(_formatDate(lastPlayed, l10n)),
-              colorScheme,
             ),
           ],
           if ((game.playDurationSeconds ?? 0) >= 60) ...[
             const SizedBox(height: 8),
             _infoRow(
-              Icons.timer_outlined,
-              l10n.playDuration(GameInfo.formatPlayDuration(game.playDurationSeconds!)),
-              colorScheme,
+              LucideIcons.timer,
+              l10n.playDuration(
+                GameInfo.formatPlayDuration(game.playDurationSeconds!),
+              ),
             ),
           ],
           const SizedBox(height: 8),
-          _infoRow(
-            Icons.inventory_2_outlined,
-            _isXp3 ? 'XP3 Archive' : 'Directory',
-            colorScheme,
-          ),
+          _infoRow(LucideIcons.package, _isXp3 ? 'XP3 Archive' : 'Directory'),
         ],
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String text, ColorScheme colorScheme,
-      {VoidCallback? onLongPress}) {
+  Widget _infoRow(IconData icon, String text, {VoidCallback? onLongPress}) {
+    final colors = context.uiColors;
     return GestureDetector(
       onLongPress: onLongPress,
       child: Row(
         children: [
-          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+          Icon(icon, size: 18, color: colors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurfaceVariant,
+              style: context.uiType.footnote.copyWith(
+                color: colors.textSecondary,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -659,57 +664,52 @@ class _GameDetailPageState extends State<GameDetailPage> {
   Widget _buildLaunchButton(AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: FilledButton.icon(
+      child: UiButton(
+        label: l10n.launchGame,
+        leadingIcon: LucideIcons.play,
+        size: UiButtonSize.large,
+        fullWidth: true,
         onPressed: () {
           gm.markPlayed(game.path);
-          Navigator.of(context).pop(
-            const GameDetailResult(needsRefresh: true, shouldLaunch: true),
-          );
+          Navigator.of(
+            context,
+          ).pop(const GameDetailResult(needsRefresh: true, shouldLaunch: true));
         },
-        icon: const Icon(Icons.play_arrow_rounded),
-        label: Text(l10n.launchGame),
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
       ),
     );
   }
 
-  Widget _buildManageSection(AppLocalizations l10n, ColorScheme colorScheme) {
+  Widget _buildManageSection(AppLocalizations l10n) {
+    final colors = context.uiColors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        elevation: 0,
-        color: colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: UiCard(
+        color: colors.surfaceElevated,
+        padding: EdgeInsets.zero,
         child: Column(
           children: [
-            ListTile(
-              leading: const Icon(Icons.image_outlined),
-              title: Text(l10n.setCover),
-              trailing: const Icon(Icons.chevron_right),
+            UiListTile(
+              icon: LucideIcons.image,
+              title: l10n.setCover,
+              showChevron: true,
               onTap: _setCover,
             ),
-            const Divider(height: 1, indent: 56),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: Text(l10n.rename),
-              trailing: const Icon(Icons.chevron_right),
+            UiListTile(
+              icon: LucideIcons.pencil,
+              title: l10n.rename,
+              showChevron: true,
               onTap: _rename,
             ),
-            const Divider(height: 1, indent: 56),
-            ListTile(
-              leading: const Icon(Icons.cloud_download_outlined),
-              title: Text(l10n.scrapeMetadata),
-              trailing: const Icon(Icons.chevron_right),
+            UiListTile(
+              icon: LucideIcons.cloudDownload,
+              title: l10n.scrapeMetadata,
+              showChevron: true,
               onTap: _openScrape,
             ),
-            const Divider(height: 1, indent: 56),
-            ListTile(
-              leading: Icon(_isXp3 ? Icons.unarchive_outlined : Icons.archive_outlined),
-              title: Text(_isXp3 ? l10n.unpackXp3 : l10n.packXp3),
-              trailing: const Icon(Icons.chevron_right),
+            UiListTile(
+              icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
+              title: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
+              showChevron: true,
               onTap: _packUnpack,
             ),
           ],
@@ -718,17 +718,18 @@ class _GameDetailPageState extends State<GameDetailPage> {
     );
   }
 
-  Widget _buildDangerSection(AppLocalizations l10n, ColorScheme colorScheme) {
+  Widget _buildDangerSection(AppLocalizations l10n) {
+    final colors = context.uiColors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        elevation: 0,
-        color: colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: ListTile(
-          leading: Icon(Icons.delete_outline, color: colorScheme.error),
-          title: Text(l10n.remove, style: TextStyle(color: colorScheme.error)),
-          trailing: Icon(Icons.chevron_right, color: colorScheme.error),
+      child: UiCard(
+        color: colors.surfaceElevated,
+        padding: EdgeInsets.zero,
+        child: UiListTile(
+          icon: LucideIcons.trash2,
+          iconColor: colors.danger,
+          title: l10n.remove,
+          showChevron: true,
           onTap: _remove,
         ),
       ),
@@ -743,63 +744,5 @@ class _GameDetailPageState extends State<GameDetailPage> {
     if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
     if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-}
-
-/// Step 1 dialog: enter game name and search. Owns its TextEditingController
-/// so it is disposed when the dialog is disposed.
-class _ScrapeSearchDialog extends StatefulWidget {
-  const _ScrapeSearchDialog({
-    required this.l10n,
-    required this.initialKeyword,
-  });
-
-  final AppLocalizations l10n;
-  final String initialKeyword;
-
-  @override
-  State<_ScrapeSearchDialog> createState() => _ScrapeSearchDialogState();
-}
-
-class _ScrapeSearchDialogState extends State<_ScrapeSearchDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialKeyword);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = widget.l10n;
-    return AlertDialog(
-      title: Text(l10n.scrapeMetadataDialogTitle),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(
-          border: const OutlineInputBorder(),
-          hintText: l10n.scrapeMetadataSearchHint,
-        ),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: Text(l10n.scrapeMetadataSearch),
-        ),
-      ],
-    );
   }
 }
