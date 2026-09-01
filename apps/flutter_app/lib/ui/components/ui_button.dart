@@ -163,7 +163,13 @@ class _UiButtonState extends State<UiButton>
         borderRadius: BorderRadius.all(
             widget._iconOnly ? UiRadius.md : _resolveRadius()),
       ),
-      child: Center(widthFactor: widget.fullWidth ? null : 1, child: content),
+      // heightFactor 必须显式置 1：Center 默认会撑满有界松约束（如
+      // Scaffold 的 FAB 槽位给出的全屏约束），把按钮拉成整屏大。
+      child: Center(
+        widthFactor: widget.fullWidth ? null : 1,
+        heightFactor: 1,
+        child: content,
+      ),
     );
 
     return Semantics(
