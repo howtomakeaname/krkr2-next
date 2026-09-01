@@ -94,6 +94,19 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 - The Cubism Live2D plugin is not built on OHOS yet (no prebuilt Core); layerex_draw (libgdiplus) likewise
 - Engine logs go to both hilog (tag `krkr2`) and `files/flutter/krkr2-engine.log` inside the app sandbox
 
+## Building from Source on macOS
+
+```bash
+./build/build_macos.sh debug      # engine + Flutter app (Xcode required)
+```
+
+The Live2D Cubism SDK **cannot be redistributed** and is therefore not part of the repo (`Core/lib/` and `Framework/` under `cpp/plugins/cubism/` are gitignored). Place them manually before the first build:
+
+- `Core/`: the `Core` directory from the official [CubismSdkForNative](https://cubism.live2d.com/sdk-native/en/) archive (tested with 5-r.5) — prebuilt `libLive2DCubismCore.a` per platform plus headers;
+- `Framework/`: the patched Framework from [KiriKiri-LauncherC](https://github.com/xiaocongyu66/KiriKiri-LauncherC) (keeps the `SetDrawableForceHidden` extension APIs krkrlive2d.cpp relies on).
+
+UI-less engine smoke tests do not require Xcode/Flutter: link `out/macos/debug/bridge/engine_api/libengine_api.dylib` directly and drive the engine_api C ABI (`engine_open_game_async` accepts `.xp3` archives or extracted directories). Set `KRKR_HEADLESS=1` to have the engine log system dialogs to stderr instead of showing them.
+
 ## Engine Performance Optimization
 
 | Priority | Task | Status |

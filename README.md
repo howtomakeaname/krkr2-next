@@ -93,6 +93,19 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 - Cubism Live2D 插件因无 OHOS 预编译 Core 暂未编入；layerex_draw（libgdiplus 依赖）同
 - 引擎日志：hilog（tag `krkr2`）与应用沙箱内 `files/flutter/krkr2-engine.log` 双通道
 
+## macOS 源码构建
+
+```bash
+./build/build_macos.sh debug      # 引擎 + Flutter app（需 Xcode）
+```
+
+Live2D Cubism SDK 因再分发许可**不入库**（`cpp/plugins/cubism/` 下的 `Core/lib/` 与 `Framework/` 已 gitignore），首次构建前需自行放置：
+
+- `Core/`：官方 [CubismSdkForNative](https://cubism.live2d.com/sdk-native/en/) 压缩包（实测 5-r.5）中的 `Core` 目录——含各平台预编译 `libLive2DCubismCore.a` 与头文件；
+- `Framework/`：使用 [KiriKiri-LauncherC](https://github.com/xiaocongyu66/KiriKiri-LauncherC) 仓库内的修补版 Framework（保留 krkrlive2d.cpp 所需的 `SetDrawableForceHidden` 等扩展 API）。
+
+引擎无 UI 冒烟验证可不依赖 Xcode/Flutter：直接链接 `out/macos/debug/bridge/engine_api/libengine_api.dylib` 调用 engine_api C 接口（`engine_open_game_async` 支持 `.xp3` 归档或解包目录），设 `KRKR_HEADLESS=1` 可让引擎跳过系统弹窗、改为 stderr 输出。
+
 ## 引擎性能优化
 
 | 优先级 | 任务 | 状态 |

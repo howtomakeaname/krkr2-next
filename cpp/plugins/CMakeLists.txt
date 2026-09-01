@@ -30,7 +30,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     layerExLongExposure.cpp
     # krkrlive2d.cpp needs the Cubism Core prebuilt binary, which is not
     # available for OHOS; excluded there (engine_api skips its anchor too).
-    $<$<NOT:$<PLATFORM_ID:OHOS>>:krkrlive2d.cpp>
+    # Must be absolute: PUBLIC sources propagate to consumers in other
+    # directories, and genex entries are resolved relative to the consumer.
+    $<$<NOT:$<PLATFORM_ID:OHOS>>:${CMAKE_CURRENT_SOURCE_DIR}/krkrlive2d.cpp>
     krkrgles.cpp
     drawDeviceD2DCompat.cpp
     wfBasicEffectCompat.cpp
@@ -78,9 +80,14 @@ list(FILTER CUBISM_FW_SOURCES EXCLUDE REGEX ".*/D3D9/.*|.*/D3D11/.*|.*/Vulkan/.*
 add_library(CubismFramework STATIC ${CUBISM_FW_SOURCES})
 target_include_directories(CubismFramework PUBLIC
     ${CUBISM_FW_DIR}
+    ${CUBISM_FW_DIR}/src
     ${CUBISM_CORE_DIR}/include
 )
-target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_ANGLE_ES2)
+# Cubism 5-r.5 Framework only gates its GL header choice on platform macros;
+# HARMONYOS_ES3 is the branch that pulls plain GLES3/GLES2-ext headers (from
+# vcpkg opengl-registry) without any jni.h dependency — fits the ANGLE ES2
+# offscreen renderer. ANGLE_ES2 (older local Framework trees) no longer exists.
+target_compile_definitions(CubismFramework PUBLIC CSM_TARGET_HARMONYOS_ES3)
 
 # ANGLE headers for CubismFramework's OpenGLES2 renderer
 find_package(unofficial-angle CONFIG QUIET)
@@ -120,9 +127,10 @@ target_link_libraries(CubismFramework PUBLIC ${CUBISM_CORE_LIB})
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     ${CUBISM_FW_DIR}
+    ${CUBISM_FW_DIR}/src
     ${CUBISM_CORE_DIR}/include
 )
-target_compile_definitions(${PROJECT_NAME} PUBLIC CSM_TARGET_ANGLE_ES2)
+target_compile_definitions(${PROJECT_NAME} PUBLIC CSM_TARGET_HARMONYOS_ES3)
 target_link_libraries(${PROJECT_NAME} PUBLIC CubismFramework)
 endif()
 

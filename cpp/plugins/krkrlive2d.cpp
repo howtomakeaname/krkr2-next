@@ -387,7 +387,13 @@ public:
             textureIds_.push_back(texId);
         }
 
-        CreateRenderer();
+        // CubismUserModel::CreateRenderer(width, height, maskBufferCount)
+        // needs the initial framebuffer size (canvas pixels, like Update below).
+        GLsizei createW = static_cast<GLsizei>(GetModel()->GetCanvasWidthPixel());
+        GLsizei createH = static_cast<GLsizei>(GetModel()->GetCanvasHeightPixel());
+        if (createW <= 0) createW = 1920;
+        if (createH <= 0) createH = 1080;
+        CreateRenderer(createW, createH);
         auto *renderer = GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
         if (!renderer) {
             spdlog::error("krkrlive2d: failed to create renderer");
