@@ -15,6 +15,7 @@
 #include "tjsCommHead.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cmath>
@@ -66,6 +67,12 @@ bool TVPFreeUnusedLayerCache = false;
 
 static std::atomic<tjs_int> TVPLayerInstanceCount{0};
 static std::atomic<int64_t> TVPLayerBitmapTotalBytes{0};
+
+// perf: compose-side counters, drained by the engine_api perf report
+std::atomic<uint64_t> g_perf_compose_us{0};  // CPU-path Draw-loop time (InternalComplete2)
+std::atomic<uint64_t> g_perf_compose_n{0};   // CPU-path completions
+std::atomic<uint64_t> g_perf_compose_rects{0};
+std::atomic<uint64_t> g_perf_compose_area{0}; // pixels composed
 
 tjs_int TVPGetLayerCount() { return TVPLayerInstanceCount.load(std::memory_order_relaxed); }
 tjs_uint64 TVPGetLayerTotalBitmapBytes() {
@@ -7266,9 +7273,14 @@ void tTJSNI_BaseLayer::InternalComplete2(tTVPComplexRect &updateregion,
     // caching.
 
     // tjs_int i;
+    const auto compose_t0 = std::chrono::steady_clock::now();
+    tjs_int compose_rects = 0;
+    int64_t compose_area = 0;
     tTVPComplexRect::tIterator it = updateregion.GetIterator();
     while(it.Step()) {
         tTVPRect r(*it);
+        compose_rects++;
+        compose_area += (int64_t)r.get_width() * r.get_height();
 
         // Add layer offset because Draw() accepts the position in
         // *parent* 's coordinates.
@@ -7363,6 +7375,14 @@ void tTJSNI_BaseLayer::InternalComplete2(tTVPComplexRect &updateregion,
     }
 
     updateregion.Clear();
+
+    g_perf_compose_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - compose_t0).count(),
+        std::memory_order_relaxed);
+    g_perf_compose_n.fetch_add(1, std::memory_order_relaxed);
+    g_perf_compose_rects.fetch_add(compose_rects, std::memory_order_relaxed);
+    g_perf_compose_area.fetch_add(compose_area, std::memory_order_relaxed);
 }
 
 //---------------------------------------------------------------------------

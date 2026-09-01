@@ -394,6 +394,17 @@ void TVPDiscardAllDiscardableEvents() {
 //---------------------------------------------------------------------------
 // TVPDeliverAllEvents
 //---------------------------------------------------------------------------
+// Per-tick event-volume diagnostics (read/reset by engine_api.cpp perf
+// report). Relaxed atomics: diagnostics only.
+#include <atomic>
+#include <chrono>
+std::atomic<uint64_t> g_perf_n_events{0};    // delivered TJS events
+std::atomic<uint64_t> g_perf_n_inpevents{0}; // delivered input events
+std::atomic<uint64_t> g_perf_max_queue{0};   // max pending TJS event queue
+std::atomic<uint64_t> g_perf_idle_us{0};     // TVP_EPT_IDLE delivery
+std::atomic<uint64_t> g_perf_cont_us{0};     // TVPDeliverContinuousEvent
+std::atomic<uint64_t> g_perf_wupd_us{0};     // TVPDeliverWindowUpdateEvents
+
 static void _TVPDeliverEventByPrio(tjs_uint prio) {
     while(true) {
         tTVPEvent *e;
@@ -401,6 +412,13 @@ static void _TVPDeliverEventByPrio(tjs_uint prio) {
         // retrieve item to deliver
         if(TVPEventQueue.size() == 0)
             break;
+        {
+            const uint64_t q = TVPEventQueue.size();
+            uint64_t cur = g_perf_max_queue.load(std::memory_order_relaxed);
+            while(q > cur &&
+                  !g_perf_max_queue.compare_exchange_weak(
+                      cur, q, std::memory_order_relaxed)) {}
+        }
         std::vector<tTVPEvent *>::iterator i = TVPEventQueue.begin();
         while(i != TVPEventQueue.end()) {
             if((*i)->GetSequence() <= TVPEventSequenceNumberToProcess &&
@@ -421,6 +439,7 @@ static void _TVPDeliverEventByPrio(tjs_uint prio) {
             throw;
         }
         delete e;
+        g_perf_n_events.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -454,6 +473,7 @@ static bool _TVPDeliverAllEvents2() {
             throw;
         }
         delete e;
+        g_perf_n_inpevents.fetch_add(1, std::memory_order_relaxed);
 
         // check exclusive events
         if(TVPExclusiveEventPosted)
@@ -517,7 +537,12 @@ void TVPDeliverAllEvents() {
         try {
             try {
                 // process idle event queue
+                const auto perf_idle_t0 = std::chrono::steady_clock::now();
                 _TVPDeliverEventByPrio(TVP_EPT_IDLE);
+                g_perf_idle_us +=
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - perf_idle_t0)
+                        .count();
             }
             TJS_CONVERT_TO_TJS_EXCEPTION
         }
@@ -532,12 +557,22 @@ void TVPDeliverAllEvents() {
             // another thread. But I have no dought about that no one
             // does care of missing one event in rare race condition.
 
+            const auto perf_cont_t0 = std::chrono::steady_clock::now();
             TVPDeliverContinuousEvent();
+            g_perf_cont_us +=
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - perf_cont_t0)
+                    .count();
         }
         try {
             try {
                 // for window content updating
+                const auto perf_wupd_t0 = std::chrono::steady_clock::now();
                 TVPDeliverWindowUpdateEvents();
+                g_perf_wupd_us +=
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - perf_wupd_t0)
+                        .count();
             }
             TJS_CONVERT_TO_TJS_EXCEPTION
         }

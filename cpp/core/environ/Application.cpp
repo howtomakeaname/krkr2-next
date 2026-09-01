@@ -36,6 +36,16 @@ extern "C" {
 #include "TVPColor.h"
 #include "FontImpl.h"
 
+// Per-tick cost breakdown for the perf report (engine_api.cpp reads and
+// resets these). Relaxed atomics: diagnostics only, called from the tick
+// thread.
+#include <atomic>
+#include <chrono>
+std::atomic<uint64_t> g_perf_msg_us{0};    // posted-message dispatch
+std::atomic<uint64_t> g_perf_timer_us{0};  // TVPTimer::ProgressAllTimer
+std::atomic<uint64_t> g_perf_watch_us{0};  // SystemWatchTimerTimer total
+std::atomic<uint64_t> g_perf_runs{0};      // Run() call count
+
 tTVPApplication *Application = new tTVPApplication;
 std::thread::id TVPMainThreadID = std::this_thread::get_id();
 static tTJSCriticalSection _NoMemCallBackCS;
@@ -518,8 +528,11 @@ void tTVPApplication::Run() {
         }
         //	TVPBreathe();
         ProcessMessages();
+        const auto perf_watch_t0 = std::chrono::steady_clock::now();
         if(TVPSystemControl)
             TVPSystemControl->SystemWatchTimerTimer();
+        g_perf_watch_us += std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_watch_t0).count();
         //		TVPDeliverWindowUpdateEvents(); // from
         // SystemWatchTimerTimer
     } catch(const EAbort &) {
@@ -564,6 +577,7 @@ void tTVPApplication::Run() {
         ShowException((const tjs_char *)TVPUnknownError);
 #endif
     }
+    g_perf_runs.fetch_add(1, std::memory_order_relaxed);
 }
 
 void tTVPApplication::ProcessMessages() {
@@ -572,10 +586,16 @@ void tTVPApplication::ProcessMessages() {
         std::lock_guard<std::mutex> cs(m_msgQueueLock);
         m_lstUserMsg.swap(lstUserMsg);
     }
+    const auto perf_msg_t0 = std::chrono::steady_clock::now();
     for(std::tuple<void *, int, tMsg> &it : lstUserMsg) {
         std::get<2>(it)();
     }
+    g_perf_msg_us += std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - perf_msg_t0).count();
+    const auto perf_timer_t0 = std::chrono::steady_clock::now();
     TVPTimer::ProgressAllTimer();
+    g_perf_timer_us += std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - perf_timer_t0).count();
 }
 
 #if 0

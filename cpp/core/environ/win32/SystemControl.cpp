@@ -28,6 +28,15 @@
 #include "Random.h"
 #include "RenderManager.h"
 #include "tjsConfig.h"
+
+// Per-tick cost breakdown (see Application.cpp; engine_api.cpp reads and
+// resets these in the periodic perf report).
+#include <atomic>
+#include <chrono>
+std::atomic<uint64_t> g_perf_deliver_us{0};   // DeliverEvents
+std::atomic<uint64_t> g_perf_tickbeat_us{0};  // Window::TickBeat loop
+std::atomic<uint64_t> g_perf_gov_us{0};       // RunMemoryGovernor
+std::atomic<uint64_t> g_perf_rehash_us{0};    // TJSDoRehash
 #ifdef __APPLE__
 #include <malloc/malloc.h>
 #endif
@@ -532,13 +541,25 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
 	}
 #endif
     // check status and deliver events
-    DeliverEvents();
+    {
+        const auto perf_t0 = std::chrono::steady_clock::now();
+        DeliverEvents();
+        g_perf_deliver_us += std::chrono::duration_cast<
+            std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_t0).count();
+    }
 
     // call TickBeat
-    tjs_int count = TVPGetWindowCount();
-    for(tjs_int i = 0; i < count; i++) {
-        tTJSNI_Window *win = TVPGetWindowListAt(i);
-        win->TickBeat();
+    {
+        const auto perf_t0 = std::chrono::steady_clock::now();
+        tjs_int count = TVPGetWindowCount();
+        for(tjs_int i = 0; i < count; i++) {
+            tTJSNI_Window *win = TVPGetWindowListAt(i);
+            win->TickBeat();
+        }
+        g_perf_tickbeat_us += std::chrono::duration_cast<
+            std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_t0).count();
     }
 
     if(!ContinuousEventCalling && tick - LastCompactedTick > 4000) {
@@ -552,17 +573,30 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
         TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_IDLE);
     }
 
-    RunMemoryGovernor(tick);
+    {
+        const auto perf_t0 = std::chrono::steady_clock::now();
+        RunMemoryGovernor(tick);
+        g_perf_gov_us += std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_t0).count();
+    }
 
     if(!ContinuousEventCalling && tick > LastRehashedTick + 1500) {
         // TJS2 object rehash
         LastRehashedTick = tick;
+        const auto perf_t0 = std::chrono::steady_clock::now();
         TJSDoRehash();
+        g_perf_rehash_us += std::chrono::duration_cast<
+            std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_t0).count();
     } else if(ContinuousEventCalling && tick > LastRehashedTick + 10000) {
         // Periodically rehash TJS2 object tables even during continuous
         // events to prevent hash table fragmentation and memory waste.
         LastRehashedTick = tick;
+        const auto perf_t0 = std::chrono::steady_clock::now();
         TJSDoRehash();
+        g_perf_rehash_us += std::chrono::duration_cast<
+            std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - perf_t0).count();
     }
     // ensure modal window visible
     if(tick > LastShowModalWindowSentTick + 4100) {

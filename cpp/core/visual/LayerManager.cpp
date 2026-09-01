@@ -11,6 +11,12 @@
 
 #include "tjsCommHead.h"
 
+#include <atomic>
+
+// perf: invalidation-side counters, drained by the engine_api perf report
+std::atomic<uint64_t> g_perf_inval_n{0};     // AddUpdateRegion calls
+std::atomic<uint64_t> g_perf_inval_area{0};  // pixels invalidated (sum of input rects)
+
 #include "tjsArray.h"
 #include "LayerManager.h"
 #include "MsgIntf.h"
@@ -1038,12 +1044,27 @@ void tTVPLayerManager::AddUpdateRegion(const tTVPComplexRect &rects) {
     UpdateRegion.Or(rects);
     if(UpdateRegion.GetCount() > TVP_UPDATE_UNITE_LIMIT)
         UpdateRegion.Unite();
+    g_perf_inval_n.fetch_add(1, std::memory_order_relaxed);
+    {
+        int64_t area = 0;
+        tTVPComplexRect::tIterator it = rects.GetIterator();
+        while(it.Step()) {
+            tTVPRect r(*it);
+            area += (int64_t)r.get_width() * r.get_height();
+        }
+        g_perf_inval_area.fetch_add((uint64_t)area,
+                                    std::memory_order_relaxed);
+    }
     NotifyWindowInvalidation();
 }
 //---------------------------------------------------------------------------
 void tTVPLayerManager::AddUpdateRegion(const tTVPRect &rect) {
     // the window is invalidated;
     UpdateRegion.Or(rect);
+    g_perf_inval_n.fetch_add(1, std::memory_order_relaxed);
+    g_perf_inval_area.fetch_add(
+        (uint64_t)rect.get_width() * rect.get_height(),
+        std::memory_order_relaxed);
     NotifyWindowInvalidation();
 }
 //---------------------------------------------------------------------------
