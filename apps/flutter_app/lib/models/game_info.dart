@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'game_engine.dart';
+
 /// Represents a game entry in the launcher.
 class GameInfo {
   GameInfo({
@@ -9,9 +11,10 @@ class GameInfo {
     this.lastPlayed,
     this.coverPath,
     this.playDurationSeconds,
-  });
+    GameEngine? engine,
+  }) : engine = engine ?? GameEngine.detect(path);
 
-  /// The root directory of the game.
+  /// The root directory (or archive / pack file) of the game.
   String path;
 
   /// Display title. Falls back to the directory name if null.
@@ -28,6 +31,11 @@ class GameInfo {
 
   /// Total play time in seconds. Updated when leaving the game page.
   int? playDurationSeconds;
+
+  /// Native runtime used to launch this entry. Detected from [path] when
+  /// the entry was created; persisted so the library does not have to touch
+  /// the filesystem to draw badges.
+  GameEngine engine;
 
   /// Display name: user-set title or the last directory component.
   String get displayTitle {
@@ -54,6 +62,7 @@ class GameInfo {
         'lastPlayed': lastPlayed?.toIso8601String(),
         'coverPath': coverPath,
         'playDurationSeconds': playDurationSeconds,
+        'engine': engine.id,
       };
 
   factory GameInfo.fromJson(Map<String, dynamic> json) => GameInfo(
@@ -65,6 +74,9 @@ class GameInfo {
             : null,
         coverPath: json['coverPath'] as String?,
         playDurationSeconds: json['playDurationSeconds'] as int?,
+        // Entries written before the engine field existed are re-detected
+        // from their path (cheap: extension check, or one directory listing).
+        engine: GameEngine.fromId(json['engine'] as String?),
       );
 
   static List<GameInfo> listFromJsonString(String jsonString) {

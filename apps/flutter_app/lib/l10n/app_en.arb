@@ -160,7 +160,30 @@
     }
   },
   "androidAllFilesAccess": "All files access is required on Android. Please grant permission and open the game again.",
-  "noXp3InFolder": "No XP3 archive found in the selected folder.",
+  "noXp3InFolder": "No XP3 archive or Artemis pack (.pfs) found in the selected folder.",
+  "gameTypeArtemis": "Artemis pack (.pfs)",
+  "gameEngine": "Engine: {engine}",
+  "@gameEngine": {
+    "placeholders": {
+      "engine": { "type": "String" }
+    }
+  },
+  "missingArtemisPack": "No Artemis pack (.pfs) found in: {path}",
+  "@missingArtemisPack": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "scanSandboxForGames": "Scan App Sandbox",
+  "scanSandboxForGamesDesc": "Find games copied in with hdc file send (XP3 / Artemis .pfs)",
+  "noGamesFoundInSandbox": "No games found in the app sandbox.",
+  "allSandboxGamesRegistered": "All games in the sandbox are already in the library.",
+  "screenOrientation": "Screen Orientation",
+  "screenOrientationDesc": "Orientation used while a game is running",
+  "orientationAuto": "Follow system",
+  "orientationLandscape": "Landscape",
+  "orientationPortrait": "Portrait",
+  "rotateScreen": "Rotate Screen",
   "engineRestartRequired": "The engine is already running another game. Restart the app to play a different one.",
   "gamesImported": "{count} games imported",
   "@gamesImported": {
@@ -169,7 +192,7 @@
     }
   },
   "selectGameDirectory": "Select Game Directory",
-  "selectGameArchive": "Select XP3 Archive",
+  "selectGameArchive": "Select Game Archive (XP3 / PFS)",
   "addArchive": "Add XP3",
 
   "justNow": "just now",

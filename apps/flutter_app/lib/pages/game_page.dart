@@ -14,6 +14,7 @@ import '../engine/engine_bridge.dart';
 import '../engine/flutter_engine_bridge_adapter.dart';
 import '../constants/prefs_keys.dart';
 import '../l10n/app_localizations.dart';
+import '../models/game_engine.dart';
 import '../services/game_manager.dart';
 import '../widgets/engine_surface.dart';
 import '../ui/ui.dart';
@@ -76,6 +77,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   // Orientation
   bool _forceLandscape = true;
+
+  // Which native runtime this entry runs on (drives preflight + the
+  // `engine` option handed to the bridge).
+  late final GameEngine _engine = GameEngine.detect(
+    _normalizeGamePath(widget.gamePath),
+  );
 
   // State
   _EnginePhase _phase = _EnginePhase.initializing;
@@ -260,7 +267,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   /// we step up one level to the real game root — but ONLY if the
   /// parent directory has `startup.tjs` or `data/` pointing back here.
   Future<String> _adjustGamePathForAndroid(String path) async {
-    if (!Platform.isAndroid || _isArchivePath(path)) return path;
+    if (!Platform.isAndroid ||
+        _isArchivePath(path) ||
+        _engine != GameEngine.krkr2) {
+      return path;
+    }
 
     final clean = path.endsWith('/')
         ? path.substring(0, path.length - 1)
@@ -314,18 +325,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     return adjusted;
   }
 
-  static bool _isArchivePath(String path) {
-    final lower = path.toLowerCase();
-    return lower.endsWith('.xp3') ||
-        lower.endsWith('.zip') ||
-        lower.endsWith('.7z') ||
-        lower.endsWith('.tar');
-  }
+  static bool _isArchivePath(String path) => GameEngine.isKrkrArchive(path);
 
   Future<String?> _preflightGamePath(String path) async {
     final l10n = AppLocalizations.of(context);
     try {
-      if (_isArchivePath(path)) {
+      if (_isArchivePath(path) || GameEngine.isPfsPack(path)) {
         final file = File(path);
         if (!await file.exists()) {
           return l10n?.archiveNotExist(path);
@@ -336,6 +341,15 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       final dir = Directory(path);
       if (!await dir.exists()) {
         return l10n?.gamePathNotExist(path);
+      }
+
+      if (_engine == GameEngine.artemis) {
+        // Artemis: the directory must hold a base pack; the runtime chains
+        // patch volumes and reads system.ini out of the pack itself.
+        if (!GameEngine.directoryHasPfs(path)) {
+          return l10n?.missingArtemisPack(path);
+        }
+        return null;
       }
 
       // Accept either startup.tjs in root or data/system/initialize.tjs
@@ -421,6 +435,15 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
 
     await _applyMemoryGovernorOptions();
+
+    // Tell the bridge which backend this entry runs on. The C side detects
+    // `.pfs` packs by itself, but an explicit choice keeps the two layers'
+    // classification in lock-step (and lets the app override later).
+    _log('Setting engine=${_engine.id}');
+    await _bridge.engineSetOption(
+      key: PrefsKeys.optionEngine,
+      value: _engine.id,
+    );
 
     if (!mounted) return;
     setState(() => _phase = _EnginePhase.opening);
@@ -1035,7 +1058,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   ),
                   const Spacer(),
                   Text(
-                    'krkr2 engine',
+                    _engine == GameEngine.artemis
+                        ? 'artemis engine'
+                        : 'krkr2 engine',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.3),
                       fontSize: 12,

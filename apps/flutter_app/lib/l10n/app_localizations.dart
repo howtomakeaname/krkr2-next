@@ -709,8 +709,86 @@ abstract class AppLocalizations {
   /// No description provided for @noXp3InFolder.
   ///
   /// In en, this message translates to:
-  /// **'No XP3 archive found in the selected folder.'**
+  /// **'No XP3 archive or Artemis pack (.pfs) found in the selected folder.'**
   String get noXp3InFolder;
+
+  /// No description provided for @gameTypeArtemis.
+  ///
+  /// In en, this message translates to:
+  /// **'Artemis pack (.pfs)'**
+  String get gameTypeArtemis;
+
+  /// No description provided for @gameEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Engine: {engine}'**
+  String gameEngine(String engine);
+
+  /// No description provided for @missingArtemisPack.
+  ///
+  /// In en, this message translates to:
+  /// **'No Artemis pack (.pfs) found in: {path}'**
+  String missingArtemisPack(String path);
+
+  /// No description provided for @scanSandboxForGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan App Sandbox'**
+  String get scanSandboxForGames;
+
+  /// No description provided for @scanSandboxForGamesDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Find games copied in with hdc file send (XP3 / Artemis .pfs)'**
+  String get scanSandboxForGamesDesc;
+
+  /// No description provided for @noGamesFoundInSandbox.
+  ///
+  /// In en, this message translates to:
+  /// **'No games found in the app sandbox.'**
+  String get noGamesFoundInSandbox;
+
+  /// No description provided for @allSandboxGamesRegistered.
+  ///
+  /// In en, this message translates to:
+  /// **'All games in the sandbox are already in the library.'**
+  String get allSandboxGamesRegistered;
+
+  /// No description provided for @screenOrientation.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen Orientation'**
+  String get screenOrientation;
+
+  /// No description provided for @screenOrientationDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Orientation used while a game is running'**
+  String get screenOrientationDesc;
+
+  /// No description provided for @orientationAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get orientationAuto;
+
+  /// No description provided for @orientationLandscape.
+  ///
+  /// In en, this message translates to:
+  /// **'Landscape'**
+  String get orientationLandscape;
+
+  /// No description provided for @orientationPortrait.
+  ///
+  /// In en, this message translates to:
+  /// **'Portrait'**
+  String get orientationPortrait;
+
+  /// No description provided for @rotateScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate Screen'**
+  String get rotateScreen;
 
   /// No description provided for @engineRestartRequired.
   ///
@@ -733,7 +811,7 @@ abstract class AppLocalizations {
   /// No description provided for @selectGameArchive.
   ///
   /// In en, this message translates to:
-  /// **'Select XP3 Archive'**
+  /// **'Select Game Archive (XP3 / PFS)'**
   String get selectGameArchive;
 
   /// No description provided for @addArchive.

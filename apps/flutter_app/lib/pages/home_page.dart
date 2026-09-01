@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
+import '../models/game_engine.dart';
 import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
@@ -217,6 +218,16 @@ class _HomePageState extends State<HomePage> {
             title: l10n.selectGameArchive,
             onTap: () => Navigator.pop(context, 'xp3'),
           ),
+          // OHOS: games side-loaded with `hdc file send` land straight in
+          // the sandbox; multi-GB Artemis pack chains in particular are far
+          // more practical to deliver that way than through the picker.
+          if (Platform.operatingSystem == 'ohos')
+            UiListTile(
+              icon: LucideIcons.scanSearch,
+              title: l10n.scanSandboxForGames,
+              subtitle: l10n.scanSandboxForGamesDesc,
+              onTap: () => Navigator.pop(context, 'sandbox'),
+            ),
         ],
       ),
     );
@@ -224,6 +235,8 @@ class _HomePageState extends State<HomePage> {
 
     if (source == 'directory') {
       await _addGameDirectory();
+    } else if (source == 'sandbox') {
+      await _addGameFromSandbox();
     } else {
       await _addGameArchive();
     }
@@ -443,21 +456,65 @@ class _HomePageState extends State<HomePage> {
       await _downloadAndAddGame(url);
       return;
     }
-    final cachePaths = result.files
+    final selectedPaths = result.files
         .map((f) => f.path)
         .whereType<String>()
+        .toList();
+    final cachePaths = selectedPaths
         .where((path) => path.toLowerCase().endsWith('.xp3'))
         .toList();
-    if (cachePaths.isEmpty || !mounted) {
-      UiSnackbar.show(
-        context,
-        message: l10n.selectGameArchive,
-        type: UiSnackbarType.warning,
+    // Artemis: a multi-select of `root.pfs` + its `.pfs.000…` patch volumes
+    // (+ optional save/config .dat/.ini) is one game — group the copies
+    // into a directory named after the base pack.
+    final artemisFiles = selectedPaths.where((path) {
+      final lower = path.toLowerCase();
+      return GameEngine.isPfsVolume(path) ||
+          lower.endsWith('.dat') ||
+          lower.endsWith('.ini');
+    }).toList();
+    final hasArtemisPack = artemisFiles.any(GameEngine.isPfsPack);
+    if (hasArtemisPack) {
+      final docDir = await getApplicationDocumentsDirectory();
+      final base = p.basenameWithoutExtension(
+        artemisFiles.firstWhere(GameEngine.isPfsPack),
       );
+      var destDir = p.join(docDir.path, base);
+      var n = 2;
+      while (Directory(destDir).existsSync() || File(destDir).existsSync()) {
+        destDir = p.join(docDir.path, '$base-${n++}');
+      }
+      await Directory(destDir).create(recursive: true);
+      for (final cachePath in artemisFiles) {
+        final dest = p.join(destDir, p.basename(cachePath));
+        try {
+          await File(cachePath).rename(dest);
+        } on FileSystemException {
+          await File(cachePath).copy(dest);
+          try {
+            await File(cachePath).delete();
+          } catch (_) {}
+        }
+      }
+      if (!mounted) return;
+      final added = await _gameManager.addGame(GameInfo(path: destDir));
+      if (!mounted) return;
+      if (added) {
+        setState(() {});
+        _offerScrapeAfterAdd(destDir);
+      }
+      if (cachePaths.isEmpty) return;
+    }
+    if (cachePaths.isEmpty || !mounted) {
+      if (!hasArtemisPack) {
+        UiSnackbar.show(
+          context,
+          message: l10n.selectGameArchive,
+          type: UiSnackbarType.warning,
+        );
+      }
       return;
     }
 
-    final docDir = await getApplicationDocumentsDirectory();
     final registered = _gameManager.games.map((g) => g.path).toSet();
     var addedCount = 0;
     String? firstAdded;
@@ -522,12 +579,15 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final docDir = await getApplicationDocumentsDirectory();
     final registered = _gameManager.games.map((g) => g.path).toSet();
     var addedCount = 0;
     String? firstAdded;
     for (final cachePath in decoded.cast<String>()) {
-      final destPath = await _adoptOhosCacheFile(cachePath);
+      // An Artemis folder comes back as one cache *directory* (pack chain +
+      // saves copied together); KiriKiri archives come back as files.
+      final destPath = Directory(cachePath).existsSync()
+          ? await _adoptOhosCacheDirectory(cachePath)
+          : await _adoptOhosCacheFile(cachePath);
       if (destPath == null || registered.contains(destPath)) continue;
       final added = await _gameManager.addGame(GameInfo(path: destPath));
       if (added) {
@@ -556,6 +616,34 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// 把适配层落在应用 cache 的整个游戏目录副本（Artemis 封包链）移入应用
+  /// files 目录并返回最终路径；同名目录已存在时追加序号，避免覆盖存档。
+  Future<String?> _adoptOhosCacheDirectory(String cacheDir) async {
+    final docDir = await getApplicationDocumentsDirectory();
+    final base = p.basename(cacheDir);
+    var destPath = p.join(docDir.path, base);
+    var n = 2;
+    while (Directory(destPath).existsSync() || File(destPath).existsSync()) {
+      destPath = p.join(docDir.path, '$base-${n++}');
+    }
+    final picked = Directory(cacheDir);
+    try {
+      await picked.rename(destPath);
+    } on FileSystemException {
+      // 跨卷 rename 等异常时退回逐文件拷贝。
+      await Directory(destPath).create(recursive: true);
+      await for (final entity in picked.list(followLinks: false)) {
+        if (entity is File) {
+          await entity.copy(p.join(destPath, p.basename(entity.path)));
+        }
+      }
+      try {
+        await picked.delete(recursive: true);
+      } catch (_) {}
+    }
+    return destPath;
+  }
+
   /// 把适配层落在应用 cache 的文件副本移入应用 files 目录并返回最终路径。
   Future<String?> _adoptOhosCacheFile(String cachePath) async {
     final docDir = await getApplicationDocumentsDirectory();
@@ -578,83 +666,77 @@ class _HomePageState extends State<HomePage> {
     return destPath;
   }
 
-  Future<void> _addGameFromSandbox({required bool pickDirectory}) async {
+  /// OHOS: register games that were side-loaded into the app sandbox (or one
+  /// of the developer roots) with `hdc file send`. Finds KiriKiri archives,
+  /// unpacked KiriKiri directories and Artemis pack directories alike.
+  Future<void> _addGameFromSandbox() async {
     final l10n = AppLocalizations.of(context)!;
     final docDir = await getApplicationDocumentsDirectory();
 
     // A set: the scan of a root and the direct probe of the same root can
     // both surface <root>/data.xp3.
-    final candidates = <File>{};
-    if (pickDirectory) {
-      candidates.addAll(_scanSandboxForGameDirectories(docDir));
-      for (final root in _ohosExtraScanRoots) {
-        if (Directory(root).existsSync()) {
-          candidates.addAll(_scanSandboxForGameDirectories(Directory(root)));
-        }
+    final candidates = <String>{};
+    final roots = <Directory>[docDir];
+    for (final root in _ohosExtraScanRoots) {
+      if (Directory(root).existsSync()) roots.add(Directory(root));
+    }
+    for (final root in roots) {
+      for (final dir in _scanSandboxForGameDirectories(root)) {
+        candidates.add(dir.path);
       }
-    } else {
-      candidates.addAll(_scanSandboxForXp3(docDir));
-      for (final root in _ohosExtraScanRoots) {
-        if (Directory(root).existsSync()) {
-          candidates.addAll(_scanSandboxForXp3(Directory(root)));
-        }
-        // The developer roots are not listable by the app (mode --x for
-        // other uids), so directory scans come back empty there — but
-        // traversing a KNOWN path is allowed. Probe the conventional
-        // KrKr archive name directly.
-        final direct = File('$root/data.xp3');
-        if (direct.existsSync()) {
-          candidates.add(direct);
-        }
+      for (final file in _scanSandboxForXp3(root)) {
+        candidates.add(file.path);
       }
     }
+    for (final root in _ohosExtraScanRoots) {
+      // The developer roots are not listable by the app (mode --x for
+      // other uids), so directory scans come back empty there — but
+      // traversing a KNOWN path is allowed. Probe the conventional
+      // KrKr archive name directly.
+      final direct = File('$root/data.xp3');
+      if (direct.existsSync()) candidates.add(direct.path);
+    }
+    // Directories are registered as a whole; drop archives that live inside
+    // a directory we already list (an unpacked game beside its data.xp3).
+    final dirs = candidates.where((c) => Directory(c).existsSync()).toSet();
+    candidates.removeWhere(
+      (c) => !dirs.contains(c) && dirs.contains(p.dirname(c)),
+    );
 
-    if (candidates.isEmpty) {
-      // Nothing side-loaded yet. On OHOS the only way to get multi-GB game
-      // data into the sandbox (short of shipping it in the HAP) is for the
-      // app itself to fetch it, so offer a network import before giving up.
-      final url = await _showOhosNetworkImport(docDir.path);
-      if (url == null || url.isEmpty || !mounted) return;
-      await _downloadAndAddGame(url);
+    final registered = _gameManager.games.map((g) => g.path).toSet();
+    final fresh = candidates.where((c) => !registered.contains(c)).toList()
+      ..sort();
+    if (!mounted) return;
+    if (fresh.isEmpty) {
+      UiSnackbar.show(
+        context,
+        message: candidates.isEmpty
+            ? l10n.noGamesFoundInSandbox
+            : l10n.allSandboxGamesRegistered,
+        type: UiSnackbarType.info,
+      );
       return;
     }
 
-    if (!pickDirectory) {
-      // Every found archive is already registered. Still offer the network
-      // import: a previous transfer may have been truncated mid-stream
-      // (registered as a game but unusable), and re-importing resumes the
-      // partial file in place instead of restarting the multi-GB download.
-      final registered = _gameManager.games.map((g) => g.path).toSet();
-      final allRegistered = candidates.every(
-        (f) => registered.contains(f.path),
-      );
-      if (allRegistered) {
-        final url = await _showOhosNetworkImport(docDir.path);
-        if (url == null || url.isEmpty || !mounted) return;
-        await _downloadAndAddGame(url);
-        return;
-      }
-    }
-
-    final File selected;
-    if (candidates.length == 1) {
-      selected = candidates.first;
+    final String selected;
+    if (fresh.length == 1) {
+      selected = fresh.first;
     } else {
-      final picked = await _pickXp3File(candidates.toList());
+      final picked = await _pickCandidatePath(fresh);
       if (picked == null || !mounted) return;
       selected = picked;
     }
 
-    final game = GameInfo(path: selected.path);
+    final game = GameInfo(path: selected);
     final added = await _gameManager.addGame(game);
     if (!mounted) return;
     if (added) {
       setState(() {});
-      _offerScrapeAfterAdd(selected.path);
+      _offerScrapeAfterAdd(selected);
     } else {
       UiSnackbar.show(
         context,
-        message: l10n.gameAlreadyExists(p.basename(selected.path)),
+        message: l10n.gameAlreadyExists(p.basename(selected)),
         type: UiSnackbarType.warning,
       );
     }
@@ -709,10 +791,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   /// 目录里有多个 XP3 时让用户选择主归档（默认选中第一个）。
-  Future<File?> _pickXp3File(List<File> xp3Files) {
+  Future<File?> _pickXp3File(List<File> xp3Files) async {
+    final picked = await _pickCandidatePath(
+      xp3Files.map((f) => f.path).toList(),
+    );
+    return picked == null ? null : File(picked);
+  }
+
+  /// 多个候选（归档或游戏目录）时让用户选择一个（默认选中第一个）。
+  /// 每项显示文件名并附引擎标签，便于区分 KiriKiri / Artemis 条目。
+  Future<String?> _pickCandidatePath(List<String> paths) {
     final l10n = AppLocalizations.of(context)!;
     final selected = ValueNotifier<int>(0);
-    final future = UiDialog.show<File>(
+    final future = UiDialog.show<String>(
       context,
       title: l10n.selectGameArchive,
       content: ConstrainedBox(
@@ -721,14 +812,28 @@ class _HomePageState extends State<HomePage> {
           valueListenable: selected,
           builder: (ctx, idx, _) => ListView.builder(
             shrinkWrap: true,
-            itemCount: xp3Files.length,
+            itemCount: paths.length,
             itemBuilder: (ctx, i) => Padding(
               padding: const EdgeInsets.symmetric(vertical: UiSpacing.xs),
-              child: UiRadio<int>(
-                value: i,
-                groupValue: idx,
-                onChanged: (v) => selected.value = v,
-                label: p.basename(xp3Files[i].path),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: UiRadio<int>(
+                      value: i,
+                      groupValue: idx,
+                      onChanged: (v) => selected.value = v,
+                      label: p.basename(paths[i]),
+                    ),
+                  ),
+                  const SizedBox(width: UiSpacing.sm),
+                  UiTag(
+                    label: GameEngine.detect(paths[i]).label,
+                    tone: GameEngine.detect(paths[i]) == GameEngine.artemis
+                        ? UiTagTone.brand
+                        : UiTagTone.neutral,
+                    dense: true,
+                  ),
+                ],
               ),
             ),
           ),
@@ -739,7 +844,7 @@ class _HomePageState extends State<HomePage> {
         UiDialogAction(
           label: l10n.addGame,
           isDefault: true,
-          onPressed: () => Navigator.pop(context, xp3Files[selected.value]),
+          onPressed: () => Navigator.pop(context, paths[selected.value]),
         ),
       ],
     );
@@ -946,8 +1051,9 @@ class _HomePageState extends State<HomePage> {
     return results;
   }
 
-  /// Finds directories that look like an unpacked KrKr game (they directly
-  /// contain a .xp3 archive or a startup.tjs).
+  /// Finds directories that look like a game root: an unpacked KrKr game
+  /// (directly containing a .xp3 archive or a startup.tjs) or an Artemis
+  /// game (directly containing a .pfs pack).
   static List<File> _scanSandboxForGameDirectories(Directory root) {
     final results = <File>[];
     void walk(Directory dir, int depth) {
@@ -967,7 +1073,8 @@ class _HomePageState extends State<HomePage> {
                 (child) =>
                     child is File &&
                     (child.path.toLowerCase().endsWith('.xp3') ||
-                        child.path.toLowerCase().endsWith('startup.tjs')),
+                        child.path.toLowerCase().endsWith('startup.tjs') ||
+                        GameEngine.isPfsPack(child.path)),
               );
           if (looksLikeGame) {
             results.add(File(entity.path));

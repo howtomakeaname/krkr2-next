@@ -335,7 +335,51 @@ class AppLocalizationsJa extends AppLocalizations {
       'Android では「すべてのファイル」へのアクセス権が必要です。許可してからゲームをもう一度開いてください。';
 
   @override
-  String get noXp3InFolder => '選択したフォルダに XP3 アーカイブが見つかりません。';
+  String get noXp3InFolder => '選択したフォルダに XP3 アーカイブも Artemis パック（.pfs）も見つかりません。';
+
+  @override
+  String get gameTypeArtemis => 'Artemis パック（.pfs）';
+
+  @override
+  String gameEngine(String engine) {
+    return 'エンジン: $engine';
+  }
+
+  @override
+  String missingArtemisPack(String path) {
+    return 'Artemis パック（.pfs）が見つかりません: $path';
+  }
+
+  @override
+  String get scanSandboxForGames => 'アプリサンドボックスをスキャン';
+
+  @override
+  String get scanSandboxForGamesDesc =>
+      'hdc file send で転送したゲームを検索（XP3 / Artemis .pfs）';
+
+  @override
+  String get noGamesFoundInSandbox => 'アプリサンドボックスにゲームが見つかりません。';
+
+  @override
+  String get allSandboxGamesRegistered => 'サンドボックス内のゲームはすべてライブラリに登録済みです。';
+
+  @override
+  String get screenOrientation => '画面の向き';
+
+  @override
+  String get screenOrientationDesc => 'ゲーム実行中に使用する画面の向き';
+
+  @override
+  String get orientationAuto => 'システムに従う';
+
+  @override
+  String get orientationLandscape => '横向き';
+
+  @override
+  String get orientationPortrait => '縦向き';
+
+  @override
+  String get rotateScreen => '画面を回転';
 
   @override
   String get engineRestartRequired =>
@@ -350,7 +394,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get selectGameDirectory => 'ゲームディレクトリを選択';
 
   @override
-  String get selectGameArchive => 'XP3 ファイルを選択';
+  String get selectGameArchive => 'ゲームアーカイブを選択（XP3 / PFS）';
 
   @override
   String get addArchive => 'XP3 追加';

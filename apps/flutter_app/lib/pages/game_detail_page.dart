@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../models/game_engine.dart';
 import '../models/game_info.dart';
 import '../models/game_metadata_candidate.dart';
 import '../services/game_manager.dart';
@@ -634,8 +635,14 @@ class _GameDetailPageState extends State<GameDetailPage> {
           const SizedBox(height: 8),
           _infoRow(
             LucideIcons.package,
-            _isXp3 ? l10n.gameTypeXp3 : l10n.gameTypeDirectory,
+            game.engine == GameEngine.artemis
+                ? l10n.gameTypeArtemis
+                : _isXp3
+                ? l10n.gameTypeXp3
+                : l10n.gameTypeDirectory,
           ),
+          const SizedBox(height: 8),
+          _infoRow(LucideIcons.cpu, l10n.gameEngine(game.engine.label)),
         ],
       ),
     );
@@ -709,12 +716,15 @@ class _GameDetailPageState extends State<GameDetailPage> {
               showChevron: true,
               onTap: _openScrape,
             ),
-            UiListTile(
-              icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
-              title: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
-              showChevron: true,
-              onTap: _packUnpack,
-            ),
+            // XP3 pack/unpack only applies to KiriKiri entries; Artemis
+            // packs (.pfs) are consumed in place by the engine.
+            if (game.engine == GameEngine.krkr2)
+              UiListTile(
+                icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
+                title: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
+                showChevron: true,
+                onTap: _packUnpack,
+              ),
           ],
         ),
       ),

@@ -344,7 +344,54 @@ class AppLocalizationsEn extends AppLocalizations {
       'All files access is required on Android. Please grant permission and open the game again.';
 
   @override
-  String get noXp3InFolder => 'No XP3 archive found in the selected folder.';
+  String get noXp3InFolder =>
+      'No XP3 archive or Artemis pack (.pfs) found in the selected folder.';
+
+  @override
+  String get gameTypeArtemis => 'Artemis pack (.pfs)';
+
+  @override
+  String gameEngine(String engine) {
+    return 'Engine: $engine';
+  }
+
+  @override
+  String missingArtemisPack(String path) {
+    return 'No Artemis pack (.pfs) found in: $path';
+  }
+
+  @override
+  String get scanSandboxForGames => 'Scan App Sandbox';
+
+  @override
+  String get scanSandboxForGamesDesc =>
+      'Find games copied in with hdc file send (XP3 / Artemis .pfs)';
+
+  @override
+  String get noGamesFoundInSandbox => 'No games found in the app sandbox.';
+
+  @override
+  String get allSandboxGamesRegistered =>
+      'All games in the sandbox are already in the library.';
+
+  @override
+  String get screenOrientation => 'Screen Orientation';
+
+  @override
+  String get screenOrientationDesc =>
+      'Orientation used while a game is running';
+
+  @override
+  String get orientationAuto => 'Follow system';
+
+  @override
+  String get orientationLandscape => 'Landscape';
+
+  @override
+  String get orientationPortrait => 'Portrait';
+
+  @override
+  String get rotateScreen => 'Rotate Screen';
 
   @override
   String get engineRestartRequired =>
@@ -359,7 +406,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectGameDirectory => 'Select Game Directory';
 
   @override
-  String get selectGameArchive => 'Select XP3 Archive';
+  String get selectGameArchive => 'Select Game Archive (XP3 / PFS)';
 
   @override
   String get addArchive => 'Add XP3';

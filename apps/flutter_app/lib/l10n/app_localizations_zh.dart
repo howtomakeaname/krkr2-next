@@ -332,7 +332,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidAllFilesAccess => 'Android 上需要“所有文件”访问权限。请授予权限后重新打开游戏。';
 
   @override
-  String get noXp3InFolder => '所选文件夹里没有找到 XP3 归档。';
+  String get noXp3InFolder => '所选文件夹里没有找到 XP3 归档或 Artemis 封包（.pfs）。';
+
+  @override
+  String get gameTypeArtemis => 'Artemis 封包（.pfs）';
+
+  @override
+  String gameEngine(String engine) {
+    return '引擎：$engine';
+  }
+
+  @override
+  String missingArtemisPack(String path) {
+    return '未找到 Artemis 封包（.pfs）：$path';
+  }
+
+  @override
+  String get scanSandboxForGames => '扫描应用沙箱';
+
+  @override
+  String get scanSandboxForGamesDesc =>
+      '查找通过 hdc file send 送入的游戏（XP3 / Artemis .pfs）';
+
+  @override
+  String get noGamesFoundInSandbox => '应用沙箱中没有找到游戏。';
+
+  @override
+  String get allSandboxGamesRegistered => '沙箱中的游戏都已在库中。';
+
+  @override
+  String get screenOrientation => '屏幕方向';
+
+  @override
+  String get screenOrientationDesc => '游戏运行时使用的屏幕方向';
+
+  @override
+  String get orientationAuto => '跟随系统';
+
+  @override
+  String get orientationLandscape => '横屏';
+
+  @override
+  String get orientationPortrait => '竖屏';
+
+  @override
+  String get rotateScreen => '旋转屏幕';
 
   @override
   String get engineRestartRequired => '引擎已在本会话中运行另一游戏，如需更换请重启应用。';
@@ -346,7 +390,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectGameDirectory => '选择游戏目录';
 
   @override
-  String get selectGameArchive => '选择 XP3 文件';
+  String get selectGameArchive => '选择游戏归档（XP3 / PFS）';
 
   @override
   String get addArchive => '添加 XP3';
