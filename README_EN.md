@@ -101,7 +101,7 @@ The OHOS build additionally bundles [artemis-compat](https://github.com/Weiss-Ul
 
 - Rendering: the GLES2 layer compositor draws into the same EGL pbuffer krkr2 uses and frames are presented through the RawImage readback (static frames skip the readback based on the layer revision counter); audio goes through OHAudio (one renderer per voice)
 - Import: the game directory must contain the base pack `root.pfs` plus its patch volumes `root.pfs.000/.001…`; saves (`*.dat`) are written next to it. Recommended: `hdc file send` the folder into the sandbox and register it with "Add game → Scan App Sandbox"; the picker's "Select Game Directory" also handles Artemis folders (the ArkTS layer copies the pack chain and saves into the cache, the app then moves them into `files`)
-- Compatibility follows upstream: verified on Madosoft titles (1280×720 framework) through title → story → choices; E-mote, tween transitions and video are not supported yet
+- Compatibility follows upstream plus a few framework-behaviour fixes made here (`e:random` integer semantics, `e:loadPngComments` face-part anchors, composed layer transforms — see `cpp/artemis/upstream/UPSTREAM.md`): verified on the emulator with *Hamidashi Creative Totsu* through title → STORY SELECT → story text / sprites / name plates; E-mote, tween transitions, video and the message-window frame are not supported yet, and a few choice/toolbar Lua callbacks still log errors without blocking the main flow
 - Logs: hilog tag `Artemis` (domain `0x0207`), mirrored into `krkr2-engine.log` with an `[artemis]` prefix
 
 ## Building from Source on macOS
