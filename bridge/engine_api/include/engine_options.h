@@ -43,6 +43,17 @@
 /** Auto path cache max entry count. */
 #define ENGINE_OPTION_AUTOPATH_CACHE_COUNT "autopath_cache_count"
 
+/** Engine backend selection for engine_open_game(_async).
+ *  "auto" (default) picks Artemis for `.pfs` packs / directories holding
+ *  one and KiriKiri2 otherwise; "krkr2" / "artemis" force a backend. */
+#define ENGINE_OPTION_ENGINE              "engine"
+
+/* ── Engine Kind Values ─────────────────────────────────────────── */
+
+#define ENGINE_KIND_AUTO                  "auto"
+#define ENGINE_KIND_KRKR2                 "krkr2"
+#define ENGINE_KIND_ARTEMIS               "artemis"
+
 /* ── ANGLE Backend Values ───────────────────────────────────────── */
 
 /** Use ANGLE's OpenGL ES backend (default). */

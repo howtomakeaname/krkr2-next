@@ -62,6 +62,16 @@ endif()
 option(ENABLE_TESTS "enable tests execute build(exclude android)" ON)
 option(BUILD_TOOLS "build tools execute build(exclude android ios)" ON)
 option(BUILD_ENGINE_API "build engine_api bridge shared library" ON)
+# Artemis Engine (.pfs) support via the vendored clean-room runtime in
+# cpp/artemis. Defaults on for OpenHarmony — the only platform with a host
+# integration so far (GLES2 compositor + OHAudio); other platforms can opt in
+# once they gain a backend.
+if(OHOS)
+    set(_KRKR2_ARTEMIS_DEFAULT ON)
+else()
+    set(_KRKR2_ARTEMIS_DEFAULT OFF)
+endif()
+option(KRKR2_ENABLE_ARTEMIS "build the Artemis Engine backend (cpp/artemis)" ${_KRKR2_ARTEMIS_DEFAULT})
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
@@ -111,6 +121,9 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cpp/external)
 # build library
 add_subdirectory(${KRKR2CORE_PATH})
 add_subdirectory(${KRKR2PLUGIN_PATH})
+if(KRKR2_ENABLE_ARTEMIS)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cpp/artemis)
+endif()
 if(BUILD_ENGINE_API)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bridge/engine_api)
 endif()

@@ -60,6 +60,12 @@ static constexpr unsigned int kEngineApiHilogDomain = 0x0206;
 #include "psbfile/PSBMedia.h"
 #include "engine_options.h"
 
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+// Second engine backend (Artemis .pfs games) behind the same C API.
+#include "artemis_runtime.h"
+#include "log/logger.h"  // artc::SetLogSink
+#endif
+
 int TVPDrawSceneOnce(int interval);
 
 // Static-frame gate perf counters (defined in environ/stubs/ui_stubs.cpp).
@@ -137,6 +143,15 @@ struct engine_handle_s {
     int psb_cache_mb = 0;
     int psb_cache_entries = 0;
   } memory_options;
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  // Non-null once engine_open_game(_async) routed this handle to the
+  // Artemis backend. All C entry points check it first and bypass the
+  // krkr2 runtime globals (g_runtime_*) when set.
+  std::unique_ptr<krkr2_artemis::ArtemisRuntime> artemis;
+  // ENGINE_OPTION_ENGINE: "auto" (detect by path) | "krkr2" | "artemis".
+  std::string engine_kind = ENGINE_KIND_AUTO;
+#endif
 };
 
 namespace {
@@ -743,6 +758,192 @@ void RunOpenGameAsync(engine_handle_t handle,
   MarkStartupWorkerRunning(impl, false);
 }
 
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+
+// ---------------------------------------------------------------------------
+// Artemis backend glue
+// ---------------------------------------------------------------------------
+
+bool ShouldUseArtemisLocked(engine_handle_s* impl, const char* game_root_path_utf8) {
+  if (impl->engine_kind == ENGINE_KIND_KRKR2) return false;
+  if (impl->engine_kind == ENGINE_KIND_ARTEMIS) return true;
+  return krkr2_artemis::LooksLikeArtemisGame(game_root_path_utf8, nullptr);
+}
+
+// Mirror an Artemis log line into the on-disk engine log (hilog output is
+// done by the vendored logger itself) and, while startup is running, into
+// the handle's startup queue so the boot screen shows engine progress.
+void ArtemisLogLine(engine_handle_t handle, const std::string& line) {
+#if defined(__OHOS__)
+  {
+    static std::mutex file_mutex;
+    std::lock_guard<std::mutex> guard(file_mutex);
+    const char* dir = std::getenv("KRKR_FILES_DIR");
+    if (dir != nullptr && *dir != '\0') {
+      const std::string path = std::string(dir) + "/krkr2-engine.log";
+      FILE* f = fopen(path.c_str(), "ab");
+      if (f != nullptr) {
+        fprintf(f, "[artemis] %s\n", line.c_str());
+        fclose(f);
+      }
+    }
+  }
+#endif
+  engine_handle_s* target = nullptr;
+  {
+    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
+    if (!IsHandleLiveLocked(handle)) return;
+    target = reinterpret_cast<engine_handle_s*>(handle);
+  }
+  if (GetStartupState(target) != ENGINE_STARTUP_STATE_RUNNING) return;
+  PushStartupLog(target, "[artemis] " + line);
+}
+
+// Creates the runtime for `handle` (caller holds impl->mutex) and routes the
+// vendored engine's logger into it.
+void CreateArtemisRuntimeLocked(engine_handle_t handle, engine_handle_s* impl) {
+  impl->artemis = std::make_unique<krkr2_artemis::ArtemisRuntime>(
+      [handle](const std::string& line) { ArtemisLogLine(handle, line); });
+  artc::SetLogSink([handle](int /*level*/, const std::string& msg) {
+    ArtemisLogLine(handle, msg);
+  });
+  impl->input.active_pointer_ids.clear();
+  impl->input.pending_events.clear();
+  impl->frame.width = 0;
+  impl->frame.height = 0;
+  impl->frame.stride_bytes = 0;
+  impl->frame.rgba.clear();
+  impl->frame.ready = false;
+  impl->frame.rendered_this_tick = false;
+}
+
+// Shared tail of the sync/async open: publish the frame geometry and flip the
+// handle into the opened state.
+void FinishArtemisOpen(engine_handle_s* impl, bool ok, const std::string& error) {
+  if (ok) {
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    if (impl->artemis) {
+      impl->frame.width = impl->artemis->StageWidth();
+      impl->frame.height = impl->artemis->StageHeight();
+      impl->frame.stride_bytes = impl->frame.width * 4u;
+      impl->frame.ready = true;
+    }
+    if (impl->state != ToStateValue(EngineState::kDestroyed)) {
+      impl->state = ToStateValue(EngineState::kOpened);
+    }
+    ClearHandleErrorLocked(impl);
+    PushStartupLog(impl, "engine_open_game => OK (artemis)");
+    SetStartupState(impl, ENGINE_STARTUP_STATE_SUCCEEDED);
+  } else {
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    SetHandleErrorLocked(impl, error.empty() ? "artemis: unknown startup error" : error.c_str());
+    PushStartupLog(impl, "ERROR: " + impl->last_error);
+    SetStartupState(impl, ENGINE_STARTUP_STATE_FAILED);
+  }
+}
+
+void RunOpenArtemisAsync(engine_handle_s* impl, std::string game_root_path_utf8) {
+  PushStartupLog(impl, "engine_open_game_async: artemis worker started");
+  std::string error;
+  bool ok = false;
+  try {
+    ok = impl->artemis->Open(game_root_path_utf8, &error);
+  } catch (const std::exception& e) {
+    error = std::string("artemis: exception during startup: ") + e.what();
+  } catch (...) {
+    error = "artemis: unknown exception during startup";
+  }
+  FinishArtemisOpen(impl, ok, error);
+  MarkStartupWorkerRunning(impl, false);
+}
+
+void DestroyArtemisRuntime(engine_handle_s* impl) {
+  if (!impl->artemis) return;
+  artc::SetLogSink(nullptr);
+  try {
+    impl->artemis->Close();
+  } catch (...) {
+  }
+  impl->artemis.reset();
+}
+
+// engine_tick for an Artemis handle. Caller holds both locks and has
+// validated the handle/thread.
+engine_result_t ArtemisTickLocked(engine_handle_s* impl) {
+  if (impl->state == ToStateValue(EngineState::kPaused)) {
+    return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+                                         "engine is paused");
+  }
+  if (impl->state != ToStateValue(EngineState::kOpened) || !impl->artemis->IsOpen()) {
+    return SetHandleErrorAndReturnLocked(
+        impl, ENGINE_RESULT_INVALID_STATE,
+        "engine_open_game must succeed before engine_tick");
+  }
+  impl->tick_count += 1;
+
+  while (!impl->input.pending_events.empty()) {
+    impl->artemis->QueueInput(impl->input.pending_events.front());
+    impl->input.pending_events.pop_front();
+  }
+
+  // Frame rate limiting (same drift-free scheme as the krkr2 path).
+  if (impl->fps.limit > 0) {
+    const auto now = std::chrono::steady_clock::now();
+    if (impl->fps.initialized) {
+      const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+          now - impl->fps.last_render_time).count();
+      if (static_cast<uint64_t>(elapsed_us) < impl->fps.interval_us) {
+        impl->frame.rendered_this_tick = false;
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_OK;
+      }
+      const auto ideal_next = impl->fps.last_render_time +
+          std::chrono::microseconds(impl->fps.interval_us);
+      if (now - ideal_next > std::chrono::microseconds(impl->fps.interval_us)) {
+        impl->fps.last_render_time = now;
+      } else {
+        impl->fps.last_render_time = ideal_next;
+      }
+    } else {
+      impl->fps.last_render_time = now;
+      impl->fps.initialized = true;
+    }
+  }
+
+  std::string error;
+  const auto status = impl->artemis->Tick(&error);
+  switch (status) {
+    case krkr2_artemis::ArtemisRuntime::TickStatus::kExitRequested:
+      // Same wording as the krkr2 path: the Flutter host matches on
+      // "termination" to leave the game page gracefully.
+      return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+                                           "runtime requested termination");
+    case krkr2_artemis::ArtemisRuntime::TickStatus::kError:
+      return SetHandleErrorAndReturnLocked(
+          impl, ENGINE_RESULT_INTERNAL_ERROR,
+          error.empty() ? "artemis: tick failed" : error.c_str());
+    case krkr2_artemis::ArtemisRuntime::TickStatus::kOk:
+      break;
+  }
+
+  const bool dirty = impl->artemis->ConsumeFrameDirty();
+  impl->frame.rendered_this_tick = dirty;
+  if (dirty) {
+    impl->frame.width = impl->artemis->StageWidth();
+    impl->frame.height = impl->artemis->StageHeight();
+    impl->frame.stride_bytes = impl->frame.width * 4u;
+    impl->frame.ready = true;
+    impl->frame.serial += 1;
+    impl->perf.dirty += 1;
+  }
+  ClearHandleErrorLocked(impl);
+  SetThreadError(nullptr);
+  return ENGINE_RESULT_OK;
+}
+
+#endif  // ENGINE_API_USE_ARTEMIS_RUNTIME
+
 }  // namespace
 
 extern "C" {
@@ -881,6 +1082,12 @@ engine_result_t engine_destroy(engine_handle_t handle) {
     startup_worker.join();
   }
 
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  // Artemis handles never own the krkr2 runtime; tear the backend down on
+  // the owner thread (GL resources are freed on the live EGL context).
+  DestroyArtemisRuntime(impl);
+#endif
+
   if (owned_runtime) {
     try {
       Application->OnDeactivate();
@@ -932,6 +1139,41 @@ engine_result_t engine_open_game(engine_handle_t handle,
     return SetHandleErrorAndReturnLocked(
         impl, ENGINE_RESULT_INVALID_STATE, "engine startup is already running");
   }
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis && impl->artemis->IsOpen()) {
+    impl->state = ToStateValue(EngineState::kOpened);
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+  if (!g_runtime_active && ShouldUseArtemisLocked(impl, game_root_path_utf8)) {
+    // Artemis games do not touch the krkr2 runtime globals, so they can be
+    // opened before or after a krkr2 session and re-opened on a new handle.
+    DestroyArtemisRuntime(impl);
+    ResetStartupState(impl);
+    SetStartupState(impl, ENGINE_STARTUP_STATE_RUNNING);
+    PushStartupLog(impl, "engine_open_game: starting (artemis)");
+    ClearHandleErrorLocked(impl);
+    CreateArtemisRuntimeLocked(handle, impl);
+    std::string error;
+    bool ok = false;
+    try {
+      ok = impl->artemis->Open(game_root_path_utf8, &error);
+    } catch (const std::exception& e) {
+      error = std::string("artemis: exception during startup: ") + e.what();
+    } catch (...) {
+      error = "artemis: unknown exception during startup";
+    }
+    FinishArtemisOpen(impl, ok, error);
+    if (!ok) {
+      DestroyArtemisRuntime(impl);
+      return ENGINE_RESULT_INTERNAL_ERROR;
+    }
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
 
   if (g_runtime_active) {
     if (g_runtime_owner != handle) {
@@ -1023,6 +1265,51 @@ engine_result_t engine_open_game_async(engine_handle_t handle,
       return SetHandleErrorAndReturnLocked(
           impl, ENGINE_RESULT_INVALID_STATE, "engine startup is already running");
     }
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+    {
+      bool artemis_worker_running = false;
+      {
+        std::lock_guard<std::mutex> startup_guard(impl->startup.mutex);
+        artemis_worker_running = impl->startup.worker_running;
+      }
+      if (impl->artemis && artemis_worker_running) {
+        return SetHandleErrorAndReturnLocked(
+            impl, ENGINE_RESULT_INVALID_STATE, "engine startup is already running");
+      }
+      if (impl->artemis && impl->artemis->IsOpen()) {
+        SetStartupState(impl, ENGINE_STARTUP_STATE_SUCCEEDED);
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_OK;
+      }
+      if (!g_runtime_active && ShouldUseArtemisLocked(impl, game_root_path_utf8)) {
+        stale_worker = DetachStartupWorker(impl);
+        if (stale_worker.joinable()) {
+          stale_worker.join();
+        }
+        DestroyArtemisRuntime(impl);
+        ResetStartupState(impl);
+        SetStartupState(impl, ENGINE_STARTUP_STATE_RUNNING);
+        PushStartupLog(impl, "engine_open_game_async: queued startup (artemis)");
+        CreateArtemisRuntimeLocked(handle, impl);
+        MarkStartupWorkerRunning(impl, true);
+        try {
+          impl->startup.worker = std::thread([impl, game_root_copy]() mutable {
+            RunOpenArtemisAsync(impl, std::move(game_root_copy));
+          });
+        } catch (...) {
+          MarkStartupWorkerRunning(impl, false);
+          SetStartupState(impl, ENGINE_STARTUP_STATE_FAILED);
+          DestroyArtemisRuntime(impl);
+          return SetHandleErrorAndReturnLocked(
+              impl, ENGINE_RESULT_INTERNAL_ERROR, "failed to create startup thread");
+        }
+        ClearHandleErrorLocked(impl);
+        SetThreadError(nullptr);
+        return ENGINE_RESULT_OK;
+      }
+    }
+#endif
     if (g_runtime_active && g_runtime_owner == handle) {
       SetStartupState(impl, ENGINE_STARTUP_STATE_SUCCEEDED);
       ClearHandleErrorLocked(impl);
@@ -1164,6 +1451,11 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
   if (result != ENGINE_RESULT_OK) {
     return result;
   }
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    return ArtemisTickLocked(impl);
+  }
+#endif
   if (g_runtime_startup_active && g_runtime_startup_owner == handle) {
     return SetHandleErrorAndReturnLocked(
         impl, ENGINE_RESULT_INVALID_STATE, "engine startup is still running");
@@ -1552,6 +1844,27 @@ engine_result_t engine_pause(engine_handle_t handle) {
     return result;
   }
 
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    if (impl->state == ToStateValue(EngineState::kPaused)) {
+      ClearHandleErrorLocked(impl);
+      SetThreadError(nullptr);
+      return ENGINE_RESULT_OK;
+    }
+    if (impl->state != ToStateValue(EngineState::kOpened)) {
+      return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+                                           "engine_pause requires opened state");
+    }
+    impl->artemis->Pause();
+    impl->input.active_pointer_ids.clear();
+    impl->input.pending_events.clear();
+    impl->state = ToStateValue(EngineState::kPaused);
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
+
   if (!g_runtime_active || g_runtime_owner != handle) {
     return SetHandleErrorAndReturnLocked(
         impl,
@@ -1592,6 +1905,25 @@ engine_result_t engine_resume(engine_handle_t handle) {
   if (result != ENGINE_RESULT_OK) {
     return result;
   }
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    if (impl->state == ToStateValue(EngineState::kOpened)) {
+      ClearHandleErrorLocked(impl);
+      SetThreadError(nullptr);
+      return ENGINE_RESULT_OK;
+    }
+    if (impl->state != ToStateValue(EngineState::kPaused)) {
+      return SetHandleErrorAndReturnLocked(impl, ENGINE_RESULT_INVALID_STATE,
+                                           "engine_resume requires paused state");
+    }
+    impl->artemis->Resume();
+    impl->state = ToStateValue(EngineState::kOpened);
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
 
   if (!g_runtime_active || g_runtime_owner != handle) {
     return SetHandleErrorAndReturnLocked(
@@ -1656,6 +1988,22 @@ engine_result_t engine_set_option(engine_handle_t handle,
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
   }
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  // Handle engine option: backend selection for the next engine_open_game.
+  if (key == ENGINE_OPTION_ENGINE) {
+    const std::string val(option->value_utf8);
+    if (val == ENGINE_KIND_KRKR2 || val == ENGINE_KIND_ARTEMIS) {
+      impl->engine_kind = val;
+    } else {
+      impl->engine_kind = ENGINE_KIND_AUTO;
+    }
+    spdlog::info("engine_set_option: engine={}", impl->engine_kind);
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
 
   // Handle angle_backend option: controls ANGLE EGL backend (Android only)
   if (key == ENGINE_OPTION_ANGLE_BACKEND) {
@@ -1746,6 +2094,18 @@ engine_result_t engine_set_surface_size(engine_handle_t handle,
 
   impl->frame.surface_width = width;
   impl->frame.surface_height = height;
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    // The Artemis frame is always stage-sized; only a native window (if
+    // attached) follows the host surface, the pbuffer readback does not.
+    impl->artemis->UpdateNativeWindowSize(width, height);
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
+
   impl->frame.width = 0;
   impl->frame.height = 0;
   impl->frame.stride_bytes = 0;
@@ -1871,6 +2231,30 @@ engine_result_t engine_read_frame_rgba(engine_handle_t handle,
         ENGINE_RESULT_INVALID_STATE,
         "engine_open_game must succeed before engine_read_frame_rgba");
   }
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    const size_t required_size =
+        static_cast<size_t>(impl->frame.stride_bytes) *
+        static_cast<size_t>(impl->frame.height);
+    if (out_pixels_size < required_size) {
+      return SetHandleErrorAndReturnLocked(
+          impl,
+          ENGINE_RESULT_INVALID_ARGUMENT,
+          "out_pixels_size is smaller than required frame buffer size");
+    }
+    const std::vector<uint8_t>& src = impl->artemis->FrameRgba();
+    if (src.size() >= required_size) {
+      std::memcpy(out_pixels, src.data(), required_size);
+    } else {
+      // No frame composed yet (first ticks): hand back black.
+      std::memset(out_pixels, 0, required_size);
+    }
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
 
   FrameReadbackLayout layout;
   if (impl->frame.ready && impl->frame.width > 0 && impl->frame.height > 0 &&
@@ -2161,6 +2545,40 @@ engine_result_t engine_set_render_target_surface(engine_handle_t handle,
     return result;
   }
 
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    if (!impl->artemis->IsOpen()) {
+      return SetHandleErrorAndReturnLocked(
+          impl,
+          ENGINE_RESULT_INVALID_STATE,
+          "engine_open_game must succeed before engine_set_render_target_surface");
+    }
+    if (native_window == nullptr) {
+      impl->artemis->DetachNativeWindow();
+      impl->render.native_window_attached = false;
+      spdlog::info("engine_set_render_target_surface(artemis): detached, Pbuffer mode");
+    } else {
+      if (width == 0 || height == 0) {
+        return SetHandleErrorAndReturnLocked(
+            impl,
+            ENGINE_RESULT_INVALID_ARGUMENT,
+            "width and height must be > 0 when setting Surface");
+      }
+      if (!impl->artemis->AttachNativeWindow(native_window, width, height)) {
+        return SetHandleErrorAndReturnLocked(
+            impl,
+            ENGINE_RESULT_INTERNAL_ERROR,
+            "failed to attach native window as render target");
+      }
+      impl->render.native_window_attached = true;
+      spdlog::info("engine_set_render_target_surface(artemis): attached {}x{}", width, height);
+    }
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
+
   if (!g_runtime_active || g_runtime_owner != handle) {
     return SetHandleErrorAndReturnLocked(
         impl,
@@ -2267,6 +2685,23 @@ engine_result_t engine_get_renderer_info(engine_handle_t handle,
   if (result != ENGINE_RESULT_OK) {
     return result;
   }
+
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    if (!impl->artemis->IsOpen()) {
+      return SetHandleErrorAndReturnLocked(
+          impl,
+          ENGINE_RESULT_INVALID_STATE,
+          "engine_open_game must succeed before engine_get_renderer_info");
+    }
+    const std::string info = impl->artemis->RendererInfo();
+    std::strncpy(out_buffer, info.c_str(), buffer_size - 1);
+    out_buffer[buffer_size - 1] = '\0';
+    ClearHandleErrorLocked(impl);
+    SetThreadError(nullptr);
+    return ENGINE_RESULT_OK;
+  }
+#endif
 
   if (!g_runtime_active || g_runtime_owner != handle) {
     return SetHandleErrorAndReturnLocked(

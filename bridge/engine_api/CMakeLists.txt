@@ -39,6 +39,16 @@ if(TARGET krkr2core AND TARGET krkr2plugin)
     target_link_libraries(engine_api PRIVATE krkr2core krkr2plugin)
 endif()
 
+# Artemis Engine backend (cpp/artemis): the same C API dispatches to it for
+# `.pfs` games. Only wired when the root build enabled the vendored runtime
+# (KRKR2_ENABLE_ARTEMIS) and the krkr2 EGL context manager is available.
+if(TARGET artemis_core AND TARGET krkr2core)
+    target_sources(engine_api PRIVATE src/artemis_runtime.cpp)
+    target_compile_definitions(engine_api PRIVATE ENGINE_API_USE_ARTEMIS_RUNTIME)
+    target_link_libraries(engine_api PRIVATE artemis_core)
+    message(STATUS "engine_api: Artemis backend enabled")
+endif()
+
 # On Apple platforms, ANGLE GL symbols conflict with system OpenGL.framework.
 # Use -force_load to ensure ANGLE's libGLESv2 and libEGL are fully linked
 # so their GL/EGL functions take priority over system equivalents.
