@@ -28,7 +28,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     layerExRaster.cpp
     layerExAreaAverage.cpp
     layerExLongExposure.cpp
-    krkrlive2d.cpp
+    # krkrlive2d.cpp needs the Cubism Core prebuilt binary, which is not
+    # available for OHOS; excluded there (engine_api skips its anchor too).
+    $<$<NOT:$<PLATFORM_ID:OHOS>>:krkrlive2d.cpp>
     krkrgles.cpp
     drawDeviceD2DCompat.cpp
     wfBasicEffectCompat.cpp
@@ -60,8 +62,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 add_definitions(-D__STDC_CONSTANT_MACROS -DTJS_TEXT_OUT_CRLF)
 
 # ---------------------------------------------------------------------------
-# Live2D Cubism SDK
+# Live2D Cubism SDK (no OHOS prebuilt Core binary — skipped entirely there)
 # ---------------------------------------------------------------------------
+if(NOT OHOS)
 set(CUBISM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cubism)
 set(CUBISM_CORE_DIR ${CUBISM_DIR}/Core)
 set(CUBISM_FW_DIR ${CUBISM_DIR}/Framework)
@@ -121,13 +124,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 target_compile_definitions(${PROJECT_NAME} PUBLIC CSM_TARGET_ANGLE_ES2)
 target_link_libraries(${PROJECT_NAME} PUBLIC CubismFramework)
+endif()
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${KRKR2PLUGIN_PATH} ${KRKR2PLUGIN_PATH}/simplebinder})
 target_link_libraries(${PROJECT_NAME} PUBLIC krkr2core)
 
 add_subdirectory(psdfile)
 add_subdirectory(psbfile)
-add_subdirectory(layerex_draw)
+if(NOT OHOS)
+    # layerex_draw depends on libgdiplus outside Windows, which is not
+    # provisioned for OHOS yet.
+    add_subdirectory(layerex_draw)
+endif()
 add_subdirectory(motionplayer)
 add_subdirectory(kagparserex)
 
@@ -138,12 +146,14 @@ add_subdirectory(fstat)
 target_link_libraries(${PROJECT_NAME} PUBLIC
         psdfile
         psbfile
-        layerExDraw
         motionplayer
         kagparserex
         fstat
 #        json steam DrawDeviceForSteam
 )
+if(NOT OHOS)
+    target_link_libraries(${PROJECT_NAME} PUBLIC layerExDraw)
+endif()
 
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
