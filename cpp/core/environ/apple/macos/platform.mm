@@ -1,8 +1,11 @@
 //
 // Created by LiDong on 2025/8/24.
 //
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <filesystem>
+#include <system_error>
 #include <vector>
 #include <algorithm>
 #include <CoreFoundation/CoreFoundation.h>
@@ -68,7 +71,13 @@ static bool _TVPCreateFolders(const ttstr &folder) {
     if(!TVPCreateFolders(parent))
         return false;
 
-    return !std::filesystem::create_directory(folder.AsStdString().c_str());
+    // create_directory returns true when it *created* the directory; the old
+    // `!create_directory(...)` therefore reported success as failure (the
+    // "Data path ... failed" log on first launch). Judge by error_code like
+    // environ/ohos/Platform.cpp does.
+    std::error_code ec;
+    std::filesystem::create_directory(folder.AsStdString(), ec);
+    return !ec || ec == std::errc::file_exists;
 }
 
 bool TVPCreateFolders(const ttstr &folder) {
@@ -360,6 +369,17 @@ tjs_int TVPGetSystemFreeMemory() {
 
 int TVPShowSimpleMessageBox(const ttstr &text, const ttstr &caption,
                             const std::vector<ttstr> &vecButtons) {
+    // Headless / embedded opt-out: NSAlert's runModal waits for a user click
+    // and the dispatch_sync below needs a running main-queue pump — neither
+    // exists when the dylib is driven through engine_api by a harness (and a
+    // modal would freeze a Flutter host's UI). Mirror environ/ohos: log the
+    // text and answer "OK".
+    if (std::getenv("KRKR_HEADLESS") != nullptr) {
+        fprintf(stderr, "[krkr2] message box: %s / %s\n",
+                caption.AsStdString().c_str(), text.AsStdString().c_str());
+        return 0;
+    }
+
     // 确保在主线程执行UI操作
     if (![NSThread isMainThread]) {
         __block int result = -1;
