@@ -100,7 +100,8 @@ OHOS 版额外内置了 [artemis-compat](https://github.com/Weiss-UltimateSavior
 
 - 渲染：GLES2 图层合成器绘制到与 krkr2 共用的 EGL pbuffer，经 RawImage 读回呈现（静态帧按图层修订号跳过读回）；音频走 OHAudio（每声部独立 renderer）
 - 导入：游戏目录需包含主包 `root.pfs` 及其补丁卷 `root.pfs.000/.001…`，存档 `*.dat` 写在同目录。推荐 `hdc file send` 送入沙箱后用「添加游戏 → 扫描应用沙箱」注册；文件选择器的「选择游戏目录」也支持 Artemis 目录（适配层会把封包链与存档整体拷入 cache 再迁入 files）
-- 兼容范围沿用上游并在本仓库修补了若干框架行为（`e:random` 整数语义、`e:loadPngComments` 表情锚点、图层变换组合，见 `cpp/artemis/upstream/UPSTREAM.md`）：模拟器实测《常轨脱离 Creative 凸》标题 → STORY SELECT → 剧情文本/立绘/名牌可正常推进；E-mote、tween 过渡动画、视频、消息窗底框等暂不支持，选项/工具栏个别 Lua 回调仍会报错（不影响主线推进）
+- 兼容范围沿用上游并在本仓库修补/补全了若干引擎行为（`e:random` 整数语义、`e:loadPngComments` 表情锚点、图层变换组合、`[stop]`/`[return]` 调用栈语义、跨文件 `[return]`、点击命中事件层、`lytween` 补间与 `trans` 过渡、`wait se=`/`setonsoundfinish` 音效等待，清单见 `cpp/artemis/upstream/UPSTREAM.md`）：模拟器实测《常轨脱离 Creative 凸》标题（含入场动画）→ STORY SELECT → 序章选项 → 剧情文本/立绘/名牌全程推进，引擎日志无 Lua 报错
+- 仍未实现：视频播放（`video` 标签直接跳过，剧情自动续接）、E-mote 动态立绘（M2 闭源中间件，无法实现）、`anime` 逐帧动画与 `rotate` 补间
 - 日志：hilog tag `Artemis`（domain `0x0207`），同时写入 `krkr2-engine.log`（前缀 `[artemis]`）
 
 ## macOS 源码构建
