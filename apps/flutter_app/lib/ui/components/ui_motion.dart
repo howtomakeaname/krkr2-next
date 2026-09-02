@@ -42,19 +42,19 @@ class UiMotion {
 
   // ---------- 作为 buildTransitions 返回值的 Widget helpers ----------
 
-  /// 页面过渡：iOS 导航推拉（右入左出 + 底层 parallax）。
+  /// 页面过渡：iOS 导航推拉（右入左出 + 底层 parallax + 底层压暗）。
   static Widget page(
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
     // CupertinoPageTransition 内部已做了 CurvedAnimation 缓存 & parallax，
-    // 这里直接复用是性能最好的选择。
+    // 这里直接复用是性能最好的选择；压暗层见 [UiParallaxDim]。
     return CupertinoPageTransition(
       primaryRouteAnimation: animation,
       secondaryRouteAnimation: secondaryAnimation,
       linearTransition: false,
-      child: child,
+      child: UiParallaxDim(secondary: secondaryAnimation, child: child),
     );
   }
 
@@ -86,8 +86,9 @@ class UiMotion {
 
   /// 快捷 push。
   ///
-  /// - `style == page`：直接走 [CupertinoPageRoute]，自动获得 iOS 的
-  ///   边缘返回手势；
+  /// - `style == page`：走 [MaterialPageRoute]，由主题里的
+  ///   [UiIosPageTransitionsBuilder] 统一渲染（与业务页直接 `Navigator.push`
+  ///   的 MaterialPageRoute 完全同一条路径，自动获得 iOS 边缘返回手势）；
   /// - 其它 style：使用自定义 [UiPageRoute]。
   static Future<T?> push<T>(
     BuildContext context,
@@ -100,7 +101,7 @@ class UiMotion {
     final navigator = Navigator.of(context, rootNavigator: rootNavigator);
     if (style == UiMotionStyle.page) {
       return navigator.push<T>(
-        CupertinoPageRoute<T>(
+        MaterialPageRoute<T>(
           builder: (_) => page,
           fullscreenDialog: fullscreenDialog,
           settings: settings,
@@ -120,6 +121,173 @@ class UiMotion {
 
 /// 可选的页面过渡风格。
 enum UiMotionStyle { page, modal, fadeScale }
+
+// ----------------------------------------------------------------------
+// 主题级页面过渡：iOS 18 导航推拉
+// ----------------------------------------------------------------------
+
+/// 供 `ThemeData.pageTransitionsTheme` 使用的 iOS 18 风格导航过渡。
+///
+/// 所有业务页直接 `Navigator.push(MaterialPageRoute(...))` 即可获得：
+/// - 新页从右侧整幅滑入（`Curves.fastEaseInToSlowEaseOut`，Flutter 团队按
+///   真机 UIKit 推拉标定的曲线），前缘带 iOS 的柔和投影；
+/// - 旧页向左退 1/3 宽度（UIKit parallax），并逐渐压暗 ~10%
+///   （UIKit `_UIParallaxDimmingView` 的观感）；
+/// - 屏幕左缘拖拽返回，拖拽期间为线性跟手，松手后按速度决定回弹/完成；
+/// - 时长沿用 UIKit 推拉 0.5s。
+///
+/// 相比直接用 [CupertinoPageTransitionsBuilder]：
+/// 1. 显式覆盖 [TargetPlatform] 全部枚举值（含 OHOS fork 新增的
+///    `TargetPlatform.ohos`）——否则 OHOS 端会掉进 Material 的
+///    Zoom/OpenRightwards 过渡，观感与 iOS 完全不同；
+/// 2. 补上 UIKit 的底层压暗；
+/// 3. 压暗层用 `drawRect` 直接混色而非 `Opacity`/`FadeTransition`，全程不引入
+///    saveLayer；底层页由 ModalScope 自带的 RepaintBoundary 缓存，过渡期间只做
+///    合成（translate）而不重绘内容。
+class UiIosPageTransitionsBuilder extends PageTransitionsBuilder {
+  const UiIosPageTransitionsBuilder();
+
+  @override
+  Duration get transitionDuration =>
+      CupertinoRouteTransitionMixin.kTransitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration =>
+      CupertinoRouteTransitionMixin.kTransitionDuration;
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      CupertinoPageTransition.delegatedTransition;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    // 复用 Cupertino 的整套推拉 + 边缘返回手势（含 popGestureInProgress 时的
+    // 线性跟手），只在页面内容外多包一层压暗。
+    return CupertinoRouteTransitionMixin.buildPageTransitions<T>(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      UiParallaxDim(
+        secondary: secondaryAnimation,
+        linearTransition: route.popGestureInProgress,
+        child: child,
+      ),
+    );
+  }
+
+  /// 给 `PageTransitionsTheme(builders: ...)` 用的完整平台映射。
+  ///
+  /// 用 `TargetPlatform.values` 动态展开，而不是逐个硬编码：这样在上游 Flutter
+  /// 与 OHOS fork（多出 `TargetPlatform.ohos`）上都能编译并全部覆盖。
+  static Map<TargetPlatform, PageTransitionsBuilder> get builders =>
+      <TargetPlatform, PageTransitionsBuilder>{
+        for (final TargetPlatform p in TargetPlatform.values)
+          p: const UiIosPageTransitionsBuilder(),
+      };
+}
+
+/// iOS 推拉时底层页面的压暗层。
+///
+/// 由 `secondaryAnimation`（本页被新页压住时 0→1）驱动，曲线与
+/// [CupertinoPageTransition] 的 parallax 位移保持一致，因此压暗与后退位移
+/// 完全同步。
+///
+/// 性能要点：
+/// - [CurvedAnimation] 在 State 中缓存，不在 build 内分配；
+/// - `secondary == 0`（没有上层路由 / 已完全 pop）时短路，直接返回 child，
+///   不多挂一个 Stack；
+/// - 压暗用带 alpha 的 [ColoredBox] 单次 `drawRect` 混色，不用
+///   `Opacity`，避免整页 saveLayer；
+/// - child 就是 ModalScope 的 RepaintBoundary，过渡期只做 layer 合成。
+class UiParallaxDim extends StatefulWidget {
+  const UiParallaxDim({
+    super.key,
+    required this.secondary,
+    required this.child,
+    this.linearTransition = false,
+    this.maxOpacity = 0.10,
+  });
+
+  final Animation<double> secondary;
+  final Widget child;
+  final bool linearTransition;
+  final double maxOpacity;
+
+  @override
+  State<UiParallaxDim> createState() => _UiParallaxDimState();
+}
+
+class _UiParallaxDimState extends State<UiParallaxDim> {
+  CurvedAnimation? _curved;
+
+  Animation<double> get _driver => _curved ?? widget.secondary;
+
+  @override
+  void initState() {
+    super.initState();
+    _setup();
+  }
+
+  @override
+  void didUpdateWidget(covariant UiParallaxDim old) {
+    super.didUpdateWidget(old);
+    if (widget.secondary != old.secondary ||
+        widget.linearTransition != old.linearTransition) {
+      _curved?.dispose();
+      _curved = null;
+      _setup();
+    }
+  }
+
+  void _setup() {
+    if (widget.linearTransition) return;
+    _curved = CurvedAnimation(
+      parent: widget.secondary,
+      // 与 CupertinoPageTransition 的 _secondaryPositionCurve 一致。
+      curve: Curves.linearToEaseOut,
+      reverseCurve: Curves.easeInToLinear,
+    );
+  }
+
+  @override
+  void dispose() {
+    _curved?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 树形状恒定（始终是 Stack + 压暗层），避免动画起止时切换父节点导致
+    // 页面子树被 GlobalKey 重挂、触发整页 relayout。alpha 为 0 时
+    // ColoredBox 只是一次透明 drawRect，代价可忽略。
+    return Stack(
+      fit: StackFit.passthrough,
+      children: <Widget>[
+        widget.child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _driver,
+              builder: (context, _) {
+                final int alpha = (widget.maxOpacity * _driver.value * 255)
+                    .round()
+                    .clamp(0, 255);
+                return ColoredBox(color: Color.fromARGB(alpha, 0, 0, 0));
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// 统一曲线 / 时长的 [PageRoute]。
 ///

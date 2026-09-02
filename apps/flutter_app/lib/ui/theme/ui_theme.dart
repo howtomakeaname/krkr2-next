@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../components/ui_motion.dart';
 import 'ui_colors.dart';
 import 'ui_typography.dart';
 
@@ -109,20 +110,13 @@ class UiTheme {
         linearMinHeight: 3,
       ),
       splashColor: Colors.transparent,
-      // 全平台统一使用 iOS 风格的 Cupertino 页面过渡：
-      // - 高性能（Flutter 内置实现，自带 parallax / 投影 / 边缘返回手势）；
-      // - 与 UiMotion.page 使用同一底层 CupertinoPageTransition，push/pop
-      //   手感一致；
-      // - iOS 端保留原生手势返回，其它平台也获得一致体验。
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: <TargetPlatform, PageTransitionsBuilder>{
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
-        },
+      // 全平台统一使用 iOS 18 风格的导航推拉（UiIosPageTransitionsBuilder）：
+      // - 复用 Flutter 内置 Cupertino 实现（parallax / 前缘投影 / 边缘返回手势），
+      //   额外补上 UIKit 的底层压暗；
+      // - builders 用 TargetPlatform.values 全量展开：OHOS fork 新增了
+      //   TargetPlatform.ohos，逐个硬编码会漏掉它并掉回 Material 的 Zoom 过渡。
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: UiIosPageTransitionsBuilder.builders,
       ),
     );
   }
