@@ -180,10 +180,34 @@
       "path": { "type": "String" }
     }
   },
-  "scanSandboxForGames": "Scan App Sandbox",
-  "scanSandboxForGamesDesc": "Find games copied in with hdc file send (XP3 / Artemis .pfs)",
-  "noGamesFoundInSandbox": "No games found in the app sandbox.",
-  "allSandboxGamesRegistered": "All games in the sandbox are already in the library.",
+  "rescanGamesDir": "Rescan Games Folder",
+  "rescanGamesDirDesc": "Find games dropped into {path} or sent in with hdc (XP3 / Artemis .pfs)",
+  "@rescanGamesDirDesc": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "noGamesFoundInSandbox": "No games found in the games folder or app sandbox.",
+  "allSandboxGamesRegistered": "All games found are already in the library.",
+  "noNewGamesFound": "No new games found.",
+  "noGamesHintOhos": "Use the Files app to copy a game folder to:\n{path}\nthen pull down to refresh",
+  "@noGamesHintOhos": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "settingsGames": "Games",
+  "publicGamesDir": "Games Folder",
+  "publicGamesDirHint": "Copy a whole game folder into {path} with the Files app, then pull down on the home page to refresh. Tap to copy the path.",
+  "@publicGamesDirHint": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "pullToRefresh": "Pull to refresh",
+  "releaseToRefresh": "Release to refresh",
+  "refreshing": "Refreshing",
+  "refreshDone": "Refreshed",
   "screenOrientation": "Screen Orientation",
   "screenOrientationDesc": "Orientation used while a game is running",
   "orientationAuto": "Follow system",

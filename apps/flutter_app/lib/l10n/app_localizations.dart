@@ -766,29 +766,83 @@ abstract class AppLocalizations {
   /// **'No Artemis pack (.pfs) found in: {path}'**
   String missingArtemisPack(String path);
 
-  /// No description provided for @scanSandboxForGames.
+  /// No description provided for @rescanGamesDir.
   ///
   /// In en, this message translates to:
-  /// **'Scan App Sandbox'**
-  String get scanSandboxForGames;
+  /// **'Rescan Games Folder'**
+  String get rescanGamesDir;
 
-  /// No description provided for @scanSandboxForGamesDesc.
+  /// No description provided for @rescanGamesDirDesc.
   ///
   /// In en, this message translates to:
-  /// **'Find games copied in with hdc file send (XP3 / Artemis .pfs)'**
-  String get scanSandboxForGamesDesc;
+  /// **'Find games dropped into {path} or sent in with hdc (XP3 / Artemis .pfs)'**
+  String rescanGamesDirDesc(String path);
 
   /// No description provided for @noGamesFoundInSandbox.
   ///
   /// In en, this message translates to:
-  /// **'No games found in the app sandbox.'**
+  /// **'No games found in the games folder or app sandbox.'**
   String get noGamesFoundInSandbox;
 
   /// No description provided for @allSandboxGamesRegistered.
   ///
   /// In en, this message translates to:
-  /// **'All games in the sandbox are already in the library.'**
+  /// **'All games found are already in the library.'**
   String get allSandboxGamesRegistered;
+
+  /// No description provided for @noNewGamesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No new games found.'**
+  String get noNewGamesFound;
+
+  /// No description provided for @noGamesHintOhos.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the Files app to copy a game folder to:\n{path}\nthen pull down to refresh'**
+  String noGamesHintOhos(String path);
+
+  /// No description provided for @settingsGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Games'**
+  String get settingsGames;
+
+  /// No description provided for @publicGamesDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Games Folder'**
+  String get publicGamesDir;
+
+  /// No description provided for @publicGamesDirHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy a whole game folder into {path} with the Files app, then pull down on the home page to refresh. Tap to copy the path.'**
+  String publicGamesDirHint(String path);
+
+  /// No description provided for @pullToRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull to refresh'**
+  String get pullToRefresh;
+
+  /// No description provided for @releaseToRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Release to refresh'**
+  String get releaseToRefresh;
+
+  /// No description provided for @refreshing.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshing'**
+  String get refreshing;
+
+  /// No description provided for @refreshDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshed'**
+  String get refreshDone;
 
   /// No description provided for @screenOrientation.
   ///

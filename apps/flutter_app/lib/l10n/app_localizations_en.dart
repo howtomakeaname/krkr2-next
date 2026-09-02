@@ -381,18 +381,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get scanSandboxForGames => 'Scan App Sandbox';
+  String get rescanGamesDir => 'Rescan Games Folder';
 
   @override
-  String get scanSandboxForGamesDesc =>
-      'Find games copied in with hdc file send (XP3 / Artemis .pfs)';
+  String rescanGamesDirDesc(String path) {
+    return 'Find games dropped into $path or sent in with hdc (XP3 / Artemis .pfs)';
+  }
 
   @override
-  String get noGamesFoundInSandbox => 'No games found in the app sandbox.';
+  String get noGamesFoundInSandbox =>
+      'No games found in the games folder or app sandbox.';
 
   @override
   String get allSandboxGamesRegistered =>
-      'All games in the sandbox are already in the library.';
+      'All games found are already in the library.';
+
+  @override
+  String get noNewGamesFound => 'No new games found.';
+
+  @override
+  String noGamesHintOhos(String path) {
+    return 'Use the Files app to copy a game folder to:\n$path\nthen pull down to refresh';
+  }
+
+  @override
+  String get settingsGames => 'Games';
+
+  @override
+  String get publicGamesDir => 'Games Folder';
+
+  @override
+  String publicGamesDirHint(String path) {
+    return 'Copy a whole game folder into $path with the Files app, then pull down on the home page to refresh. Tap to copy the path.';
+  }
+
+  @override
+  String get pullToRefresh => 'Pull to refresh';
+
+  @override
+  String get releaseToRefresh => 'Release to refresh';
+
+  @override
+  String get refreshing => 'Refreshing';
+
+  @override
+  String get refreshDone => 'Refreshed';
 
   @override
   String get screenOrientation => 'Screen Orientation';
