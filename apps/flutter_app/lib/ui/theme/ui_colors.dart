@@ -108,13 +108,16 @@ class UiColors extends ThemeExtension<UiColors> {
         brand: brand,
         brandSoft: brandSoft,
         brandMuted: brandMuted,
-        background: const Color(0xFFFFFFFF),
+        // 浅色页底用分组灰，白卡片才能从页面里跳出来。
+        background: const Color(0xFFF2F3F7),
         groupedBackground: const Color(0xFFF2F3F7),
         surface: const Color(0xFFFFFFFF),
         surfaceElevated: const Color(0xFFFFFFFF),
         surfacePressed: const Color(0xFFEDEEF2),
-        separator: const Color(0x1A3C3C43),
-        border: const Color(0x33C6C6C8),
+        // iOS `separator` ≈ rgba(60,60,67,0.29)；过淡时分组分割线会消失。
+        separator: const Color(0x4A3C3C43),
+        // 1px 不透明描边；0.5pt 在 OHOS 上经常被合成掉。
+        border: const Color(0xFFC6C6C8),
         textPrimary: const Color(0xFF0A0A0F),
         textSecondary: const Color(0xFF636672),
         textTertiary: const Color(0xFF9A9CA6),

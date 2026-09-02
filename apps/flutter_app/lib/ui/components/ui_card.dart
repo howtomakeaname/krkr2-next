@@ -35,7 +35,7 @@ class UiCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? colors.surface,
         borderRadius: borderRadius,
-        border: border,
+        border: border ?? Border.all(color: colors.border, width: 1),
         boxShadow: elevation > 0
             ? [
                 BoxShadow(

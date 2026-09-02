@@ -64,7 +64,10 @@ class UiListSection extends StatelessWidget {
           Material(
             color: colors.surface,
             clipBehavior: Clip.antiAlias,
-            borderRadius: UiRadius.brLg,
+            shape: RoundedRectangleBorder(
+              borderRadius: UiRadius.brLg,
+              side: BorderSide(color: colors.border, width: 1),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: rows,
