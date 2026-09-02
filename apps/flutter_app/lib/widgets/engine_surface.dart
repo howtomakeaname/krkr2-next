@@ -557,13 +557,8 @@ class EngineSurfaceState extends State<EngineSurface> {
 
   // --- Frame polling ---
 
-  /// Software RawImage-path perf counters, accumulated in [_pollFrame].
-  /// Read (and reset) via [EngineSurfacePerf.take] — the game page logs
-  /// them periodically alongside the engine-side "perf:" lines.
-  static int _perfReadCalls = 0;
-  static int _perfReadUs = 0;
-  static int _perfDecodeCalls = 0;
-  static int _perfDecodeUs = 0;
+  /// Software RawImage-path perf counters live on [_EngineSurfacePerf]
+  /// so [EngineSurfacePerf.take] actually sees what [_pollFrame] records.
 
   Future<void> _pollFrame({bool? externalRendered}) async {
     if (!widget.active || _frameInFlight) {
@@ -595,8 +590,8 @@ class EngineSurfaceState extends State<EngineSurface> {
       final Stopwatch readSw = Stopwatch()..start();
       final EngineFrameData? frameData = await widget.bridge.engineReadFrame();
       readSw.stop();
-      _perfReadCalls += 1;
-      _perfReadUs += readSw.elapsedMicroseconds;
+      _EngineSurfacePerf.readCalls += 1;
+      _EngineSurfacePerf.readUs += readSw.elapsedMicroseconds;
       if (frameData == null) {
         return;
       }
@@ -652,8 +647,8 @@ class EngineSurfaceState extends State<EngineSurface> {
         rowBytes: frameInfo.strideBytes,
       );
       decodeSw.stop();
-      _perfDecodeCalls += 1;
-      _perfDecodeUs += decodeSw.elapsedMicroseconds;
+      _EngineSurfacePerf.decodeCalls += 1;
+      _EngineSurfacePerf.decodeUs += decodeSw.elapsedMicroseconds;
 
       if (!mounted) {
         nextImage.dispose();
@@ -967,7 +962,9 @@ class EngineSurfaceState extends State<EngineSurface> {
                     RawImage(
                       image: _frameImage,
                       fit: BoxFit.contain,
-                      filterQuality: FilterQuality.none,
+                      // Native stage is typically 1280×720; nearest-neighbor
+                      // upscale onto a 2K+ panel looks like a low-res blit.
+                      filterQuality: FilterQuality.medium,
                     ),
                 ],
               ),
