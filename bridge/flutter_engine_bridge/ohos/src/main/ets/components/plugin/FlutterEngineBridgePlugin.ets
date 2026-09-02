@@ -14,6 +14,10 @@ import {
 } from '@ohos/flutter_ohos';
 import deviceInfo from '@ohos.deviceInfo';
 import picker from '@ohos.file.picker';
+import fs from '@ohos.file.fs';
+import fileUri from '@ohos.file.fileuri';
+import bundleManager from '@ohos.bundle.bundleManager';
+import common from '@ohos.app.ability.common';
 import UIAbility from '@ohos.app.ability.UIAbility';
 
 const TAG = 'FlutterEngineBridgePlugin';
@@ -235,9 +239,88 @@ export default class FlutterEngineBridgePlugin
         break;
       }
 
+      case 'ensurePublicGamesDir': {
+        const ability = this.ability;
+        if (ability == null) {
+          result.error('no_ability', 'No ability available', null);
+          break;
+        }
+        this.ensurePublicGamesDir(ability.context, result);
+        break;
+      }
+
       default:
         result.notImplemented();
         break;
+    }
+  }
+
+  /**
+   * Make sure `Download/<bundleName>/games/` exists and hand back its sandbox
+   * path (`/storage/Users/currentUser/Download/<bundleName>/games`).
+   *
+   * The app has persistent access to `Download/<bundleName>/` with no
+   * permission prompt (Core File Kit FAQ: "使用DOWNLOAD模式保存的文件如何访问").
+   * The bundle directory itself is created by the system on the first
+   * DOWNLOAD-mode DocumentViewPicker.save(); that call shows no UI. Users
+   * copy whole game folders into games/ with the file manager and the Dart
+   * side scans it on launch / resume / pull-to-refresh.
+   *
+   * Resolves to `{ path, display }` or `null` when the directory cannot be
+   * set up (old API, picker refused, ...).
+   */
+  private ensurePublicGamesDir(context: common.UIAbilityContext, result: MethodResult): void {
+    let bundleName = '';
+    try {
+      bundleName = bundleManager.getBundleInfoForSelfSync(
+        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).name;
+    } catch (e) {
+      Log.e(TAG, `ensurePublicGamesDir: getBundleInfoForSelfSync failed: ${JSON.stringify(e)}`);
+      result.success(null);
+      return;
+    }
+    const display = `Download/${bundleName}/games`;
+
+    const finish = (rootPath: string): void => {
+      try {
+        const gamesPath = `${rootPath}/games`;
+        if (!fs.accessSync(gamesPath)) {
+          fs.mkdirSync(gamesPath);
+        }
+        Log.i(TAG, `ensurePublicGamesDir: ${gamesPath}`);
+        result.success({ path: gamesPath, display: display });
+      } catch (e) {
+        Log.e(TAG, `ensurePublicGamesDir: mkdir failed: ${JSON.stringify(e)}`);
+        result.success(null);
+      }
+    };
+
+    try {
+      const rootUri = `file://docs/storage/Users/currentUser/Download/${bundleName}`;
+      const rootPath = new fileUri.FileUri(rootUri).path;
+      if (fs.accessSync(rootPath)) {
+        finish(rootPath);
+        return;
+      }
+      // First run: let the system create Download/<bundleName>/ for us.
+      const options = new picker.DocumentSaveOptions();
+      options.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+      new picker.DocumentViewPicker(context).save(options)
+        .then((uris: Array<string>) => {
+          if (uris.length === 0) {
+            Log.e(TAG, 'ensurePublicGamesDir: DOWNLOAD-mode save returned no uri');
+            result.success(null);
+            return;
+          }
+          finish(new fileUri.FileUri(uris[0]).path);
+        })
+        .catch((err: Error) => {
+          Log.e(TAG, `ensurePublicGamesDir: save failed: ${err.message}`);
+          result.success(null);
+        });
+    } catch (e) {
+      Log.e(TAG, `ensurePublicGamesDir threw: ${JSON.stringify(e)}`);
+      result.success(null);
     }
   }
 
