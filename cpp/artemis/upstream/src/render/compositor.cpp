@@ -552,6 +552,9 @@ void Compositor::CaptureFrame() {
 
 bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &rule,
                                  int rule_w, int rule_h, int vague) {
+    // StepScript runs before this tick's Present, so the default FB is
+    // still the previous composed scene — capture that as the fade-from.
+    CaptureFrame();
     if (!gl_ready_ || time_ms <= 0 || !trans_have_frame_) return false;
     if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
     if (!rule.empty() && rule_w > 0 && rule_h > 0 &&
@@ -960,10 +963,11 @@ void Compositor::Draw() {
                           std::to_string(sorted.size()) + sample);
     }
     glDisable(GL_BLEND);
-    // KrKr2-Next: running [trans] → fade the previous frame out on top of
-    // the new state, then remember this frame for the next transition.
+    // Fade the previous scene out on top of the new state. The "from"
+    // texture is captured once in BeginTransition (pbuffer still holds
+    // the last Present). Copying the full stage every Draw was a GPU
+    // sync we do not need for idle frames.
     DrawTransitionOverlay();
-    CaptureFrame();
     // [flip]: the composed frame is now the presentation candidate
     if (present_cb_) present_cb_();
 }

@@ -163,6 +163,7 @@ struct ArtemisRuntime::Impl {
   uint64_t drawn_revision = ~0ull;
   bool frame_dirty = false;
   std::vector<uint8_t> frame_rgba;
+  std::vector<uint8_t> flip_row;
   uint32_t native_win_w = 0;
   uint32_t native_win_h = 0;
   uint64_t tick_count = 0;
@@ -530,21 +531,21 @@ bool ArtemisRuntime::Impl::ReadbackFrame() {
   const size_t needed = row_bytes * h;
   if (frame_rgba.size() != needed) frame_rgba.assign(needed, 0);
 
-  glFinish();
   glPixelStorei(GL_PACK_ALIGNMENT, 4);
   glReadPixels(0, 0, static_cast<GLsizei>(w), static_cast<GLsizei>(h), GL_RGBA,
                GL_UNSIGNED_BYTE, frame_rgba.data());
   if (glGetError() != GL_NO_ERROR) return false;
 
-  // GL rows are bottom-up; the host expects top-down.
-  std::vector<uint8_t> tmp(row_bytes);
+  // GL rows are bottom-up; the host expects top-down. glReadPixels already
+  // waits for the pipe — an extra glFinish() just stalls the GPU twice.
+  if (flip_row.size() != row_bytes) flip_row.resize(row_bytes);
   uint8_t* bytes = frame_rgba.data();
   for (uint32_t y = 0; y < h / 2u; ++y) {
     uint8_t* top = bytes + static_cast<size_t>(y) * row_bytes;
     uint8_t* bottom = bytes + static_cast<size_t>(h - 1u - y) * row_bytes;
-    std::memcpy(tmp.data(), top, row_bytes);
+    std::memcpy(flip_row.data(), top, row_bytes);
     std::memcpy(top, bottom, row_bytes);
-    std::memcpy(bottom, tmp.data(), row_bytes);
+    std::memcpy(bottom, flip_row.data(), row_bytes);
   }
   return true;
 }
