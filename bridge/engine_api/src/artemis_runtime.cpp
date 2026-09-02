@@ -720,7 +720,12 @@ void ArtemisRuntime::Resume() {
   Impl& s = *impl_;
   if (!s.paused) return;
   s.paused = false;
+  s.frame_dirty = true;
   if (s.lua) s.lua->ResumeAudio();
+}
+
+void ArtemisRuntime::MarkFrameDirty() {
+  impl_->frame_dirty = true;
 }
 
 void ArtemisRuntime::Close() {
