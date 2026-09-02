@@ -33,6 +33,7 @@
   "renameGame": "Rename Game",
   "displayTitle": "Display Title",
   "save": "Save",
+  "done": "Done",
 
   "gameAlreadyExists": "Game already exists: {title}",
   "@gameAlreadyExists": {
@@ -81,7 +82,12 @@
 
   "settingsRendering": "Rendering",
   "renderPipeline": "Render Pipeline",
-  "renderPipelineHint": "Requires restarting the game to take effect",
+  "renderPipelineHint": "Render pipeline and graphics backend take effect after restarting the app",
+  "restartRequiredTitle": "Restart required",
+  "restartRequiredMessage": "This change takes effect after the app restarts.",
+  "applyAndRestart": "Apply and restart",
+  "restartPendingBanner": "Saved changes are not in effect yet. Restart the app, or tap here to restart now.",
+  "restartNow": "Restart app",
   "opengl": "OpenGL",
   "software": "Software",
   "graphicsBackend": "Graphics Backend",
@@ -184,6 +190,12 @@
   "orientationLandscape": "Landscape",
   "orientationPortrait": "Portrait",
   "rotateScreen": "Rotate Screen",
+  "gameStarting": "Starting",
+  "gamePreparingEngine": "Preparing engine",
+  "gameOpening": "Opening game",
+  "gameLoadingResources": "Loading resources",
+  "gameBootLogs": "Details",
+  "gameHideBootLogs": "Hide details",
   "engineRestartRequired": "The engine is already running another game. Restart the app to play a different one.",
   "gamesImported": "{count} games imported",
   "@gamesImported": {

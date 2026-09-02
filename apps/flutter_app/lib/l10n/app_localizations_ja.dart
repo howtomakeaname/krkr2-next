@@ -86,6 +86,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get save => '保存';
 
   @override
+  String get done => '完了';
+
+  @override
   String gameAlreadyExists(String title) {
     return 'ゲームは既に存在します：$title';
   }
@@ -174,7 +177,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get renderPipeline => 'レンダリングパイプライン';
 
   @override
-  String get renderPipelineHint => 'ゲームの再起動後に有効になります';
+  String get renderPipelineHint => 'レンダリングパイプラインとグラフィックスバックエンドはアプリ再起動後に有効になります';
+
+  @override
+  String get restartRequiredTitle => '再起動が必要です';
+
+  @override
+  String get restartRequiredMessage => 'この変更はアプリを再起動すると有効になります。';
+
+  @override
+  String get applyAndRestart => '変更して再起動';
+
+  @override
+  String get restartPendingBanner =>
+      '保存した変更はまだ有効になっていません。アプリを再起動するか、ここから手動で再起動してください。';
+
+  @override
+  String get restartNow => 'アプリを再起動';
 
   @override
   String get opengl => 'OpenGL';
@@ -380,6 +399,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get rotateScreen => '画面を回転';
+
+  @override
+  String get gameStarting => '起動中';
+
+  @override
+  String get gamePreparingEngine => 'エンジンを準備';
+
+  @override
+  String get gameOpening => 'ゲームを開く';
+
+  @override
+  String get gameLoadingResources => 'リソースを読み込み';
+
+  @override
+  String get gameBootLogs => '詳細ログ';
+
+  @override
+  String get gameHideBootLogs => 'ログを閉じる';
 
   @override
   String get engineRestartRequired =>

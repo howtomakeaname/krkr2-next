@@ -88,6 +88,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get save => 'Save';
 
   @override
+  String get done => 'Done';
+
+  @override
   String gameAlreadyExists(String title) {
     return 'Game already exists: $title';
   }
@@ -179,7 +182,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get renderPipelineHint =>
-      'Requires restarting the game to take effect';
+      'Render pipeline and graphics backend take effect after restarting the app';
+
+  @override
+  String get restartRequiredTitle => 'Restart required';
+
+  @override
+  String get restartRequiredMessage =>
+      'This change takes effect after the app restarts.';
+
+  @override
+  String get applyAndRestart => 'Apply and restart';
+
+  @override
+  String get restartPendingBanner =>
+      'Saved changes are not in effect yet. Restart the app, or tap here to restart now.';
+
+  @override
+  String get restartNow => 'Restart app';
 
   @override
   String get opengl => 'OpenGL';
@@ -392,6 +412,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rotateScreen => 'Rotate Screen';
+
+  @override
+  String get gameStarting => 'Starting';
+
+  @override
+  String get gamePreparingEngine => 'Preparing engine';
+
+  @override
+  String get gameOpening => 'Opening game';
+
+  @override
+  String get gameLoadingResources => 'Loading resources';
+
+  @override
+  String get gameBootLogs => 'Details';
+
+  @override
+  String get gameHideBootLogs => 'Hide details';
 
   @override
   String get engineRestartRequired =>

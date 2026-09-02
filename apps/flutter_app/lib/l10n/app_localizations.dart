@@ -244,6 +244,12 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get save;
 
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
   /// No description provided for @gameAlreadyExists.
   ///
   /// In en, this message translates to:
@@ -409,8 +415,38 @@ abstract class AppLocalizations {
   /// No description provided for @renderPipelineHint.
   ///
   /// In en, this message translates to:
-  /// **'Requires restarting the game to take effect'**
+  /// **'Render pipeline and graphics backend take effect after restarting the app'**
   String get renderPipelineHint;
+
+  /// No description provided for @restartRequiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart required'**
+  String get restartRequiredTitle;
+
+  /// No description provided for @restartRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This change takes effect after the app restarts.'**
+  String get restartRequiredMessage;
+
+  /// No description provided for @applyAndRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply and restart'**
+  String get applyAndRestart;
+
+  /// No description provided for @restartPendingBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved changes are not in effect yet. Restart the app, or tap here to restart now.'**
+  String get restartPendingBanner;
+
+  /// No description provided for @restartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart app'**
+  String get restartNow;
 
   /// No description provided for @opengl.
   ///
@@ -789,6 +825,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rotate Screen'**
   String get rotateScreen;
+
+  /// No description provided for @gameStarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get gameStarting;
+
+  /// No description provided for @gamePreparingEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing engine'**
+  String get gamePreparingEngine;
+
+  /// No description provided for @gameOpening.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening game'**
+  String get gameOpening;
+
+  /// No description provided for @gameLoadingResources.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading resources'**
+  String get gameLoadingResources;
+
+  /// No description provided for @gameBootLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get gameBootLogs;
+
+  /// No description provided for @gameHideBootLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide details'**
+  String get gameHideBootLogs;
 
   /// No description provided for @engineRestartRequired.
   ///

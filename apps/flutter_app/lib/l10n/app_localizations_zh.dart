@@ -85,6 +85,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get save => '保存';
 
   @override
+  String get done => '完成';
+
+  @override
   String gameAlreadyExists(String title) {
     return '游戏已存在：$title';
   }
@@ -172,7 +175,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get renderPipeline => '渲染管线';
 
   @override
-  String get renderPipelineHint => '需要重启游戏后生效';
+  String get renderPipelineHint => '渲染管线与图形后端需重启应用后生效';
+
+  @override
+  String get restartRequiredTitle => '需要重启应用';
+
+  @override
+  String get restartRequiredMessage => '这项改动需要重启应用后才会生效。';
+
+  @override
+  String get applyAndRestart => '改动并重启应用';
+
+  @override
+  String get restartPendingBanner => '已保存的改动尚未生效。请重启应用，或点这里手动重启。';
+
+  @override
+  String get restartNow => '重启应用';
 
   @override
   String get opengl => 'OpenGL';
@@ -379,7 +397,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rotateScreen => '旋转屏幕';
 
   @override
-  String get engineRestartRequired => '引擎已在本会话中运行另一游戏，如需更换请重启应用。';
+  String get gameStarting => '正在启动';
+
+  @override
+  String get gamePreparingEngine => '准备引擎';
+
+  @override
+  String get gameOpening => '打开游戏';
+
+  @override
+  String get gameLoadingResources => '载入资源';
+
+  @override
+  String get gameBootLogs => '详细日志';
+
+  @override
+  String get gameHideBootLogs => '收起日志';
+
+  @override
+  String get engineRestartRequired => '引擎已在本会话中运行另一游戏，如需切换新游戏请重启应用。';
 
   @override
   String gamesImported(int count) {

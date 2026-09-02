@@ -27,6 +27,7 @@ class SettingsPage extends StatefulWidget {
     required this.renderer,
     required this.angleBackend,
     required this.gameOrientation,
+    this.restartPending = false,
   });
 
   final EngineMode engineMode;
@@ -39,6 +40,7 @@ class SettingsPage extends StatefulWidget {
   final String renderer;
   final String angleBackend;
   final String gameOrientation;
+  final bool restartPending;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -55,6 +57,7 @@ class SettingsResult {
     required this.renderer,
     required this.angleBackend,
     required this.gameOrientation,
+    this.restartPending = false,
   });
 
   final EngineMode engineMode;
@@ -65,6 +68,15 @@ class SettingsResult {
   final String renderer;
   final String angleBackend;
   final String gameOrientation;
+
+  /// 已写入需重启才能生效的项，用户选择了稍后手动重启。
+  final bool restartPending;
+}
+
+/// 退出当前进程。系统桌面会留下图标，用户点一下即相当于冷启动。
+Future<void> restartKrkr2App() async {
+  await WidgetsBinding.instance.endOfFrame;
+  exit(0);
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -78,7 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _gameOrientation;
   String _localeCode = 'system';
   String _themeModeCode = 'dark';
-  bool _dirty = false;
+  bool _restartDeferred = false;
 
   @override
   void initState() {
@@ -91,6 +103,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _renderer = widget.renderer;
     _angleBackend = widget.angleBackend;
     _gameOrientation = widget.gameOrientation;
+    _restartDeferred = widget.restartPending;
     _loadLocale();
     _loadThemeMode();
   }
@@ -113,7 +126,23 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _save() async {
+  SettingsResult _result() => SettingsResult(
+        engineMode: _engineMode,
+        customDylibPath: _customDylibPath,
+        perfOverlay: _perfOverlay,
+        fpsLimitEnabled: _fpsLimitEnabled,
+        targetFps: _targetFps,
+        renderer: _renderer,
+        angleBackend: _angleBackend,
+        gameOrientation: _gameOrientation,
+        restartPending: _restartDeferred,
+      );
+
+  void _pop() {
+    Navigator.pop(context, _result());
+  }
+
+  Future<void> _writePrefs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       PrefsKeys.engineMode,
@@ -132,60 +161,64 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setString(PrefsKeys.renderer, _renderer);
     await prefs.setString(PrefsKeys.angleBackend, _angleBackend);
     await prefs.setString(PrefsKeys.gameOrientation, _gameOrientation);
-    // Keep the legacy flag coherent for anything still reading it.
     await prefs.setBool(
       PrefsKeys.forceLandscape,
       _gameOrientation == PrefsKeys.gameOrientationLandscape,
     );
+  }
 
-    if (mounted) {
-      Navigator.pop(
-        context,
-        SettingsResult(
-          engineMode: _engineMode,
-          customDylibPath: _customDylibPath,
-          perfOverlay: _perfOverlay,
-          fpsLimitEnabled: _fpsLimitEnabled,
-          targetFps: _targetFps,
-          renderer: _renderer,
-          angleBackend: _angleBackend,
-          gameOrientation: _gameOrientation,
+  Future<void> _commitLive(VoidCallback apply) async {
+    setState(apply);
+    await _writePrefs();
+  }
+
+  /// 改完即写后询问是否立刻重启；取消则留下可手动重启的提示。
+  Future<void> _commitNeedsRestart(VoidCallback apply) async {
+    setState(apply);
+    await _writePrefs();
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final restartNow = await UiDialog.show<bool>(
+      context,
+      title: l10n.restartRequiredTitle,
+      message: l10n.restartRequiredMessage,
+      barrierDismissible: false,
+      actions: [
+        UiDialogAction(label: l10n.cancel, returnValue: false),
+        UiDialogAction(
+          label: l10n.applyAndRestart,
+          isDefault: true,
+          returnValue: true,
         ),
-      );
+      ],
+    );
+    if (!mounted) return;
+    if (restartNow == true) {
+      await restartKrkr2App();
+      if (mounted) setState(() => _restartDeferred = true);
+      return;
     }
+    setState(() => _restartDeferred = true);
   }
 
-  void _markDirty() {
-    if (!_dirty) setState(() => _dirty = true);
-  }
-
-  /// iOS 设置惯例的取值行：点按后从底部弹出单选列表，返回选中值。
-  ///
-  /// 选择器（segmented/dropdown）直接塞进 tile 的 trailing 槽在窄屏上
-  /// 会被压缩变形，所以值类设置统一走"当前值 + chevron → 底部弹选"。
+  /// iOS 设置惯例：点按取值行，在该行旁弹出带 checkmark 的菜单。
   Future<T?> _showValuePicker<T>({
-    required String title,
+    required Rect anchor,
     required T current,
     required List<UiDropdownItem<T>> options,
   }) {
-    return UiBottomSheet.show<T>(
+    return UiPopupMenu.show<T>(
       context,
-      title: title,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final item in options)
-            UiListTile(
-              title: item.label,
-              trailing: UiRadio<T>(
-                value: item.value,
-                groupValue: current,
-                onChanged: (v) => Navigator.pop(context, v),
-              ),
-              onTap: () => Navigator.pop(context, item.value),
-            ),
-        ],
-      ),
+      anchor: anchor,
+      items: [
+        for (final item in options)
+          UiMenuItem(
+            label: item.label,
+            icon: item.icon,
+            selected: item.value == current,
+            value: item.value,
+          ),
+      ],
     );
   }
 
@@ -245,48 +278,42 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
+    final colors = context.uiColors;
     return PopScope(
-      canPop: !_dirty,
-      onPopInvokedWithResult: (didPop, _) async {
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        final discard = await UiDialog.show<bool>(
-          context,
-          title: l10n.settings,
-          message: l10n.discardChangesMessage,
-          actions: [
-            UiDialogAction(label: l10n.cancel, returnValue: false),
-            UiDialogAction(
-              label: l10n.discard,
-              isDestructive: true,
-              returnValue: true,
-            ),
-          ],
-        );
-        if (discard == true && context.mounted) {
-          Navigator.pop(context);
-        }
+        _pop();
       },
       child: Scaffold(
+        backgroundColor: colors.groupedBackground,
         appBar: AppBar(
           title: Text(l10n.settings),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: UiSpacing.md),
-              child: UiButton(
-                label: l10n.save,
-                leadingIcon: LucideIcons.save,
-                size: UiButtonSize.small,
-                onPressed: _dirty ? _save : null,
-              ),
-            ),
-          ],
+          backgroundColor: colors.groupedBackground,
         ),
         body: ListView(
           padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
           children: [
+            if (_restartDeferred)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  UiSpacing.lg,
+                  UiSpacing.sm,
+                  UiSpacing.lg,
+                  UiSpacing.md,
+                ),
+                child: UiBanner(
+                  tone: UiBannerTone.warning,
+                  message: l10n.restartPendingBanner,
+                  actionLabel: l10n.restartNow,
+                  onAction: restartKrkr2App,
+                ),
+              ),
             // ── Engine section (desktop only) ──
             // On Android/iOS the engine is always bundled; no switching needed.
-            if (!Platform.isAndroid && !Platform.isIOS)
+            if (!Platform.isAndroid &&
+                !Platform.isIOS &&
+                Platform.operatingSystem != 'ohos')
               UiListSection(
                 header: l10n.settingsEngine,
                 children: [
@@ -313,8 +340,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                             ],
                             onChanged: (value) {
-                              setState(() => _engineMode = value);
-                              _markDirty();
+                              if (value == _engineMode) return;
+                              _commitNeedsRestart(() => _engineMode = value);
                             },
                           ),
                         ),
@@ -339,18 +366,17 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: l10n.renderPipeline,
                   trailingText: _rendererLabel(_renderer, l10n),
                   showChevron: true,
-                  onTap: () async {
+                  onTapRect: (anchor) async {
                     final v = await _showValuePicker<String>(
-                      title: l10n.renderPipeline,
+                      anchor: anchor,
                       current: _renderer,
                       options: [
                         UiDropdownItem(value: 'opengl', label: 'OpenGL'),
                         UiDropdownItem(value: 'software', label: l10n.software),
                       ],
                     );
-                    if (v == null || !mounted) return;
-                    setState(() => _renderer = v);
-                    _markDirty();
+                    if (v == null || v == _renderer || !mounted) return;
+                    await _commitNeedsRestart(() => _renderer = v);
                   },
                 ),
                 if (Platform.isAndroid)
@@ -359,18 +385,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: l10n.graphicsBackendHint,
                     trailingText: _angleBackend == 'gles' ? 'GLES' : 'Vulkan',
                     showChevron: true,
-                    onTap: () async {
+                    onTapRect: (anchor) async {
                       final v = await _showValuePicker<String>(
-                        title: l10n.graphicsBackend,
+                        anchor: anchor,
                         current: _angleBackend,
                         options: const [
                           UiDropdownItem(value: 'gles', label: 'GLES'),
                           UiDropdownItem(value: 'vulkan', label: 'Vulkan'),
                         ],
                       );
-                      if (v == null || !mounted) return;
-                      setState(() => _angleBackend = v);
-                      _markDirty();
+                      if (v == null || v == _angleBackend || !mounted) return;
+                      await _commitNeedsRestart(() => _angleBackend = v);
                     },
                   ),
                 UiListTile(
@@ -378,10 +403,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: l10n.performanceOverlayDesc,
                   trailing: UiSwitch(
                     value: _perfOverlay,
-                    onChanged: (value) {
-                      setState(() => _perfOverlay = value);
-                      _markDirty();
-                    },
+                    onChanged: (value) =>
+                        _commitLive(() => _perfOverlay = value),
                   ),
                 ),
                 UiListTile(
@@ -391,10 +414,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       : l10n.fpsLimitOff,
                   trailing: UiSwitch(
                     value: _fpsLimitEnabled,
-                    onChanged: (value) {
-                      setState(() => _fpsLimitEnabled = value);
-                      _markDirty();
-                    },
+                    onChanged: (value) =>
+                        _commitLive(() => _fpsLimitEnabled = value),
                   ),
                 ),
                 if (_fpsLimitEnabled)
@@ -403,9 +424,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: l10n.targetFrameRateDesc,
                     trailingText: l10n.fpsLabel(_targetFps),
                     showChevron: true,
-                    onTap: () async {
+                    onTapRect: (anchor) async {
                       final v = await _showValuePicker<int>(
-                        title: l10n.targetFrameRate,
+                        anchor: anchor,
                         current: _targetFps,
                         options: PrefsKeys.fpsOptions
                             .map(
@@ -416,9 +437,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             )
                             .toList(),
                       );
-                      if (v == null || !mounted) return;
-                      setState(() => _targetFps = v);
-                      _markDirty();
+                      if (v == null || v == _targetFps || !mounted) return;
+                      await _commitLive(() => _targetFps = v);
                     },
                   ),
                 if (PrefsKeys.orientationSupported)
@@ -427,9 +447,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: l10n.screenOrientationDesc,
                     trailingText: _orientationLabel(_gameOrientation, l10n),
                     showChevron: true,
-                    onTap: () async {
+                    onTapRect: (anchor) async {
                       final v = await _showValuePicker<String>(
-                        title: l10n.screenOrientation,
+                        anchor: anchor,
                         current: _gameOrientation,
                         options: [
                           UiDropdownItem(
@@ -449,9 +469,12 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       );
-                      if (v == null || !mounted) return;
-                      setState(() => _gameOrientation = v);
-                      _markDirty();
+                      if (v == null ||
+                          v == _gameOrientation ||
+                          !mounted) {
+                        return;
+                      }
+                      await _commitLive(() => _gameOrientation = v);
                     },
                   ),
               ],
@@ -465,9 +488,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: l10n.themeMode,
                   trailingText: _themeLabel(_themeModeCode, l10n),
                   showChevron: true,
-                  onTap: () async {
+                  onTapRect: (anchor) async {
                     final v = await _showValuePicker<String>(
-                      title: l10n.themeMode,
+                      anchor: anchor,
                       current: _themeModeCode,
                       options: [
                         UiDropdownItem(
@@ -489,9 +512,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: l10n.language,
                   trailingText: _localeLabel(_localeCode, l10n),
                   showChevron: true,
-                  onTap: () async {
+                  onTapRect: (anchor) async {
                     final v = await _showValuePicker<String>(
-                      title: l10n.language,
+                      anchor: anchor,
                       current: _localeCode,
                       options: [
                         UiDropdownItem(
@@ -641,8 +664,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: const Icon(LucideIcons.x, size: 18),
                   tooltip: l10n.clearPath,
                   onPressed: () {
-                    setState(() => _customDylibPath = null);
-                    _markDirty();
+                    _commitNeedsRestart(() => _customDylibPath = null);
                   },
                 ),
             ],
@@ -661,8 +683,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 type: FileType.any,
               );
               if (result != null && result.files.single.path != null) {
-                setState(() => _customDylibPath = result.files.single.path);
-                _markDirty();
+                final path = result.files.single.path;
+                if (path == _customDylibPath) return;
+                await _commitNeedsRestart(() => _customDylibPath = path);
               }
             },
           ),
