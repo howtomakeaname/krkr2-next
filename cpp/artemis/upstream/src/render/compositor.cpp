@@ -19,6 +19,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <cstdio>
 
@@ -156,6 +157,221 @@ std::string Compositor::HitLayer(float x, float y) const {
 // [var system="get_layer_info"] — stored (relative) offsets and draggable
 // bounds. slider_dragX reads left to derive the percentage, so we return the
 // raw stored value, not the cascade-resolved absolute position.
+// ---------------------------------------------------------------------------
+// KrKr2-Next: tween engine (platform independent)
+// ---------------------------------------------------------------------------
+namespace {
+enum Ease { kEaseLinear = 0, kEaseInQuad, kEaseOutQuad, kEaseInOutQuad,
+            kEaseInCubic, kEaseOutCubic, kEaseInOutCubic, kEaseInSine,
+            kEaseOutSine, kEaseInOutSine, kEaseOutBack, kEaseOutBounce };
+
+int ParseEase(const std::string &name) {
+    if (name.empty() || name == "none" || name == "linear") return kEaseLinear;
+    if (name == "easein_quad") return kEaseInQuad;
+    if (name == "easeout_quad") return kEaseOutQuad;
+    if (name == "easeinout_quad") return kEaseInOutQuad;
+    if (name == "easein_cubic") return kEaseInCubic;
+    if (name == "easeout_cubic") return kEaseOutCubic;
+    if (name == "easeinout_cubic") return kEaseInOutCubic;
+    if (name == "easein_sine") return kEaseInSine;
+    if (name == "easeout_sine") return kEaseOutSine;
+    if (name == "easeinout_sine") return kEaseInOutSine;
+    if (name == "easeout_back") return kEaseOutBack;
+    if (name == "easeout_bounce") return kEaseOutBounce;
+    // unknown curve families (elastic, quart, expo...) fall back by direction
+    if (name.rfind("easein", 0) == 0 && name.find("out") == std::string::npos) return kEaseInQuad;
+    if (name.rfind("easeout", 0) == 0) return kEaseOutQuad;
+    return kEaseInOutQuad;
+}
+
+float ApplyEase(int ease, float t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    const float pi = 3.14159265f;
+    switch (ease) {
+    case kEaseInQuad: return t * t;
+    case kEaseOutQuad: return 1 - (1 - t) * (1 - t);
+    case kEaseInOutQuad: return t < 0.5f ? 2 * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) / 2;
+    case kEaseInCubic: return t * t * t;
+    case kEaseOutCubic: { const float u = 1 - t; return 1 - u * u * u; }
+    case kEaseInOutCubic: return t < 0.5f ? 4 * t * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) * (-2 * t + 2) / 2;
+    case kEaseInSine: return 1 - std::cos(t * pi / 2);
+    case kEaseOutSine: return std::sin(t * pi / 2);
+    case kEaseInOutSine: return -(std::cos(pi * t) - 1) / 2;
+    case kEaseOutBack: { const float c1 = 1.70158f, c3 = c1 + 1; const float u = t - 1;
+                         return 1 + c3 * u * u * u + c1 * u * u; }
+    case kEaseOutBounce: {
+        const float n1 = 7.5625f, d1 = 2.75f;
+        if (t < 1 / d1) return n1 * t * t;
+        if (t < 2 / d1) { t -= 1.5f / d1; return n1 * t * t + 0.75f; }
+        if (t < 2.5f / d1) { t -= 2.25f / d1; return n1 * t * t + 0.9375f; }
+        t -= 2.625f / d1; return n1 * t * t + 0.984375f;
+    }
+    default: return t;
+    }
+}
+
+float ToF(const std::string &s, float def = 0) {
+    try { return s.empty() ? def : std::stof(s); } catch (...) { return def; }
+}
+} // namespace
+
+bool Compositor::ReadParam(const Layer &l, const std::string &param, float *v) {
+    if (param == "alpha") { *v = l.alpha * 255.0f; return true; }
+    if (param == "left" || param == "x") { *v = l.x; return true; }
+    if (param == "top" || param == "y") { *v = l.y; return true; }
+    if (param == "xscale") { *v = l.sx * 100.0f; return true; }
+    if (param == "yscale") { *v = l.sy * 100.0f; return true; }
+    if (param == "zoom") { *v = l.sx * 100.0f; return true; }
+    if (param == "w") { *v = l.w; return true; }
+    if (param == "h") { *v = l.h; return true; }
+    return false;
+}
+
+bool Compositor::ApplyParam(Layer &l, const std::string &param, float v) {
+    if (param == "alpha") { l.alpha = v > 1.0f ? v / 255.0f : (v < 0 ? 0 : v); if (l.alpha > 1) l.alpha = 1; return true; }
+    if (param == "left" || param == "x") { l.x = v; l.own_pos = true; return true; }
+    if (param == "top" || param == "y") { l.y = v; l.own_pos = true; return true; }
+    if (param == "xscale") { if (v > 0) l.sx = v / 100.0f; return true; }
+    if (param == "yscale") { if (v > 0) l.sy = v / 100.0f; return true; }
+    if (param == "zoom") { if (v > 0) { l.sx = l.sy = v / 100.0f; } return true; }
+    if (param == "w") { l.w = v; return true; }
+    if (param == "h") { l.h = v; return true; }
+    return false;
+}
+
+void Compositor::AddTween(const std::string &id,
+                          const std::map<std::string, std::string> &attrs, double now_ms) {
+    auto get = [&](const char *k) -> std::string {
+        const auto it = attrs.find(k);
+        return it == attrs.end() ? std::string() : it->second;
+    };
+    std::string param = get("param");
+    // `param` missing: the animated property is whichever known key carries
+    // a "from,to" pair (tween{ id, alpha="255,0" } style).
+    if (param.empty()) {
+        for (const char *k : {"alpha", "left", "top", "x", "y", "xscale", "yscale", "zoom", "w", "h"}) {
+            if (attrs.count(k)) { param = k; break; }
+        }
+    }
+    if (param.empty()) return;
+    Tween tw;
+    tw.id = id;
+    tw.param = param;
+    tw.time_ms = ToF(get("time"), 0);
+    tw.delay_ms = ToF(get("delay"), 0);
+    tw.ease = ParseEase(get("ease"));
+    tw.start_ms = now_ms;
+    // from/to: explicit attrs win; else "<param>=a,b"; else current -> to.
+    const std::string from = get("from"), to = get("to");
+    const std::string pair = get(param.c_str());
+    const size_t comma = pair.find(',');
+    if (!to.empty()) tw.to = ToF(to);
+    else if (comma != std::string::npos) tw.to = ToF(pair.substr(comma + 1));
+    else tw.to = ToF(pair);
+    if (!from.empty()) { tw.from = ToF(from); tw.from_current = false; }
+    else if (comma != std::string::npos) { tw.from = ToF(pair.substr(0, comma)); tw.from_current = false; }
+    // Replace an in-flight tween of the same property on the same layer.
+    for (auto it = tweens_.begin(); it != tweens_.end();) {
+        if (it->id == id && it->param == param) it = tweens_.erase(it); else ++it;
+    }
+    if (tw.time_ms <= 0 && tw.delay_ms <= 0) {
+        // instantaneous: apply and bump
+        for (auto &l : layers_) if (l.id == id) { ApplyParam(l, param, tw.to); ++revision_; }
+        return;
+    }
+    // Materialize the target layer so the tween has something to drive
+    // (the framework sometimes tweens a group id before children exist).
+    bool found = false;
+    for (auto &l : layers_) if (l.id == id) { found = true; break; }
+    if (!found) { Layer g; g.id = id; layers_.push_back(g); }
+    tweens_.push_back(tw);
+    ++revision_;
+}
+
+void Compositor::DeleteTweens(const std::string &id) {
+    const std::string prefix = id + ".";
+    for (auto it = tweens_.begin(); it != tweens_.end();) {
+        if (it->id == id || it->id.compare(0, prefix.size(), prefix) == 0) {
+            // cancel = jump to the end value (the framework deletes tweens
+            // once their visual purpose is served, e.g. reveal done)
+            for (auto &l : layers_) if (l.id == it->id) ApplyParam(l, it->param, it->to);
+            it = tweens_.erase(it);
+            ++revision_;
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool Compositor::Update(double now_ms) {
+    now_ms_ = now_ms;
+    bool changed = false;
+    for (auto it = tweens_.begin(); it != tweens_.end();) {
+        Tween &tw = *it;
+        const double since = now_ms - tw.start_ms;
+        if (since < tw.delay_ms) { ++it; continue; }
+        Layer *target = nullptr;
+        for (auto &l : layers_) if (l.id == tw.id) { target = &l; break; }
+        if (!target) { it = tweens_.erase(it); continue; }
+        if (!tw.started) {
+            tw.started = true;
+            if (tw.from_current) {
+                float cur = tw.to;
+                if (ReadParam(*target, tw.param, &cur)) tw.from = cur;
+            }
+        }
+        const double run = since - tw.delay_ms;
+        float t = tw.time_ms > 0 ? static_cast<float>(run / tw.time_ms) : 1.0f;
+        const bool done = t >= 1.0f;
+        if (done) t = 1.0f;
+        const float v = tw.from + (tw.to - tw.from) * ApplyEase(tw.ease, t);
+        ApplyParam(*target, tw.param, v);
+        changed = true;
+        if (done) it = tweens_.erase(it); else ++it;
+    }
+    if (trans_active_) {
+        if (now_ms - trans_start_ms_ >= trans_time_ms_) trans_active_ = false;
+        changed = true;   // the overlay fades every frame (or just went away)
+    }
+    if (changed) ++revision_;
+    return changed;
+}
+
+double Compositor::PendingAnimationMs(double now_ms) const {
+    double remain = 0;
+    for (const Tween &tw : tweens_) {
+        const double end = tw.start_ms + tw.delay_ms + tw.time_ms;
+        if (end - now_ms > remain) remain = end - now_ms;
+    }
+    if (trans_active_) {
+        const double end = trans_start_ms_ + trans_time_ms_;
+        if (end - now_ms > remain) remain = end - now_ms;
+    }
+    return remain < 0 ? 0 : remain;
+}
+
+std::vector<std::string> Compositor::HitLayers(float x, float y) const {
+    std::vector<const Layer *> hits;
+    for (const auto &l : layers_) {
+        float ex, ey, ew, eh, ea; bool ev;
+        EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
+        if (!ev || !l.texture) continue;
+        if (x < ex || y < ey || x >= ex + ew || y >= ey + eh) continue;
+        hits.push_back(&l);
+    }
+    // topmost first: higher z (ZCmp) then deeper id wins
+    std::stable_sort(hits.begin(), hits.end(), [](const Layer *a, const Layer *b) {
+        const int c = ZCmp(a->id, b->id);
+        if (c != 0) return c > 0;
+        return SectionCount(a->id) > SectionCount(b->id);
+    });
+    std::vector<std::string> ids;
+    ids.reserve(hits.size());
+    for (const Layer *l : hits) ids.push_back(l->id);
+    return ids;
+}
+
 Compositor::LayerInfo Compositor::GetLayerInfo(const std::string &id) const {
     LayerInfo info;
     for (const auto &l : layers_) {
@@ -213,6 +429,29 @@ void main() {
     gl_FragColor = vec4(c.rgb, c.a * u_alpha);
 })";
 
+// KrKr2-Next: [trans] overlay — the previous frame fades out over the new
+// layer state. Plain fade uses u_t; rule transitions threshold the rule
+// image (dark pixels change first) with a `vague` soft edge.
+const char *kTransFs = R"(precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+uniform sampler2D u_rule;
+uniform float u_t;
+uniform float u_vague;
+uniform int u_use_rule;
+void main() {
+    vec4 c = texture2D(u_tex, v_uv);
+    float a;
+    if (u_use_rule == 1) {
+        float r = texture2D(u_rule, vec2(v_uv.x, 1.0 - v_uv.y)).r;
+        float edge = mix(-u_vague, 1.0 + u_vague, u_t);
+        a = smoothstep(edge - u_vague, edge + u_vague, r);
+    } else {
+        a = 1.0 - u_t;
+    }
+    gl_FragColor = vec4(c.rgb, c.a * a);
+})";
+
 // Artemis layer ids sort by their leading integer ("600.4.0" → 600,
 // "1.80.mw" → 1, "-273" → -273); non-numeric ids keep insertion order.
 uint32_t CompileShader(uint32_t type, const char *src) {
@@ -238,8 +477,108 @@ bool Compositor::InitGl() {
     prog_.u_screen = glGetUniformLocation(prog_.program, "u_screen");
     prog_.u_tex = glGetUniformLocation(prog_.program, "u_tex");
     prog_.u_alpha = glGetUniformLocation(prog_.program, "u_alpha");
+
+    tprog_.program = glCreateProgram();
+    uint32_t tvs = CompileShader(GL_VERTEX_SHADER, kVs);
+    uint32_t tfs = CompileShader(GL_FRAGMENT_SHADER, kTransFs);
+    glAttachShader(tprog_.program, tvs);
+    glAttachShader(tprog_.program, tfs);
+    glLinkProgram(tprog_.program);
+    glDeleteShader(tvs);
+    glDeleteShader(tfs);
+    tprog_.a_pos = glGetAttribLocation(tprog_.program, "a_pos");
+    tprog_.a_uv = glGetAttribLocation(tprog_.program, "a_uv");
+    tprog_.u_screen = glGetUniformLocation(tprog_.program, "u_screen");
+    tprog_.u_tex = glGetUniformLocation(tprog_.program, "u_tex");
+    tprog_.u_rule = glGetUniformLocation(tprog_.program, "u_rule");
+    tprog_.u_t = glGetUniformLocation(tprog_.program, "u_t");
+    tprog_.u_vague = glGetUniformLocation(tprog_.program, "u_vague");
+    tprog_.u_use_rule = glGetUniformLocation(tprog_.program, "u_use_rule");
     gl_ready_ = true;
     return true;
+}
+
+// Copy the composited stage (the current viewport) into last_frame_tex_ so
+// the next [trans] can fade it out. GPU-side copy; nothing is read back.
+void Compositor::CaptureFrame() {
+    if (!gl_ready_) return;
+    GLint vp[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, vp);
+    if (vp[2] <= 0 || vp[3] <= 0) return;
+    if (!last_frame_tex_) {
+        glGenTextures(1, &last_frame_tex_);
+        glBindTexture(GL_TEXTURE_2D, last_frame_tex_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, last_frame_tex_);
+    }
+    // GLES2 rejects copying more components than the framebuffer stores:
+    // pick RGB when the surface has no alpha plane.
+    GLint alpha_bits = 0;
+    glGetIntegerv(GL_ALPHA_BITS, &alpha_bits);
+    glGetError();   // clear any stale error before the copy
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, alpha_bits > 0 ? GL_RGBA : GL_RGB,
+                     vp[0], vp[1], vp[2], vp[3], 0);
+    trans_have_frame_ = glGetError() == GL_NO_ERROR;
+}
+
+bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &rule,
+                                 int rule_w, int rule_h, int vague) {
+    if (!gl_ready_ || time_ms <= 0 || !trans_have_frame_) return false;
+    if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
+    if (!rule.empty() && rule_w > 0 && rule_h > 0 &&
+        rule.size() >= static_cast<size_t>(rule_w) * rule_h) {
+        // expand 8-bit rule to RGBA (GLES2 has no single-channel float path
+        // worth the trouble; LUMINANCE would also work)
+        std::vector<uint8_t> rgba(static_cast<size_t>(rule_w) * rule_h * 4);
+        for (size_t i = 0; i < static_cast<size_t>(rule_w) * rule_h; ++i) {
+            rgba[i * 4 + 0] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = rule[i];
+            rgba[i * 4 + 3] = 255;
+        }
+        trans_rule_tex_ = CreateTexture(rgba.data(), rule_w, rule_h);
+    }
+    trans_vague_ = vague < 0 ? 0 : (vague > 255 ? 1.0f : vague / 255.0f);
+    trans_start_ms_ = now_ms;
+    trans_time_ms_ = time_ms;
+    trans_active_ = true;
+    ++revision_;
+    return true;
+}
+
+void Compositor::DrawTransitionOverlay() {
+    if (!trans_active_ || !last_frame_tex_) return;
+    float t = trans_time_ms_ > 0 ? static_cast<float>((now_ms_ - trans_start_ms_) / trans_time_ms_) : 1.0f;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    glUseProgram(tprog_.program);
+    glUniform2f(tprog_.u_screen, (float)stage_w_, (float)stage_h_);
+    glUniform1i(tprog_.u_tex, 0);
+    glUniform1i(tprog_.u_rule, 1);
+    glUniform1f(tprog_.u_t, t);
+    glUniform1f(tprog_.u_vague, trans_vague_ > 0.002f ? trans_vague_ : 0.002f);
+    glUniform1i(tprog_.u_use_rule, trans_rule_tex_ ? 1 : 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, trans_rule_tex_ ? trans_rule_tex_ : last_frame_tex_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, last_frame_tex_);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Captured frame rows are bottom-up: sample v=1 at the stage top.
+    const float W = (float)stage_w_, H = (float)stage_h_;
+    float verts[16] = {
+        0, 0, 0, 1,   W, 0, 1, 1,
+        0, H, 0, 0,   W, H, 1, 0,
+    };
+    glVertexAttribPointer(tprog_.a_pos, 2, GL_FLOAT, GL_FALSE, 16, verts);
+    glEnableVertexAttribArray(tprog_.a_pos);
+    glVertexAttribPointer(tprog_.a_uv, 2, GL_FLOAT, GL_FALSE, 16, verts + 2);
+    glEnableVertexAttribArray(tprog_.a_uv);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisable(GL_BLEND);
+    glUseProgram(prog_.program);
 }
 
 uint32_t Compositor::CreateTexture(const uint8_t *pixels, int w, int h) {
@@ -513,6 +852,13 @@ void Compositor::ReleaseGl() {
         if (l.texture) glDeleteTextures(1, &l.texture);
     }
     layers_.clear();
+    tweens_.clear();
+    if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
+    if (last_frame_tex_) { glDeleteTextures(1, &last_frame_tex_); last_frame_tex_ = 0; }
+    if (prog_.program) { glDeleteProgram(prog_.program); prog_.program = 0; }
+    if (tprog_.program) { glDeleteProgram(tprog_.program); tprog_.program = 0; }
+    trans_active_ = false;
+    trans_have_frame_ = false;
     gl_ready_ = false;
 }
 
@@ -589,6 +935,10 @@ void Compositor::Draw() {
                           std::to_string(sorted.size()) + sample);
     }
     glDisable(GL_BLEND);
+    // KrKr2-Next: running [trans] → fade the previous frame out on top of
+    // the new state, then remember this frame for the next transition.
+    DrawTransitionOverlay();
+    CaptureFrame();
     // [flip]: the composed frame is now the presentation candidate
     if (present_cb_) present_cb_();
 }
@@ -751,7 +1101,15 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     return true;
 }
 void Compositor::Shutdown() { layers_.clear(); present_cb_ = nullptr; }
-void Compositor::ReleaseGl() { ++revision_; layers_.clear(); gl_ready_ = false; }
+void Compositor::ReleaseGl() { ++revision_; layers_.clear(); tweens_.clear(); trans_active_ = false; gl_ready_ = false; }
+void Compositor::CaptureFrame() {}
+void Compositor::DrawTransitionOverlay() {}
+bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &,
+                                 int, int, int) {
+    if (time_ms <= 0) return false;
+    trans_start_ms_ = now_ms; trans_time_ms_ = time_ms; trans_active_ = true; ++revision_;
+    return true;
+}
 void Compositor::Draw() {}
 void Compositor::Init(int stage_w, int stage_h) {
     stage_w_ = stage_w;

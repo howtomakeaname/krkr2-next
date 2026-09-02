@@ -35,3 +35,25 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   anchored `1.0` root, face parts on positioned character containers, choice
   buttons under positioned parents, and keeps the pull-out toolbar hidden at
   `left=1240` as the real engine does. `Layers()` accessor added for tests.
+- `src/script/lua_engine.cpp` — bridge `lua_pcall`s (calllua / lyevent /
+  e:tag / DoString) run under a `debug.traceback` handler so framework
+  errors log their Lua call chain.
+- `src/script/lua_engine.cpp` — `ClickAt` dispatches to the frontmost layer
+  that *owns* a click lyevent (id-chain walk) instead of whatever decorative
+  child is drawn on top (choice text over its button image);
+  `Compositor::HitLayers` added for that.
+- `src/script/asb_parser.cpp` — `AsbRunner::Return` reloads the caller's
+  script on a cross-file frame (`[call file=system/first.iet …]` from
+  script.asb) instead of halting.
+- `src/render/compositor.{h,cpp}` — real `[lytween]` tweens (alpha / left /
+  top / xscale / yscale / zoom / w / h, delay + easing curves, `lytweendel`
+  cancels a subtree) and `[trans]` crossfades (last composited frame is
+  captured with glCopyTexImage2D and faded out over the new state; `rule=`
+  images drive a thresholded wipe with `vague` softness). `Update(now)` /
+  `PendingAnimationMs()` let the host advance animations and make `[wt]` /
+  `wait scenario` hold the script for their duration.
+- Host-side (bridge/engine_api/artemis_runtime.cpp): `[stop]` halts without
+  popping the call frame (`[return]` pops); `[stop exskip]` is a no-op. The
+  upstream "stop pops a frame" heuristic let `*main` run past a pending
+  choice (`script.asb *select [stop]`), which is what produced the
+  `message.lua:535` / `select.lua:500` errors.

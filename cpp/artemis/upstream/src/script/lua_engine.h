@@ -156,6 +156,8 @@ public:
     void LoadSystemData();
 
     lua_State *state() const { return L_; }
+    // KrKr2-Next: engine clock in ms (same base as e:now()).
+    double NowMs() const;
 
 private:
     static int l_tag(lua_State *L);

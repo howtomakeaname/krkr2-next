@@ -1,5 +1,6 @@
 #include "script/lua_engine.h"
 #include "render/compositor.h"
+#include "render/stb_image.h"
 #include "audio/audio.h"
 #include "pack/pack_manager.h"
 #include "script/pluto_lua.h"
@@ -16,6 +17,35 @@ extern "C" {
 }
 
 namespace artc {
+
+namespace {
+// KrKr2-Next: lua_pcall message handler that appends debug.traceback so
+// framework errors surfaced through the bridge (calllua / lyevent / e:tag)
+// show the Lua call chain instead of just the failing line.
+int TracebackHandler(lua_State *L) {
+    const char *msg = lua_tostring(L, 1);
+    lua_getglobal(L, "debug");
+    if (!lua_istable(L, -1)) { lua_pop(L, 1); return 1; }
+    lua_getfield(L, -1, "traceback");
+    if (!lua_isfunction(L, -1)) { lua_pop(L, 2); return 1; }
+    lua_pushstring(L, msg ? msg : "(non-string error)");
+    lua_pushinteger(L, 2);
+    lua_call(L, 2, 1);
+    return 1;
+}
+
+// lua_pcall with TracebackHandler. The callee and its `nargs` arguments
+// must be on top of the stack, exactly as for lua_pcall.
+int PCallTraceback(lua_State *L, int nargs, int nresults) {
+    const int base = lua_gettop(L) - nargs;   // callee index
+    lua_pushcfunction(L, TracebackHandler);
+    lua_insert(L, base);                        // handler sits below the callee
+    const int rc = lua_pcall(L, nargs, nresults, base);
+    lua_remove(L, base);
+    return rc;
+}
+} // namespace
+
 
 namespace {
 const char kBridgeTable[] = "e";
@@ -366,8 +396,13 @@ int LuaEngine::l_tag(lua_State *L) {
         // auto-complete too (no transition animation in this engine).
         const std::string sc = m["scenario"];
         if (!sc.empty() || inst->transition_wait_) {
+            // KrKr2-Next: tweens/transitions now run for real — hold the
+            // runner for their remaining time (a tap still skips it).
             inst->transition_wait_ = false;
-            return 0;   // scenario / transition tween → auto-complete
+            const double pending = inst->compositor_
+                ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
+            return 0;
         }
         int time = 0;
         const auto it = m.find("time");
@@ -474,10 +509,19 @@ int LuaEngine::l_tag(lua_State *L) {
         // them with 0.4s alpha/left tweens (title_animeset/title_anime). Our
         // compositor has no animation engine, so apply the tween end value
         // immediately (instant-reveal approximation; animation comes later).
-        if (tagname == "lytween" && m.count("id") && m.count("param") &&
-            m.count("to")) {
-            inst->compositor_->SetProps(m["id"],
-                                        {{m["param"], m["to"]}});
+        if (tagname == "lytween" && m.count("id")) {
+            // KrKr2-Next: real tween (see Compositor::AddTween).
+            inst->compositor_->AddTween(m["id"], m, inst->NowMs());
+            return 0;
+        }
+        if (tagname == "lytweendel" && m.count("id")) {
+            inst->compositor_->DeleteTweens(m["id"]);
+            return 0;
+        }
+        if (tagname == "wt" && inst->compositor_) {
+            // [wt] waits for running tweens/transitions.
+            const double pending = inst->compositor_->PendingAnimationMs(inst->NowMs());
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
             return 0;
         }
         if ((tagname == "setonpush" || tagname == "delonpush") && inst) {
@@ -521,6 +565,33 @@ int LuaEngine::l_tag(lua_State *L) {
         // trans_flag eqwait) must auto-complete.
         if (tagname == "trans") {
             inst->transition_wait_ = true;
+            // KrKr2-Next: crossfade from the last presented frame. type=1 is
+            // a plain fade; rule= names an 8-bit rule image in the pack.
+            int time = 0;
+            if (m.count("time")) time = std::atoi(m["time"].c_str());
+            if (time > 0 && inst->compositor_) {
+                std::vector<uint8_t> rule;
+                int rw = 0, rh = 0;
+                const auto rit = m.find("rule");
+                if (rit != m.end() && !rit->second.empty() && inst->packs_) {
+                    std::vector<uint8_t> png;
+                    std::string path = inst->ResolvePackPath(rit->second);
+                    if (!inst->packs_->Read(path, png)) inst->packs_->Read(path + ".png", png);
+                    if (!png.empty()) {
+                        int ch = 0;
+                        uint8_t *px = stbi_load_from_memory(png.data(), (int)png.size(), &rw, &rh, &ch, 1);
+                        if (px) {
+                            rule.assign(px, px + static_cast<size_t>(rw) * rh);
+                            stbi_image_free(px);
+                        } else {
+                            rw = rh = 0;
+                        }
+                    }
+                }
+                int vague = 0;
+                if (m.count("vague")) vague = std::atoi(m["vague"].c_str());
+                inst->compositor_->BeginTransition(inst->NowMs(), time, rule, rw, rh, vague);
+            }
             return 0;
         }
         // ---- message pipeline (chgmsg / print / rt) ----
@@ -931,7 +1002,16 @@ bool LuaEngine::FindLayerEvent(const std::string &id, const std::string &type,
 void LuaEngine::ClickAt(float x, float y) {
     SetWaiting(false);   // a tap ends the current click-wait
     if (!compositor_) return;
-    const std::string id = compositor_->HitLayer(x, y);
+    // KrKr2-Next: the real engine dispatches a click to the frontmost layer
+    // that OWNS a click event (walking up its id chain), not to whatever
+    // decorative child happens to be drawn on top of it — the choice-button
+    // text layer `1.80.120.N.0.0.2` sits above the button image `.0` that
+    // carries the lyevent, and tapping the text must still pick the choice.
+    std::string id;
+    for (const std::string &cand : compositor_->HitLayers(x, y)) {
+        if (FindLayerEvent(cand, "click", nullptr)) { id = cand; break; }
+    }
+    if (id.empty()) id = compositor_->HitLayer(x, y);
     Log(kLogInfo, "click: hit='" + id + "' registered=" +
                       (FindLayerEvent(id, "click", nullptr) ? "yes" : "no"));
     if (id.empty()) return;
@@ -1089,7 +1169,7 @@ void LuaEngine::CallEvent(const std::string &fn,
         lua_pushlstring(L_, kv.second.c_str(), kv.second.size());
         lua_settable(L_, -3);
     }
-    if (lua_pcall(L_, 2, 0, 0) != 0) {
+    if (PCallTraceback(L_, 2, 0) != 0) {
         if (!quiet)
             Log(kLogError, "event " + fn + ": " + lua_tostring(L_, -1));
         lua_pop(L_, 1);
@@ -1300,6 +1380,11 @@ int LuaEngine::l_index(lua_State *L) {
 int LuaEngine::l_noop(lua_State *L) { return 0; }
 
 // e:now() — playtime in milliseconds since engine init (behavior parity).
+double LuaEngine::NowMs() const {
+    return std::chrono::duration<double, std::milli>(
+               std::chrono::steady_clock::now() - init_time_).count();
+}
+
 int LuaEngine::l_now(lua_State *L) {
     LuaEngine *self = Self(L);
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1350,7 +1435,7 @@ bool LuaEngine::DoString(const std::string &code, const std::string &chunk) {
         lua_pop(L_, 1);
         return false;
     }
-    if (lua_pcall(L_, 0, 0, 0) != 0) {
+    if (PCallTraceback(L_, 0, 0) != 0) {
         Log(kLogError, std::string("lua exec: ") + lua_tostring(L_, -1));
         lua_pop(L_, 1);
         return false;
@@ -1389,7 +1474,7 @@ bool LuaEngine::CallGlobalInternal(const std::string &fn, bool quiet) {
         return false;
     }
     lua_getglobal(L_, kBridgeTable);   // engine bridge passed as arg 1
-    if (lua_pcall(L_, 1, 0, 0) != 0) {
+    if (PCallTraceback(L_, 1, 0) != 0) {
         if (!quiet)
             Log(kLogError, "calllua " + fn + ": " + lua_tostring(L_, -1));
         lua_pop(L_, 1);
@@ -1415,7 +1500,7 @@ bool LuaEngine::DispatchTag(const std::string &tag,
         lua_pushlstring(L_, kv.second.c_str(), kv.second.size());
         lua_settable(L_, -3);
     }
-    if (lua_pcall(L_, 2, 0, 0) != 0) {
+    if (PCallTraceback(L_, 2, 0) != 0) {
         Log(kLogError, "tag dispatch " + tag + ": " + lua_tostring(L_, -1));
         lua_pop(L_, 1);
         return false;

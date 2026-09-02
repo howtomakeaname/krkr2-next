@@ -301,11 +301,15 @@ bool ArtemisRuntime::Impl::Boot(std::string* error) {
     }
     r->Call(file, label);
   });
-  lua->SetStopHandler([this, r, l](const std::string& tag) {
-    // Real engine: `stop → wait for eqtag drain`. A queued wait (dialog
-    // eqwait) defers the frame pop so dialog_exit runs after the answer.
-    if (tag == "stop" && l->HasQueuedTag()) {
-      Log("asb: stop deferred (queued wait)");
+  lua->SetStopHandler([this, r](const std::string& tag) {
+    // [stop] halts the script until an explicit jump/call re-enters it
+    // (choice screens park at `script.asb *select [stop]` inside the estag
+    // call frame and resume through `jump select_exit → [return]`);
+    // [return] pops the call frame. Popping on `stop` — the upstream
+    // heuristic — let the main loop run past a pending choice.
+    if (tag == "stop") {
+      r->Halt();
+      Log("asb: stop via lua tag (halt)");
       return;
     }
     if (!r->Return()) {
@@ -490,10 +494,19 @@ void ArtemisRuntime::Impl::StepScript() {
         for (const auto& kv : ln.attrs)
           if (kv.first == "label") lbl = kv.second;
         runner.JumpTo(lbl);
-      } else if (ln.command == "stop" || ln.command == "return") {
+      } else if (ln.command == "stop" && ln.attrs.empty()) {
+        // Halt in place; the call frame (if any) stays for the [return]
+        // that the resuming flow issues later (select_exit / dialog).
+        runner.Halt();
+        Log("asb: [stop] reached (halt)");
+      } else if (ln.command == "stop") {
+        // `[stop exskip]` (script.asb *movie_play) stops the fast-forward
+        // mode, not the script — nothing to do natively.
+        runner.Advance();
+      } else if (ln.command == "return") {
         if (!runner.Return()) {
           runner.Halt();
-          Log("asb: [" + ln.command + "] reached (halt)");
+          Log("asb: [return] reached (halt)");
         }
       } else {
         lua->DispatchTag(ln.command, ln.attrs);
@@ -629,6 +642,9 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
     s.DrainQueuedTags();  // input-dispatched calllua may enqueue (estag call etc.)
   }
   s.StepScript();
+  // Advance [lytween] / [trans] animations to this frame's time before
+  // compositing (bumps the layer revision while anything is moving).
+  if (s.lua) s.compositor.Update(s.lua->NowMs());
   s.Present();
   if (s.lua) s.lua->EndFrame();  // clear per-frame edges
 

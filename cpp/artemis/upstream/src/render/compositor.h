@@ -86,6 +86,11 @@ public:
     void EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
                        float *eh, float *ea, bool *ev) const;
     std::string HitLayer(float x, float y) const;
+    // KrKr2-Next: every visible textured layer containing the stage point,
+    // topmost first. Lets the input layer pick the frontmost *event-bearing*
+    // layer instead of a decorative child drawn over it (choice text over
+    // its button image).
+    std::vector<std::string> HitLayers(float x, float y) const;
 
     // [var system="get_layer_info"] — return the layer's stored position
     // (relative offsets, matching draggable semantics) and draggable bounds.
@@ -111,6 +116,29 @@ public:
     // nothing changed since the last presented frame.
     uint64_t Revision() const { return revision_; }
 
+    // ---- KrKr2-Next: tweens ([lytween]) and transitions ([trans]) ----
+    // Time base: milliseconds on a monotonic clock supplied by the host
+    // (LuaEngine hands over its e:now() clock). Tweens animate one layer
+    // property (alpha / left / top / xscale / yscale / zoom / w / h) between
+    // `from` and `to` over `time` ms after `delay` ms with an easing curve;
+    // [lytweendel id] cancels the tweens of a layer and its subtree.
+    void AddTween(const std::string &id, const std::map<std::string, std::string> &attrs,
+                  double now_ms);
+    void DeleteTweens(const std::string &id);
+    // Advance tweens/transition to `now_ms`; returns true when the picture
+    // changed (the caller redraws). Call once per frame before Draw().
+    bool Update(double now_ms);
+    // Remaining animation time (ms) — what [wt] / the transition wait need.
+    double PendingAnimationMs(double now_ms) const;
+
+    // [trans time= rule= vague=] — crossfade from the frame that was on
+    // screen when the tag arrived to the current layer state. `rule` is the
+    // decoded 8-bit rule image (row-major, stage sized; empty = plain fade),
+    // dark pixels transition first, `vague` (0-255) softens the edge.
+    bool BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &rule,
+                         int rule_w, int rule_h, int vague);
+    bool TransitionActive() const { return trans_active_; }
+
 private:
     uint64_t revision_ = 0;
     struct GlProgram {
@@ -118,13 +146,43 @@ private:
         int a_pos = -1, a_uv = -1;
         int u_screen = -1, u_tex = -1, u_alpha = -1;
     };
+    struct TransProgram {
+        uint32_t program = 0;
+        int a_pos = -1, a_uv = -1;
+        int u_screen = -1, u_tex = -1, u_rule = -1, u_t = -1, u_vague = -1, u_use_rule = -1;
+    };
+    struct Tween {
+        std::string id;
+        std::string param;
+        float from = 0, to = 0;
+        double start_ms = 0;     // when the delay started
+        double delay_ms = 0, time_ms = 0;
+        int ease = 0;
+        bool from_current = true; // resolve `from` from the layer on first update
+        bool started = false;
+    };
 
     bool InitGl();
     uint32_t CreateTexture(const uint8_t *pixels, int w, int h);
+    void DrawTransitionOverlay();
+    void CaptureFrame();
+    static bool ApplyParam(Layer &l, const std::string &param, float value);
+    static bool ReadParam(const Layer &l, const std::string &param, float *value);
 
     int stage_w_ = 1280, stage_h_ = 720;
     GlProgram prog_{};
+    TransProgram tprog_{};
     bool gl_ready_ = false;
+
+    std::vector<Tween> tweens_;
+    double now_ms_ = 0;
+    // transition state
+    bool trans_active_ = false;
+    double trans_start_ms_ = 0, trans_time_ms_ = 0;
+    float trans_vague_ = 0;
+    uint32_t trans_rule_tex_ = 0;
+    uint32_t last_frame_tex_ = 0;   // copy of the last composited frame
+    bool trans_have_frame_ = false;
     std::vector<Layer> layers_;   // draw order = vector order
     PackManager *packs_ = nullptr;
     std::function<void()> present_cb_;

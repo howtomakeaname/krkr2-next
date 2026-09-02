@@ -142,7 +142,21 @@ bool AsbRunner::Return() {
     if (callstack_.empty()) return false;
     const auto top = callstack_.back();
     callstack_.pop_back();
-    if (top.first != current_file_) return false;   // cross-file: halt
+    if (top.first != current_file_) {
+        // KrKr2-Next: cross-file return — reload the caller's script and
+        // resume at the saved line. script.asb *movie_play does
+        // `[call file="system/first.iet" label="movie_emergendcy"]` and
+        // relies on the [return] landing back in script.asb; halting here
+        // stranded the story after every (skipped) movie.
+        std::vector<uint8_t> image;
+        if (!packs_ || !packs_->Read(top.first, image)) {
+            Log(kLogError, "asb: cannot reload caller script: " + top.first);
+            return false;
+        }
+        if (!Load(image, "")) return false;
+        current_file_ = top.first;
+        Log(kLogInfo, "asb: return to " + top.first + " line " + std::to_string(top.second));
+    }
     if (top.second >= script_.lines.size()) return false;
     pc_ = top.second;
     halted_ = false;
