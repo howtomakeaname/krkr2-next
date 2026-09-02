@@ -49,6 +49,7 @@ class _HomePageState extends State<HomePage> {
   String _renderer = PrefsKeys.rendererOpengl;
   String _angleBackend = PrefsKeys.angleBackendGles;
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
+  bool _restartDeferred = false;
 
   String? _resolveBuiltInDylibPath() {
     if (Platform.isIOS) {
@@ -194,7 +195,13 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _addGame() async {
+  Rect _fallbackMenuAnchor(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    return Rect.fromLTWH(size.width - 64, pad.top + 8, 44, 44);
+  }
+
+  Future<void> _addGame({Rect? anchor}) async {
     final l10n = AppLocalizations.of(context)!;
     if (Platform.isIOS) {
       await _scanIosGamesDir();
@@ -205,34 +212,28 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final source = await UiBottomSheet.show<String>(
+    final source = await UiPopupMenu.show<String>(
       context,
-      title: l10n.addGame,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          UiListTile(
-            icon: LucideIcons.folderOpen,
-            title: l10n.selectGameDirectory,
-            onTap: () => Navigator.pop(context, 'directory'),
+      anchor: anchor ?? _fallbackMenuAnchor(context),
+      items: [
+        UiMenuItem(
+          label: l10n.selectGameDirectory,
+          icon: LucideIcons.folderOpen,
+          value: 'directory',
+        ),
+        UiMenuItem(
+          label: l10n.selectGameArchive,
+          icon: LucideIcons.archive,
+          value: 'xp3',
+        ),
+        if (Platform.operatingSystem == 'ohos')
+          UiMenuItem(
+            label: l10n.scanSandboxForGames,
+            subtitle: l10n.scanSandboxForGamesDesc,
+            icon: LucideIcons.scanSearch,
+            value: 'sandbox',
           ),
-          UiListTile(
-            icon: LucideIcons.archive,
-            title: l10n.selectGameArchive,
-            onTap: () => Navigator.pop(context, 'xp3'),
-          ),
-          // OHOS: games side-loaded with `hdc file send` land straight in
-          // the sandbox; multi-GB Artemis pack chains in particular are far
-          // more practical to deliver that way than through the picker.
-          if (Platform.operatingSystem == 'ohos')
-            UiListTile(
-              icon: LucideIcons.scanSearch,
-              title: l10n.scanSandboxForGames,
-              subtitle: l10n.scanSandboxForGamesDesc,
-              onTap: () => Navigator.pop(context, 'sandbox'),
-            ),
-        ],
-      ),
+      ],
     );
     if (source == null || !mounted) return;
 
@@ -1188,32 +1189,30 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _setCoverImage(GameInfo game) async {
+  Future<void> _setCoverImage(GameInfo game, {Rect? anchor}) async {
     final l10n = AppLocalizations.of(context)!;
-    final source = await UiBottomSheet.show<String>(
+    final source = await UiPopupMenu.show<String>(
       context,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          UiListTile(
-            icon: LucideIcons.image,
-            title: l10n.coverFromGallery,
-            onTap: () => Navigator.pop(context, 'gallery'),
+      anchor: anchor ?? _fallbackMenuAnchor(context),
+      items: [
+        UiMenuItem(
+          label: l10n.coverFromGallery,
+          icon: LucideIcons.image,
+          value: 'gallery',
+        ),
+        UiMenuItem(
+          label: l10n.coverFromCamera,
+          icon: LucideIcons.camera,
+          value: 'camera',
+        ),
+        if (game.coverPath != null)
+          UiMenuItem(
+            label: l10n.coverRemove,
+            icon: LucideIcons.trash2,
+            isDestructive: true,
+            value: 'remove',
           ),
-          UiListTile(
-            icon: LucideIcons.camera,
-            title: l10n.coverFromCamera,
-            onTap: () => Navigator.pop(context, 'camera'),
-          ),
-          if (game.coverPath != null)
-            UiListTile(
-              icon: LucideIcons.trash2,
-              iconColor: context.uiColors.danger,
-              title: l10n.coverRemove,
-              onTap: () => Navigator.pop(context, 'remove'),
-            ),
-        ],
-      ),
+      ],
     );
     if (source == null || !mounted) return;
 
@@ -1313,6 +1312,8 @@ class _HomePageState extends State<HomePage> {
       MaterialPageRoute<void>(
         builder: (_) => GamePage(
           gamePath: game.path,
+          title: game.displayTitle,
+          coverPath: game.coverPath,
           ffiLibraryPath: dylibPath,
           orientation: _gameOrientation,
           gameManager: _gameManager,
@@ -1487,13 +1488,16 @@ class _HomePageState extends State<HomePage> {
           renderer: _renderer,
           angleBackend: _angleBackend,
           gameOrientation: _gameOrientation,
+          restartPending: _restartDeferred,
         ),
       ),
     );
     if (result != null && mounted) {
       setState(() {
         // On mobile the engine mode is always builtIn, so we skip updating it.
-        if (!Platform.isAndroid && !Platform.isIOS) {
+        if (!Platform.isAndroid &&
+            !Platform.isIOS &&
+            Platform.operatingSystem != 'ohos') {
           _engineMode = result.engineMode;
           _customDylibPath = result.customDylibPath;
         }
@@ -1503,6 +1507,7 @@ class _HomePageState extends State<HomePage> {
         _renderer = result.renderer;
         _angleBackend = result.angleBackend;
         _gameOrientation = result.gameOrientation;
+        if (result.restartPending) _restartDeferred = true;
       });
     }
   }
@@ -1531,7 +1536,9 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final games = _sortedGames;
-    final isDesktop = !Platform.isAndroid && !Platform.isIOS;
+    final isDesktop = !Platform.isAndroid &&
+        !Platform.isIOS &&
+        Platform.operatingSystem != 'ohos';
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
@@ -1579,15 +1586,35 @@ class _HomePageState extends State<HomePage> {
                             ),
                           ),
                         const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(LucideIcons.settings),
-                          tooltip: l10n.settings,
+                        if (!Platform.isIOS)
+                          Builder(
+                            builder: (btnContext) => UiButton.icon(
+                              icon: LucideIcons.plus,
+                              onPressed: () {
+                                _addGame(anchor: UiPopupMenu.rectOf(btnContext));
+                              },
+                            ),
+                          ),
+                        UiButton.icon(
+                          icon: LucideIcons.settings,
                           onPressed: _openSettings,
                         ),
                       ],
                     ),
                   ),
                 ),
+                if (_restartDeferred)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    sliver: SliverToBoxAdapter(
+                      child: UiBanner(
+                        tone: UiBannerTone.warning,
+                        message: l10n.restartPendingBanner,
+                        actionLabel: l10n.restartNow,
+                        onAction: restartKrkr2App,
+                      ),
+                    ),
+                  ),
                 if (games.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
@@ -1595,7 +1622,7 @@ class _HomePageState extends State<HomePage> {
                   )
                 else
                   _buildGameGrid(games, l10n),
-                const SliverPadding(padding: EdgeInsets.only(bottom: 88)),
+                const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
               ],
             ),
       floatingActionButton: Platform.isIOS
@@ -1619,12 +1646,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             )
-          : UiButton(
-              label: l10n.addGame,
-              leadingIcon: LucideIcons.plus,
-              size: UiButtonSize.large,
-              onPressed: _addGame,
-            ),
+          : null,
     );
   }
 

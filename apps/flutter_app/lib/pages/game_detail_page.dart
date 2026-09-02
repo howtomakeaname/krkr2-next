@@ -75,32 +75,36 @@ class _GameDetailPageState extends State<GameDetailPage> {
     );
   }
 
-  Future<void> _setCover() async {
+  Rect _fallbackMenuAnchor(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    return Rect.fromLTWH(size.width - 64, pad.top + 4, 44, 44);
+  }
+
+  Future<void> _setCover({Rect? anchor}) async {
     final l10n = AppLocalizations.of(context)!;
-    final source = await UiBottomSheet.show<String>(
+    final source = await UiPopupMenu.show<String>(
       context,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          UiListTile(
-            icon: LucideIcons.image,
-            title: l10n.coverFromGallery,
-            onTap: () => Navigator.pop(context, 'gallery'),
+      anchor: anchor ?? _fallbackMenuAnchor(context),
+      items: [
+        UiMenuItem(
+          label: l10n.coverFromGallery,
+          icon: LucideIcons.image,
+          value: 'gallery',
+        ),
+        UiMenuItem(
+          label: l10n.coverFromCamera,
+          icon: LucideIcons.camera,
+          value: 'camera',
+        ),
+        if (game.coverPath != null)
+          UiMenuItem(
+            label: l10n.coverRemove,
+            icon: LucideIcons.trash2,
+            isDestructive: true,
+            value: 'remove',
           ),
-          UiListTile(
-            icon: LucideIcons.camera,
-            title: l10n.coverFromCamera,
-            onTap: () => Navigator.pop(context, 'camera'),
-          ),
-          if (game.coverPath != null)
-            UiListTile(
-              icon: LucideIcons.trash2,
-              iconColor: context.uiColors.danger,
-              title: l10n.coverRemove,
-              onTap: () => Navigator.pop(context, 'remove'),
-            ),
-        ],
-      ),
+      ],
     );
     if (source == null || !mounted) return;
 
@@ -402,15 +406,18 @@ class _GameDetailPageState extends State<GameDetailPage> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
-          leading: IconButton(
-            icon: const Icon(LucideIcons.arrowLeft),
+          leading: UiButton.icon(
+            icon: LucideIcons.arrowLeft,
             onPressed: _pop,
           ),
           actions: [
-            IconButton(
-              icon: const Icon(LucideIcons.image),
-              tooltip: l10n.setCover,
-              onPressed: _setCover,
+            Builder(
+              builder: (btnContext) => UiButton.icon(
+                icon: LucideIcons.image,
+                onPressed: () {
+                  _setCover(anchor: UiPopupMenu.rectOf(btnContext));
+                },
+              ),
             ),
           ],
         ),
@@ -702,7 +709,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
               icon: LucideIcons.image,
               title: l10n.setCover,
               showChevron: true,
-              onTap: _setCover,
+              onTapRect: (rect) => _setCover(anchor: rect),
             ),
             UiListTile(
               icon: LucideIcons.pencil,

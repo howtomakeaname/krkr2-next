@@ -115,8 +115,8 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
         title: Text(l10n.scrapeMetadataSelectTitle),
         leading: _applying
             ? null
-            : IconButton(
-                icon: const Icon(LucideIcons.chevronLeft),
+            : UiButton.icon(
+                icon: LucideIcons.chevronLeft,
                 onPressed: () => Navigator.of(context).pop(false),
               ),
       ),

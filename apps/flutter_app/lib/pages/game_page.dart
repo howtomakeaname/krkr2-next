@@ -25,6 +25,8 @@ class GamePage extends StatefulWidget {
   const GamePage({
     super.key,
     required this.gamePath,
+    this.title,
+    this.coverPath,
     this.ffiLibraryPath,
     this.engineBridgeBuilder = createEngineBridge,
     this.orientation = PrefsKeys.gameOrientationLandscape,
@@ -32,6 +34,8 @@ class GamePage extends StatefulWidget {
   });
 
   final String gamePath;
+  final String? title;
+  final String? coverPath;
   final String? ffiLibraryPath;
   final EngineBridgeBuilder engineBridgeBuilder;
 
@@ -96,6 +100,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   int _tickCount = 0;
   final List<String> _logs = [];
   static const int _maxLogs = 2000;
+  bool _showBootLogs = false;
 
   // ScrollController for boot log auto-scroll
   final ScrollController _bootLogScrollController = ScrollController();
@@ -124,7 +129,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _bridge = widget.engineBridgeBuilder(ffiLibraryPath: widget.ffiLibraryPath);
     _loadSettings();
-    _applyOrientation();
+    unawaited(_applyOrientation());
     _log('Initializing engine for: ${widget.gamePath}');
     if (widget.ffiLibraryPath != null) {
       _log('Using custom dylib: ${widget.ffiLibraryPath}');
@@ -576,9 +581,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
           _perfOverlayKey0.currentState?.reportFrameDelta(
             renderDeltaMs.toDouble(),
           );
-          // Poll frame immediately after tick, passing the flag so
-          // engine_surface skips its own flag read.
-          await _surfaceKey.currentState?.pollFrame(rendered: true);
+          // Kick the readback/decode off the tick critical path.
+          // engineTick and engineReadFrame share a native mutex, so the
+          // copy stays ordered; decodeImageFromPixels can overlap the
+          // next vsync. _frameInFlight drops a late poll instead of
+          // stacking them.
+          unawaited(_surfaceKey.currentState?.pollFrame(rendered: true));
         }
         _tickCount += 1;
 
@@ -799,7 +807,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   /// window.setPreferredOrientation (landscape pair → AUTO_ROTATION_LANDSCAPE,
   /// portrait pair → AUTO_ROTATION_PORTRAIT, all four → follows the system
   /// rotation lock), so the same call serves Android, iOS and OHOS.
-  void _applyOrientation() {
+  Future<void> _applyOrientation() async {
     if (!PrefsKeys.orientationSupported) return;
     final List<DeviceOrientation> wanted;
     switch (_orientation) {
@@ -818,11 +826,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
           DeviceOrientation.landscapeRight,
         ];
     }
-    unawaited(
-      SystemChrome.setPreferredOrientations(wanted).catchError((Object e) {
-        _log('setPreferredOrientations($_orientation) failed: $e');
-      }),
-    );
+    try {
+      await SystemChrome.setPreferredOrientations(wanted);
+    } catch (e) {
+      _log('setPreferredOrientations($_orientation) failed: $e');
+    }
   }
 
   /// Runtime toggle from the in-game overlay: landscape ↔ portrait. "Follow
@@ -836,7 +844,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       _showOverlay = false;
     });
     _log('Orientation → $next');
-    _applyOrientation();
+    unawaited(_applyOrientation());
   }
 
   void _restoreOrientation() {
@@ -922,7 +930,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       _logs.removeRange(_maxLogs, _logs.length);
     }
     // Try to update the UI if we're in a loading phase
-    if (mounted && _phase != _EnginePhase.running) {
+    if (mounted && _phase != _EnginePhase.running && _showBootLogs) {
       setState(() {});
     }
   }
@@ -996,34 +1004,35 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               rendererInfo: _rendererInfo,
             ),
 
-          // Floating menu button (top-right)
-          Positioned(
-            right: 16,
-            top: MediaQuery.of(context).padding.top + 8,
-            child: AnimatedOpacity(
-              opacity: _showOverlay ? 1.0 : 0.6,
-              duration: const Duration(milliseconds: 200),
-              child: Material(
-                color: Colors.black45,
-                borderRadius: BorderRadius.circular(8),
-                child: InkWell(
+          // Floating menu button (top-right) — only while the game is up.
+          if (_phase == _EnginePhase.running)
+            Positioned(
+              right: 16,
+              top: MediaQuery.of(context).padding.top + 8,
+              child: AnimatedOpacity(
+                opacity: _showOverlay ? 1.0 : 0.6,
+                duration: const Duration(milliseconds: 200),
+                child: Material(
+                  color: Colors.black45,
                   borderRadius: BorderRadius.circular(8),
-                  onTap: _toggleOverlay,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      _showOverlay ? LucideIcons.x : LucideIcons.menu,
-                      color: Colors.white70,
-                      size: 24,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _toggleOverlay,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        _showOverlay ? LucideIcons.x : LucideIcons.menu,
+                        color: Colors.white70,
+                        size: 24,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
           // Overlay controls
-          if (_showOverlay) _buildOverlay(),
+          if (_showOverlay && _phase == _EnginePhase.running) _buildOverlay(),
 
           // Debug panel
           if (_showDebug) _buildDebugPanel(),
@@ -1032,187 +1041,248 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildBootLogView() {
-    // Full-screen terminal-style boot log — no animations that would
-    // freeze during synchronous FFI calls.
-    final String phaseLabel;
+  String get _bootTitle {
+    final title = widget.title;
+    if (title != null && title.isNotEmpty) return title;
+    final parts = widget.gamePath.split(RegExp(r'[/\\]'));
+    return parts.lastWhere((p) => p.isNotEmpty, orElse: () => widget.gamePath);
+  }
+
+  File? get _bootCoverFile {
+    final path = widget.coverPath;
+    if (path == null || path.isEmpty) return null;
+    final file = File(path);
+    return file.existsSync() ? file : null;
+  }
+
+  int get _bootStep {
     switch (_phase) {
       case _EnginePhase.initializing:
-        phaseLabel = 'INITIALIZING';
-        break;
+        return 0;
       case _EnginePhase.creating:
-        phaseLabel = 'CREATING ENGINE';
-        break;
+        return 1;
       case _EnginePhase.opening:
-        phaseLabel = 'LOADING GAME';
-        break;
+        return 2;
       default:
-        phaseLabel = 'LOADING';
+        return 2;
     }
+  }
 
-    // Reversed logs so newest is at the bottom (terminal style)
-    final reversedLogs = _logs.reversed.toList();
-
-    // Schedule scroll-to-bottom after this frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_bootLogScrollController.hasClients) {
-        _bootLogScrollController.jumpTo(
-          _bootLogScrollController.position.maxScrollExtent,
-        );
-      }
-    });
-
-    return Container(
-      color: Colors.black,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white10)),
+  /// 当前步骤从下方刷入、旧步骤向上刷出。
+  Widget _buildBootStepTicker(String label) {
+    return ClipRect(
+      child: SizedBox(
+        height: 28,
+        width: double.infinity,
+        child: AnimatedSwitcher(
+          duration: UiDuration.slow,
+          switchInCurve: UiCurves.iosStandard,
+          switchOutCurve: UiCurves.iosSmooth,
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.center,
+            fit: StackFit.expand,
+            children: [
+              ...previous,
+              ?current,
+            ],
+          ),
+          transitionBuilder: (child, animation) {
+            final incoming = child.key == ValueKey<String>(label);
+            final begin =
+                incoming ? const Offset(0, 0.85) : const Offset(0, -0.85);
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: begin,
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _phase == _EnginePhase.opening
-                          ? Colors.orangeAccent
-                          : Colors.greenAccent,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    phaseLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _engine == GameEngine.artemis
-                        ? 'artemis engine'
-                        : 'krkr2 engine',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
+            );
+          },
+          child: Text(
+            label,
+            key: ValueKey<String>(label),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
             ),
-            // Game path info
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.white.withValues(alpha: 0.03),
-              child: Text(
-                widget.gamePath,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Log area — scrollable terminal output
-            Expanded(
-              child: reversedLogs.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Waiting...',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _bootLogScrollController,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: reversedLogs.length,
-                      itemBuilder: (context, index) {
-                        final log = reversedLogs[index];
-                        final isError = log.contains('ERROR');
-                        final isOk = log.contains('=> OK');
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 2),
-                          child: Text(
-                            log,
-                            style: TextStyle(
-                              color: isError
-                                  ? Colors.redAccent
-                                  : isOk
-                                  ? Colors.greenAccent
-                                  : Colors.white.withValues(alpha: 0.6),
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                              height: 1.4,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            // Bottom status bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.white10)),
-              ),
-              child: Row(
-                children: [
-                  // Static blinking cursor indicator (just a block char)
-                  const Text(
-                    '█',
-                    style: TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: 14,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _phase == _EnginePhase.opening
-                        ? 'Engine is loading game resources...'
-                        : 'Preparing engine...',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: _exitGame,
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        fontSize: 12,
-                        fontFamily: 'monospace',
-                        decoration: TextDecoration.underline,
-                        decorationColor: Colors.white.withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBootLogView() {
+    final l10n = AppLocalizations.of(context)!;
+    final cover = _bootCoverFile;
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final reversedLogs = _logs.reversed.toList();
+    final step = _bootStep;
+    final stepLabels = [
+      l10n.gamePreparingEngine,
+      l10n.gameOpening,
+      l10n.gameLoadingResources,
+    ];
+
+    if (_showBootLogs) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_bootLogScrollController.hasClients) {
+          _bootLogScrollController.jumpTo(
+            _bootLogScrollController.position.maxScrollExtent,
+          );
+        }
+      });
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Color(0xFF0C0C0F)),
+        if (cover != null)
+          Image.file(
+            cover,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        const ColoredBox(color: Color(0xB3000000)),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: UiButton(
+                    label: l10n.cancel,
+                    variant: UiButtonVariant.ghost,
+                    size: UiButtonSize.small,
+                    onPressed: _exitGame,
+                  ),
+                ),
+                Expanded(
+                  flex: _showBootLogs ? 2 : 3,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (cover != null && !landscape) ...[
+                            ClipRRect(
+                              borderRadius: UiRadius.brLg,
+                              child: Image.file(
+                                cover,
+                                width: 88,
+                                height: 88,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    const SizedBox.shrink(),
+                              ),
+                            ),
+                            const SizedBox(height: UiSpacing.lg),
+                          ],
+                          Text(
+                            _bootTitle,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            l10n.gameEngine(_engine.label),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: UiSpacing.xl),
+                          const UiLoader(
+                            size: UiLoaderSize.medium,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(height: UiSpacing.lg),
+                          _buildBootStepTicker(stepLabels[step]),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (_showBootLogs)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.34,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: UiRadius.brLg,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      child: reversedLogs.isEmpty
+                          ? Center(
+                              child: Text(
+                                l10n.gameStarting,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: _bootLogScrollController,
+                              padding: const EdgeInsets.all(12),
+                              itemCount: reversedLogs.length,
+                              itemBuilder: (context, index) {
+                                final log = reversedLogs[index];
+                                final isError = log.contains('ERROR');
+                                final isOk = log.contains('=> OK');
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Text(
+                                    log,
+                                    style: TextStyle(
+                                      color: isError
+                                          ? const Color(0xFFFF6961)
+                                          : isOk
+                                          ? const Color(0xFF34C77A)
+                                          : Colors.white.withValues(alpha: 0.55),
+                                      fontSize: 11,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                const SizedBox(height: UiSpacing.sm),
+                UiButton(
+                  label: _showBootLogs
+                      ? l10n.gameHideBootLogs
+                      : l10n.gameBootLogs,
+                  variant: UiButtonVariant.ghost,
+                  size: UiButtonSize.small,
+                  onPressed: () => setState(() => _showBootLogs = !_showBootLogs),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
