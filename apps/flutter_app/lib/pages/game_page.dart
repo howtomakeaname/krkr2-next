@@ -51,6 +51,23 @@ class GamePage extends StatefulWidget {
   State<GamePage> createState() => _GamePageState();
 }
 
+/// Process-level engine runtime session.
+///
+/// The kirikiri2 / Artemis runtimes cannot be restarted in-process:
+/// `engine_destroy` + `engine_open_game` returns -3 ("runtime restart
+/// is not supported yet"). Leaving this page therefore parks the
+/// runtime (pause) instead of destroying it; re-entering the same game
+/// resumes the parked session. Switching to a different game requires
+/// restarting the app.
+_EngineRuntimeSession? _activeEngineRuntime;
+
+class _EngineRuntimeSession {
+  _EngineRuntimeSession({required this.bridge, required this.gamePath});
+
+  final EngineBridge bridge;
+  final String gamePath;
+}
+
 class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   static const int _engineResultOk = 0;
   static const MethodChannel _platformChannel = MethodChannel(
@@ -58,6 +75,25 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   );
 
   late EngineBridge _bridge;
+
+  /// Re-entering the same parked game: skip create/open and resume.
+  bool _reuseRuntime = false;
+
+  /// Only the page that created the bridge may destroy it.
+  bool _ownsBridge = false;
+
+  /// Another game already owns the in-process runtime.
+  bool _engineConflict = false;
+
+  /// [enginePause] has already been issued for this visit; dispose
+  /// must not destroy or pause again.
+  bool _runtimeParked = false;
+
+  /// After resume, keep polling a few frames even if the static-frame
+  /// gate reports "not rendered" so a newly built [EngineSurface]
+  /// receives the cached last frame.
+  int _forcePresentFrames = 0;
+
   final GlobalKey<EngineSurfaceState> _surfaceKey =
       GlobalKey<EngineSurfaceState>();
 
@@ -127,7 +163,20 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       unawaited(_savePendingPlaySession());
     }
     WidgetsBinding.instance.addObserver(this);
-    _bridge = widget.engineBridgeBuilder(ffiLibraryPath: widget.ffiLibraryPath);
+    final session = _activeEngineRuntime;
+    final normalizedPath = _normalizeGamePath(widget.gamePath);
+    if (session != null && session.gamePath == normalizedPath) {
+      _bridge = session.bridge;
+      _reuseRuntime = true;
+    } else if (session != null) {
+      _bridge = session.bridge;
+      _engineConflict = true;
+    } else {
+      _bridge = widget.engineBridgeBuilder(
+        ffiLibraryPath: widget.ffiLibraryPath,
+      );
+      _ownsBridge = true;
+    }
     _loadSettings();
     unawaited(_applyOrientation());
     _log('Initializing engine for: ${widget.gamePath}');
@@ -222,7 +271,16 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     _bootLogScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _stopTickLoop(notify: false);
-    unawaited(_bridge.engineDestroy());
+    if (!_runtimeParked) {
+      if (_engineConflict) {
+        _runtimeParked = true;
+      } else if (_reuseRuntime ||
+          (_ownsBridge && _phase == _EnginePhase.running)) {
+        unawaited(_parkRuntime());
+      } else if (_ownsBridge) {
+        unawaited(_bridge.engineDestroy());
+      }
+    }
     _restoreOrientation();
     super.dispose();
   }
@@ -376,6 +434,41 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   Future<void> _autoStart() async {
+    if (_engineConflict) {
+      _fail(
+        AppLocalizations.of(context)?.engineRestartRequired ??
+            'The engine is already running another game. '
+                'Restart the app to play a different game.',
+      );
+      return;
+    }
+    if (_reuseRuntime) {
+      _log('Reusing suspended engine runtime for this game');
+      try {
+        final docDir = await getApplicationDocumentsDirectory();
+        _writablePath = docDir.path;
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() => _phase = _EnginePhase.running);
+      try {
+        await _applyFpsLimit();
+        final int resumeResult = await _bridge.engineResume();
+        if (resumeResult != _engineResultOk) {
+          _fail(
+            'engine_resume failed: result=$resumeResult, '
+            'error=${_bridge.engineGetLastError()}',
+          );
+          return;
+        }
+      } catch (e, st) {
+        _fail('engine resume error: $e\n$st');
+        return;
+      }
+      _forcePresentFrames = 8;
+      _startPlaySessionRun();
+      _startTickLoop();
+      return;
+    }
     if (Platform.isAndroid) {
       final granted = await _ensureAndroidAllFilesAccess();
       if (!granted) {
@@ -568,7 +661,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         // so that engine_surface does NOT read it a second time (which
         // would always see false because the flag is reset on read).
         final bool rendered = await _bridge.engineGetFrameRenderedFlag();
-        if (rendered) {
+        final bool forcePresent = _forcePresentFrames > 0;
+        if (forcePresent) {
+          _forcePresentFrames -= 1;
+        }
+        if (rendered || forcePresent) {
           if (_rendererInfo.isEmpty) {
             _fetchRendererInfo();
           }
@@ -586,7 +683,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
           // copy stays ordered; decodeImageFromPixels can overlap the
           // next vsync. _frameInFlight drops a late poll instead of
           // stacking them.
-          unawaited(_surfaceKey.currentState?.pollFrame(rendered: true));
+          unawaited(
+            _surfaceKey.currentState?.pollFrame(
+              rendered: rendered || forcePresent,
+            ),
+          );
         }
         _tickCount += 1;
 
@@ -780,7 +881,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         _autoPausedByLifecycle = false;
         _resumeTickAfterLifecycle = false;
         _log('Lifecycle resumed');
-        if (resumeTick) _startTickLoop();
+        if (resumeTick) {
+          _forcePresentFrames = 8;
+          _startTickLoop();
+        }
       }
     } finally {
       _lifecycleTransitionInFlight = false;
@@ -965,19 +1069,44 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     setState(() => _showDebug = !_showDebug);
   }
 
-  void _exitGame() {
+  Future<void> _parkRuntime() async {
+    if (_runtimeParked) return;
+    _runtimeParked = true;
+    _stopTickLoop(notify: false);
+    // A conflict page does not own the in-process runtime — leave the
+    // parked session (other game) untouched.
+    if (_engineConflict) return;
+    try {
+      await _bridge.enginePause();
+    } catch (_) {}
+    _activeEngineRuntime = _EngineRuntimeSession(
+      bridge: _bridge,
+      gamePath: _normalizeGamePath(widget.gamePath),
+    );
+  }
+
+  Future<void> _exitGame() async {
     _stopTickLoop(notify: false);
     _restoreOrientation();
-    Navigator.of(context).pop();
+    await _parkRuntime();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool surfaceActive = _phase == _EnginePhase.running;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(_exitGame());
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
         fit: StackFit.expand,
         children: [
           // Full-screen engine surface
@@ -1038,6 +1167,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
           if (_showDebug) _buildDebugPanel(),
         ],
       ),
+    ),
     );
   }
 
@@ -1344,10 +1474,26 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                       _errorMessage = null;
                       _tickCount = 0;
                     });
+                    final session = _activeEngineRuntime;
+                    if (_engineConflict) {
+                      unawaited(_autoStart());
+                      return;
+                    }
+                    if (_reuseRuntime ||
+                        (session != null &&
+                            session.gamePath ==
+                                _normalizeGamePath(widget.gamePath))) {
+                      _reuseRuntime = true;
+                      _ownsBridge = false;
+                      _runtimeParked = false;
+                      unawaited(_autoStart());
+                      return;
+                    }
                     unawaited(_bridge.engineDestroy());
                     _bridge = widget.engineBridgeBuilder(
                       ffiLibraryPath: widget.ffiLibraryPath,
                     );
+                    _ownsBridge = true;
                     unawaited(_autoStart());
                   },
                 ),
@@ -1391,6 +1537,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                       _log('User paused');
                     } else {
                       await _bridge.engineResume();
+                      _forcePresentFrames = 8;
                       _startTickLoop();
                       _log('User resumed');
                     }

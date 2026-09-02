@@ -65,6 +65,7 @@ class ArtemisRuntime {
 
   void Pause();
   void Resume();
+  void MarkFrameDirty();
 
   /** Release Lua/GL/audio state. Safe to call twice. Destroys the EGL
    *  context only when this runtime created it. */

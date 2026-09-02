@@ -107,6 +107,10 @@ struct engine_handle_s {
     std::vector<uint8_t> rgba;
     bool ready = false;
     bool rendered_this_tick = false;
+    // Set on resume / surface-size change so the next tick presents a
+    // frame even when the static-scene memcmp gate leaves the dirty
+    // flag clear (new Flutter surface has no cached image).
+    bool force_present = false;
   } frame;
 
   // Frame rate limiting (0 = unlimited / follow vsync)
@@ -547,6 +551,20 @@ bool ReadCurrentFrameRgba(const FrameReadbackLayout& layout, void* out_pixels) {
   return true;
 }
 
+void RequestFramePresentLocked(engine_handle_s* impl) {
+  impl->frame.force_present = true;
+#if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
+  if (impl->artemis) {
+    impl->artemis->MarkFrameDirty();
+    return;
+  }
+#endif
+  auto& egl = krkr::GetEngineEGLContext();
+  if (egl.IsValid()) {
+    egl.MarkFrameDirty();
+  }
+}
+
 bool IsFinitePointerValue(double value) {
   return std::isfinite(value);
 }
@@ -928,7 +946,8 @@ engine_result_t ArtemisTickLocked(engine_handle_s* impl) {
   }
 
   const bool dirty = impl->artemis->ConsumeFrameDirty();
-  impl->frame.rendered_this_tick = dirty;
+  impl->frame.rendered_this_tick = dirty || impl->frame.force_present;
+  impl->frame.force_present = false;
   if (dirty) {
     impl->frame.width = impl->artemis->StageWidth();
     impl->frame.height = impl->artemis->StageHeight();
@@ -1678,9 +1697,16 @@ engine_result_t engine_tick(engine_handle_t handle, uint32_t delta_ms) {
     // pbuffer still holds the previous (identical) frame, and clearing
     // rendered_this_tick makes the Flutter side keep its last decoded
     // image instead of copying + decoding 3.7MB again.
-    if (!krkr::GetEngineEGLContext().ConsumeFrameDirty()) {
+    const bool dirty = krkr::GetEngineEGLContext().ConsumeFrameDirty();
+    const bool cache_missing = impl->frame.rgba.empty() || !impl->frame.ready;
+    if (!dirty && !cache_missing && !impl->frame.force_present) {
       impl->frame.rendered_this_tick = false;
+    } else if (!dirty && !cache_missing) {
+      // Host asked us to re-present the last cached frame (resume /
+      // new Flutter surface) without a GL readback.
+      impl->frame.force_present = false;
     } else {
+      impl->frame.force_present = false;
       impl->perf.dirty += 1;
       const auto perf_read_t0 = std::chrono::steady_clock::now();
       const FrameReadbackLayout layout = GetFrameReadbackLayoutLocked(impl);
@@ -1909,6 +1935,7 @@ engine_result_t engine_resume(engine_handle_t handle) {
 #if defined(ENGINE_API_USE_ARTEMIS_RUNTIME)
   if (impl->artemis) {
     if (impl->state == ToStateValue(EngineState::kOpened)) {
+      RequestFramePresentLocked(impl);
       ClearHandleErrorLocked(impl);
       SetThreadError(nullptr);
       return ENGINE_RESULT_OK;
@@ -1919,6 +1946,7 @@ engine_result_t engine_resume(engine_handle_t handle) {
     }
     impl->artemis->Resume();
     impl->state = ToStateValue(EngineState::kOpened);
+    RequestFramePresentLocked(impl);
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -1933,6 +1961,7 @@ engine_result_t engine_resume(engine_handle_t handle) {
   }
 
   if (impl->state == ToStateValue(EngineState::kOpened)) {
+    RequestFramePresentLocked(impl);
     ClearHandleErrorLocked(impl);
     SetThreadError(nullptr);
     return ENGINE_RESULT_OK;
@@ -1945,6 +1974,8 @@ engine_result_t engine_resume(engine_handle_t handle) {
 
   Application->OnActivate();
   impl->state = ToStateValue(EngineState::kOpened);
+  RequestFramePresentLocked(impl);
+  spdlog::info("engine_resume: resumed, frame present requested");
   ClearHandleErrorLocked(impl);
   SetThreadError(nullptr);
   return ENGINE_RESULT_OK;
@@ -2111,6 +2142,7 @@ engine_result_t engine_set_surface_size(engine_handle_t handle,
   impl->frame.stride_bytes = 0;
   impl->frame.rgba.clear();
   impl->frame.ready = false;
+  RequestFramePresentLocked(impl);
 
   // Propagate the new surface size to the EGL context and viewport.
   if (g_runtime_active && g_runtime_owner == handle) {
@@ -2271,6 +2303,15 @@ engine_result_t engine_read_frame_rgba(engine_handle_t handle,
     impl->frame.width = layout.width;
     impl->frame.height = layout.height;
     impl->frame.stride_bytes = layout.stride_bytes;
+    // Empty cache (new surface after resume, or set_surface_size).
+    // Read the current GL frame instead of handing back black — the
+    // static-scene gate will not dirty a still title screen on its own.
+    auto& egl = krkr::GetEngineEGLContext();
+    if (required_size > 0 && egl.IsValid() && egl.MakeCurrent() &&
+        ReadCurrentFrameRgba(layout, impl->frame.rgba.data())) {
+      impl->frame.serial += 1;
+      impl->perf.reads += 1;
+    }
     impl->frame.ready = true;
   }
 
