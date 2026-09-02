@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -33,10 +34,14 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GameManager _gameManager = GameManager();
   bool _loading = true;
   String? _iosGamesDir;
+  // OHOS: sandbox path of Download/<bundleName>/games (and its short label
+  // for UI copy). Users drop whole game folders here with the file manager.
+  String? _ohosGamesDir;
+  String? _ohosGamesDirDisplay;
   // On Android/iOS the engine is always built-in; EngineMode switching is
   // only meaningful on desktop platforms.
   EngineMode _engineMode = EngineMode.builtIn;
@@ -92,7 +97,25 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadGames();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from the file manager after copying a game in: pick it up
+    // without making the user pull to refresh.
+    if (state == AppLifecycleState.resumed &&
+        Platform.operatingSystem == 'ohos' &&
+        !_loading) {
+      unawaited(_refreshOhosGames(silent: true));
+    }
   }
 
   Future<void> _loadGames() async {
@@ -127,9 +150,91 @@ class _HomePageState extends State<HomePage> {
 
     if (Platform.isIOS) {
       await _initIosGamesDir();
+    } else if (Platform.operatingSystem == 'ohos') {
+      await _initOhosGamesDir();
+      await _scanOhosGamesDir();
     }
 
     if (mounted) setState(() => _loading = false);
+  }
+
+  /// OHOS: resolve (and on first run create) `Download/<bundleName>/games/`.
+  ///
+  /// The app owns `Download/<bundleName>/` without any permission prompt;
+  /// the native side creates it through a silent DOWNLOAD-mode picker save
+  /// and hands back the sandbox path. Failure leaves [_ohosGamesDir] null
+  /// and the rest of the import flow (hdc side-load, network) still works.
+  Future<void> _initOhosGamesDir() async {
+    if (_ohosGamesDir != null) return;
+    try {
+      final info = await _platformChannel
+          .invokeMapMethod<String, dynamic>('ensurePublicGamesDir');
+      final path = info?['path'] as String?;
+      if (path == null || path.isEmpty) return;
+      _ohosGamesDir = path;
+      _ohosGamesDirDisplay = (info?['display'] as String?) ?? path;
+    } on PlatformException catch (e) {
+      debugPrint('ensurePublicGamesDir failed: ${e.code} ${e.message}');
+    } on MissingPluginException {
+      // Older native plugin without this method.
+    }
+  }
+
+  /// OHOS: register games that appeared under [_ohosGamesDir] and drop
+  /// entries whose folder the user has since deleted. Returns the number of
+  /// newly added games.
+  Future<int> _scanOhosGamesDir() async {
+    final dirPath = _ohosGamesDir;
+    if (dirPath == null) return 0;
+    final root = Directory(dirPath);
+    if (!root.existsSync()) return 0;
+
+    for (final game in List<GameInfo>.of(_gameManager.games)) {
+      if (p.isWithin(dirPath, game.path) &&
+          !Directory(game.path).existsSync() &&
+          !File(game.path).existsSync()) {
+        await _gameManager.removeGame(game.path);
+      }
+    }
+
+    final candidates = <String>{};
+    for (final dir in _scanSandboxForGameDirectories(root)) {
+      candidates.add(dir.path);
+    }
+    for (final file in _scanSandboxForXp3(root)) {
+      candidates.add(file.path);
+    }
+    // A folder is registered as one game; loose archives inside it
+    // (data.xp3 + patch.xp3 ...) are part of that game, not separate ones.
+    final dirs = candidates.where((c) => Directory(c).existsSync()).toSet();
+    candidates.removeWhere(
+      (c) => !dirs.contains(c) && dirs.any((d) => p.isWithin(d, c)),
+    );
+
+    final registered = _gameManager.games.map((g) => g.path).toSet();
+    final fresh = candidates.where((c) => !registered.contains(c)).toList()
+      ..sort();
+    var added = 0;
+    for (final path in fresh) {
+      if (await _gameManager.addGame(GameInfo(path: path))) added++;
+    }
+    return added;
+  }
+
+  /// OHOS: rescan the public games folder. [silent] skips the result toast
+  /// (lifecycle-triggered scans); pull-to-refresh and the menu report back.
+  Future<void> _refreshOhosGames({bool silent = false}) async {
+    await _initOhosGamesDir();
+    final added = await _scanOhosGamesDir();
+    if (!mounted) return;
+    if (added > 0 || !silent) setState(() {});
+    if (silent) return;
+    final l10n = AppLocalizations.of(context)!;
+    UiSnackbar.show(
+      context,
+      message: added > 0 ? l10n.gamesImported(added) : l10n.noNewGamesFound,
+      type: added > 0 ? UiSnackbarType.success : UiSnackbarType.info,
+    );
   }
 
   Future<void> _initIosGamesDir() async {
@@ -228,8 +333,10 @@ class _HomePageState extends State<HomePage> {
         ),
         if (Platform.operatingSystem == 'ohos')
           UiMenuItem(
-            label: l10n.scanSandboxForGames,
-            subtitle: l10n.scanSandboxForGamesDesc,
+            label: l10n.rescanGamesDir,
+            subtitle: l10n.rescanGamesDirDesc(
+              _ohosGamesDirDisplay ?? 'Download/<bundleName>/games',
+            ),
             icon: LucideIcons.scanSearch,
             value: 'sandbox',
           ),
@@ -679,8 +786,15 @@ class _HomePageState extends State<HomePage> {
 
     // A set: the scan of a root and the direct probe of the same root can
     // both surface <root>/data.xp3.
+    // Public games folder first: it is the documented drop location, so
+    // anything new there should surface even if the scan roots below fail.
+    await _initOhosGamesDir();
     final candidates = <String>{};
     final roots = <Directory>[docDir];
+    final publicGames = _ohosGamesDir;
+    if (publicGames != null && Directory(publicGames).existsSync()) {
+      roots.add(Directory(publicGames));
+    }
     for (final root in _ohosExtraScanRoots) {
       if (Directory(root).existsSync()) roots.add(Directory(root));
     }
@@ -704,7 +818,7 @@ class _HomePageState extends State<HomePage> {
     // a directory we already list (an unpacked game beside its data.xp3).
     final dirs = candidates.where((c) => Directory(c).existsSync()).toSet();
     candidates.removeWhere(
-      (c) => !dirs.contains(c) && dirs.contains(p.dirname(c)),
+      (c) => !dirs.contains(c) && dirs.any((d) => p.isWithin(d, c)),
     );
 
     final registered = _gameManager.games.map((g) => g.path).toSet();
@@ -1489,6 +1603,7 @@ class _HomePageState extends State<HomePage> {
           angleBackend: _angleBackend,
           gameOrientation: _gameOrientation,
           restartPending: _restartDeferred,
+          publicGamesDir: _ohosGamesDirDisplay,
         ),
       ),
     );
@@ -1540,69 +1655,70 @@ class _HomePageState extends State<HomePage> {
         !Platform.isIOS &&
         Platform.operatingSystem != 'ohos';
     final topPadding = MediaQuery.of(context).padding.top;
+    // Pull-to-refresh rescans the drop folder (iOS: Documents/Games,
+    // OHOS: Download/<bundleName>/games). Desktop and Android pick games
+    // through a picker, so there is nothing to rescan there.
+    final isOhos = Platform.operatingSystem == 'ohos';
+    final canPullRefresh = isOhos || Platform.isIOS;
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: _loading
-          ? const Center(child: UiLoader())
-          : CustomScrollView(
+    // The title bar stays put; only the library below it scrolls and pulls.
+    final Widget header = Padding(
+      padding: EdgeInsets.only(
+        top: topPadding + 16,
+        left: 20,
+        right: 20,
+        bottom: 8,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              l10n.appTitle,
+              style: context.uiType.headline.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (isDesktop)
+            Tooltip(
+              message: _engineMode == EngineMode.builtIn
+                  ? (_builtInAvailable
+                        ? l10n.builtInReady
+                        : l10n.builtInNotReady)
+                  : (_customDylibPath != null
+                        ? _customDylibPath!.split('/').last
+                        : l10n.customNotSet),
+              child: Icon(
+                _engineMode == EngineMode.builtIn
+                    ? LucideIcons.packageOpen
+                    : LucideIcons.puzzle,
+                color: _engineReady
+                    ? context.uiColors.brand
+                    : context.uiColors.danger,
+                size: 22,
+              ),
+            ),
+          const SizedBox(width: 4),
+          if (!Platform.isIOS)
+            Builder(
+              builder: (btnContext) => UiButton.icon(
+                icon: LucideIcons.plus,
+                onPressed: () {
+                  _addGame(anchor: UiPopupMenu.rectOf(btnContext));
+                },
+              ),
+            ),
+          UiButton.icon(
+            icon: LucideIcons.settings,
+            onPressed: _openSettings,
+          ),
+        ],
+      ),
+    );
+
+    Widget content = CustomScrollView(
               slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.only(
-                    top: topPadding + 16,
-                    left: 20,
-                    right: 20,
-                    bottom: 8,
-                  ),
-                  sliver: SliverToBoxAdapter(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            l10n.appTitle,
-                            style: context.uiType.headline.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (isDesktop)
-                          Tooltip(
-                            message: _engineMode == EngineMode.builtIn
-                                ? (_builtInAvailable
-                                      ? l10n.builtInReady
-                                      : l10n.builtInNotReady)
-                                : (_customDylibPath != null
-                                      ? _customDylibPath!.split('/').last
-                                      : l10n.customNotSet),
-                            child: Icon(
-                              _engineMode == EngineMode.builtIn
-                                  ? LucideIcons.packageOpen
-                                  : LucideIcons.puzzle,
-                              color: _engineReady
-                                  ? context.uiColors.brand
-                                  : context.uiColors.danger,
-                              size: 22,
-                            ),
-                          ),
-                        const SizedBox(width: 4),
-                        if (!Platform.isIOS)
-                          Builder(
-                            builder: (btnContext) => UiButton.icon(
-                              icon: LucideIcons.plus,
-                              onPressed: () {
-                                _addGame(anchor: UiPopupMenu.rectOf(btnContext));
-                              },
-                            ),
-                          ),
-                        UiButton.icon(
-                          icon: LucideIcons.settings,
-                          onPressed: _openSettings,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 if (_restartDeferred)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -1623,6 +1739,34 @@ class _HomePageState extends State<HomePage> {
                 else
                   _buildGameGrid(games, l10n),
                 const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+              ],
+            );
+    if (canPullRefresh) {
+      content = UiPullRefresh(
+        pullingText: l10n.pullToRefresh,
+        readyText: l10n.releaseToRefresh,
+        refreshingText: l10n.refreshing,
+        doneText: l10n.refreshDone,
+        onRefresh: () async {
+          if (isOhos) {
+            await _refreshOhosGames();
+          } else {
+            await _scanIosGamesDir();
+            if (mounted) setState(() {});
+          }
+        },
+        child: content,
+      );
+    }
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      body: _loading
+          ? const Center(child: UiLoader())
+          : Column(
+              children: [
+                header,
+                Expanded(child: content),
               ],
             ),
       floatingActionButton: Platform.isIOS
@@ -1660,12 +1804,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildEmptyState(AppLocalizations l10n) {
+    final String description;
+    if (Platform.isIOS) {
+      description = l10n.noGamesHintIos;
+    } else if (Platform.operatingSystem == 'ohos') {
+      description = l10n.noGamesHintOhos(
+        _ohosGamesDirDisplay ?? 'Download/<bundleName>/games',
+      );
+    } else {
+      description = l10n.noGamesHintDesktop;
+    }
     return UiEmpty(
       icon: LucideIcons.gamepad2,
       title: l10n.noGamesYet,
-      description: Platform.isIOS
-          ? l10n.noGamesHintIos
-          : l10n.noGamesHintDesktop,
+      description: description,
       actionLabel: Platform.isIOS ? l10n.howToImport : l10n.addGame,
       onAction: Platform.isIOS ? _showIosImportGuide : _addGame,
     );
