@@ -158,6 +158,8 @@ public:
     lua_State *state() const { return L_; }
     // KrKr2-Next: engine clock in ms (same base as e:now()).
     double NowMs() const;
+    // KrKr2-Next: fire due setonsoundfinish callbacks (called per frame).
+    void PollSoundFinish();
 
 private:
     static int l_tag(lua_State *L);
@@ -221,6 +223,11 @@ private:
     float drag_off_x_ = 0, drag_off_y_ = 0;
     bool waiting_ = false;                              // click-wait gating
     bool timed_wait_ = false;
+    // KrKr2-Next: [wait se=N] — released when voice N stops (or by input).
+    bool se_wait_ = false;
+    std::string wait_se_key_;
+    // KrKr2-Next: setonsoundfinish {id, function} — fired once the voice ends.
+    std::map<std::string, std::string> onsoundfinish_;
     // A [trans] tag began a transition; the engine has no transition tween,
     // so the transition's own completion wait (wt / trans_flag eqwait) must
     // auto-complete instead of blocking on user input.

@@ -57,3 +57,9 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   upstream "stop pops a frame" heuristic let `*main` run past a pending
   choice (`script.asb *select [stop]`), which is what produced the
   `message.lua:535` / `select.lua:500` errors.
+- `src/audio/audio.{h,cpp}` + `ohos/audio_ohos.cpp` — `Audio::IsPlaying(key)`.
+  `src/script/lua_engine.cpp` — `[wait se=N]` releases when voice N ends,
+  `setonsoundfinish`/`delonsoundfinish` fire their Lua callback once the
+  voice ends (polled per frame), and a bare `[wait]` (time=0, input=0 — the
+  framework's eqwait/trans_flag) waits for the running transition/tween
+  instead of blocking until a tap.

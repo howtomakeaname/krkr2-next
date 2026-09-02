@@ -28,6 +28,9 @@ public:
 
     void Stop(const std::string &key);
     void StopAll();
+    // KrKr2-Next: true while the voice under `key` is still producing audio
+    // (looping voices never finish). Drives [wait se=] and setonsoundfinish.
+    bool IsPlaying(const std::string &key) const;
     void SetVolume(const std::string &key, int vol1000);
     void PauseAll();
     void ResumeAll();

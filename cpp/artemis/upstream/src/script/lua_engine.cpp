@@ -102,6 +102,7 @@ void LuaEngine::EndFrame() {
 }
 
 bool LuaEngine::RunEnterFrame() {
+    PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
     if (it == event_handlers_.end() || it->second.empty()) return false;
     // rate-limit error spam: a broken vsync would otherwise log at frame rate
@@ -410,6 +411,19 @@ int LuaEngine::l_tag(lua_State *L) {
         const auto i0 = m.find("0");
         if (time == 0 && i0 != m.end()) time = std::atoi(i0->second.c_str());
         const std::string in = m["input"];
+        // KrKr2-Next: se=N waits for that voice to end (input may still skip).
+        const std::string se = m["se"];
+        if (!se.empty()) {
+            if (inst->audio_ && inst->audio_->IsPlaying(se)) {
+                inst->wait_se_key_ = se;
+                inst->se_wait_ = true;
+                inst->SetWaiting(true);
+                if (time > 0) inst->SetTimedWait(time);
+            } else if (time > 0) {
+                inst->SetTimedWait(time);
+            }
+            return 0;
+        }
         if (in == "1" || in == "2") {
             if (time > 0) inst->SetTimedWait(time);   // either input or deadline
             else inst->SetWaiting(true);              // pure click wait
@@ -417,8 +431,13 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->SetTimedWait(time);
         } else {
             // input=0, time=0: eqwait normalized by flg.ui (dialog eqwait /
-            // trans_flag) — blocks the runner, released by any tap.
-            inst->SetWaiting(true);
+            // trans_flag). KrKr2-Next: this is "wait for the running
+            // transition/tween" — hold for the pending animation and fall
+            // through when nothing is animating (it used to block until a tap,
+            // which stalled every scene change on a white/black mask).
+            const double pending = inst->compositor_
+                ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
         }
         return 0;
     }
@@ -522,6 +541,16 @@ int LuaEngine::l_tag(lua_State *L) {
             // [wt] waits for running tweens/transitions.
             const double pending = inst->compositor_->PendingAnimationMs(inst->NowMs());
             if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
+            return 0;
+        }
+        if ((tagname == "setonsoundfinish" || tagname == "delonsoundfinish") && inst) {
+            const std::string sid = m["id"];
+            if (!sid.empty()) {
+                if (tagname == "setonsoundfinish" && !m["function"].empty())
+                    inst->onsoundfinish_[sid] = m["function"];
+                else
+                    inst->onsoundfinish_.erase(sid);
+            }
             return 0;
         }
         if ((tagname == "setonpush" || tagname == "delonpush") && inst) {
@@ -1177,6 +1206,7 @@ void LuaEngine::CallEvent(const std::string &fn,
 }
 
 void LuaEngine::SetWaiting(bool w) {
+    if (!w) se_wait_ = false;
     if (waiting_ == w) return;
     waiting_ = w;
     if (!w) timed_wait_ = false;   // manual release also clears any timed wait
@@ -1199,7 +1229,25 @@ bool LuaEngine::IsWaiting() {
         timed_wait_ = false;
         SetWaiting(false);
     }
+    if (se_wait_ && (!audio_ || !audio_->IsPlaying(wait_se_key_))) {
+        se_wait_ = false;
+        SetWaiting(false);
+    }
     return waiting_;
+}
+
+// KrKr2-Next: setonsoundfinish callbacks — the framework registers
+// `sesys_voiceend` etc. after seplay; fire each once its voice has ended.
+void LuaEngine::PollSoundFinish() {
+    if (onsoundfinish_.empty()) return;
+    std::vector<std::pair<std::string, std::string>> due;
+    for (const auto &kv : onsoundfinish_) {
+        if (!audio_ || !audio_->IsPlaying(kv.first)) due.push_back(kv);
+    }
+    for (const auto &kv : due) {
+        onsoundfinish_.erase(kv.first);
+        CallEvent(kv.second, {{"id", kv.first}}, true);
+    }
 }
 
 // [save] persistence: length-prefixed {key,value} pairs in <game>/system.dat.

@@ -653,7 +653,8 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
           " waiting=" + std::to_string(s.lua && s.lua->IsWaiting() ? 1 : 0) +
           " runner=" + std::to_string(s.runner.Loaded() ? 1 : 0) +
           (s.runner.Halted() ? " halted" : "") +
-          " rev=" + std::to_string(s.compositor.Revision()));
+          " rev=" + std::to_string(s.compositor.Revision()) +
+          " draw: " + s.compositor.DescribeDrawList(24));
   }
   return TickStatus::kOk;
 }

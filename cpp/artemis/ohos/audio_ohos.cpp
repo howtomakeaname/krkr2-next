@@ -197,6 +197,13 @@ void Audio::Stop(const std::string &key) {
     impl_->voices.erase(it);
 }
 
+bool Audio::IsPlaying(const std::string &key) const {
+    std::lock_guard<std::mutex> lk(impl_->mutex);
+    auto it = impl_->voices.find(key);
+    if (it == impl_->voices.end() || !it->second) return false;
+    return it->second->loop || !it->second->finished.load();
+}
+
 void Audio::StopAll() {
     std::lock_guard<std::mutex> lk(impl_->mutex);
     for (auto &kv : impl_->voices) DestroyVoice(kv.second);

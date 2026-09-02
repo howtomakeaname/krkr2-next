@@ -351,6 +351,31 @@ double Compositor::PendingAnimationMs(double now_ms) const {
     return remain < 0 ? 0 : remain;
 }
 
+std::string Compositor::DescribeDrawList(size_t max_layers) const {
+    std::vector<const Layer *> sorted;
+    for (const auto &l : layers_) sorted.push_back(&l);
+    std::stable_sort(sorted.begin(), sorted.end(), [](const Layer *a, const Layer *b) {
+        const int c = ZCmp(a->id, b->id);
+        if (c != 0) return c < 0;
+        return SectionCount(a->id) < SectionCount(b->id);
+    });
+    std::string out = "layers=" + std::to_string(layers_.size()) +
+                      " tweens=" + std::to_string(tweens_.size()) +
+                      " trans=" + std::to_string(trans_active_ ? 1 : 0) + " |";
+    size_t n = 0;
+    for (const Layer *l : sorted) {
+        float ex, ey, ew, eh, ea; bool ev;
+        EffectiveRect(*l, &ex, &ey, &ew, &eh, &ea, &ev);
+        if (!ev || !l->texture) continue;
+        if (n++ >= max_layers) { out += " ..."; break; }
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), " %s(%d,%d %dx%d a=%.2f)", l->id.c_str(), (int)ex, (int)ey,
+                      (int)ew, (int)eh, ea);
+        out += buf;
+    }
+    return out;
+}
+
 std::vector<std::string> Compositor::HitLayers(float x, float y) const {
     std::vector<const Layer *> hits;
     for (const auto &l : layers_) {

@@ -109,6 +109,10 @@ public:
 
     // KrKr2-Next: read-only view of the layer table (tests / diagnostics).
     const std::vector<Layer> &Layers() const { return layers_; }
+    // KrKr2-Next: one-line summary of the draw list in z order (topmost
+    // last): id(x,y wxh a=alpha) for textured visible layers, plus the
+    // animation state. Used by the host's periodic diagnostics.
+    std::string DescribeDrawList(size_t max_layers) const;
 
     // KrKr2-Next host hook: monotonically increasing layer-state revision.
     // Bumped by every mutation (LoadImage / SetProps / DeleteLayer / SetText /

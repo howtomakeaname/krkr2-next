@@ -38,6 +38,7 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
 }
 void Audio::Stop(const std::string &) {}
 void Audio::StopAll() {}
+bool Audio::IsPlaying(const std::string &) const { return false; }
 void Audio::SetVolume(const std::string &, int) {}
 void Audio::PauseAll() {}
 void Audio::ResumeAll() {}
@@ -189,6 +190,18 @@ void Audio::Stop(const std::string &key) {
     if (it->second.obj) { (*it->second.obj)->Destroy(it->second.obj); }
     if (it->second.pcm) free(it->second.pcm);
     impl_->voices.erase(it);
+}
+bool Audio::IsPlaying(const std::string &key) const {
+    auto it = impl_->voices.find(key);
+    if (it == impl_->voices.end() || !it->second.play) return false;
+    if (it->second.loop) return true;
+    SLuint32 state = SL_PLAYSTATE_STOPPED;
+    (*it->second.play)->GetPlayState(it->second.play, &state);
+    if (state != SL_PLAYSTATE_PLAYING) return false;
+    SLmillisecond pos = 0, dur = 0;
+    (*it->second.play)->GetPosition(it->second.play, &pos);
+    (*it->second.play)->GetDuration(it->second.play, &dur);
+    return dur == SL_TIME_UNKNOWN || pos < dur;
 }
 void Audio::StopAll() {
     for (auto &kv : impl_->voices) {
