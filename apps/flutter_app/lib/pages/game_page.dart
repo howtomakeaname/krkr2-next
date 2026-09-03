@@ -1237,7 +1237,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     setState(() => _showOverlay = false);
     switch (action) {
       case _GameMenuAction.debug:
-        _toggleDebug();
+        unawaited(_toggleDebug());
         break;
       case _GameMenuAction.pause:
         unawaited(_togglePause());
@@ -1264,8 +1264,28 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     _log('User resumed');
   }
 
-  void _toggleDebug() {
-    setState(() => _showDebug = !_showDebug);
+  Future<void> _toggleDebug() async {
+    if (_showDebug) {
+      await Navigator.of(context).maybePop();
+      return;
+    }
+
+    setState(() => _showDebug = true);
+    await UiBottomSheet.show<void>(
+      context,
+      title: 'Debug Log',
+      showCloseButton: true,
+      child: _GameDebugSheetContent(
+        phase: () => _phase.name,
+        tickCount: () => _tickCount,
+        ticking: () => _isTicking,
+        logs: () => _logs,
+        onClear: _logs.clear,
+      ),
+    );
+    if (mounted) {
+      setState(() => _showDebug = false);
+    }
   }
 
   Future<void> _parkRuntime() async {
@@ -1369,9 +1389,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
                 ),
               ),
-
-            // Debug panel
-            _buildDebugPanel(),
           ],
         ),
       ),
@@ -1712,210 +1729,149 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       ),
     );
   }
+}
 
-  Widget _buildDebugPanel() {
-    final l10n = AppLocalizations.of(context)!;
-    const labelStyle = TextStyle(
-      color: Color(0xFF8E8E93),
-      fontSize: 10,
-      fontFamily: 'monospace',
-      fontWeight: FontWeight.w500,
-      letterSpacing: 0.5,
-      height: 1.3,
-      decoration: TextDecoration.none,
-    );
-    const valueStyle = TextStyle(
-      color: Color(0xFFD1D1D6),
-      fontSize: 10,
-      fontFamily: 'monospace',
-      fontWeight: FontWeight.w600,
-      fontFeatures: [FontFeature.tabularFigures()],
-      letterSpacing: 0.2,
-      height: 1.3,
-      decoration: TextDecoration.none,
-    );
+enum _GameMenuAction { debug, pause, rotate, exit }
+
+class _GameDebugSheetContent extends StatefulWidget {
+  const _GameDebugSheetContent({
+    required this.phase,
+    required this.tickCount,
+    required this.ticking,
+    required this.logs,
+    required this.onClear,
+  });
+
+  final ValueGetter<String> phase;
+  final ValueGetter<int> tickCount;
+  final ValueGetter<bool> ticking;
+  final ValueGetter<List<String>> logs;
+  final VoidCallback onClear;
+
+  @override
+  State<_GameDebugSheetContent> createState() => _GameDebugSheetContentState();
+}
+
+class _GameDebugSheetContentState extends State<_GameDebugSheetContent> {
+  late final Timer _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+    final logs = List<String>.of(widget.logs());
+    final height = (MediaQuery.sizeOf(context).height * 0.22)
+        .clamp(176.0, 230.0)
+        .toDouble();
 
     Widget metric(String label, String value) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: labelStyle),
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.5,
+              height: 1.3,
+            ),
+          ),
           const SizedBox(width: 5),
-          Text(value, style: valueStyle),
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: 0.2,
+              height: 1.3,
+            ),
+          ),
         ],
       );
     }
 
-    final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 220 + bottomPadding,
-      child: IgnorePointer(
-        ignoring: !_showDebug,
-        child: AnimatedSlide(
-          offset: _showDebug ? Offset.zero : const Offset(0, 1.05),
-          duration: UiDuration.base,
-          curve: UiCurves.iosStandard,
-          child: AnimatedOpacity(
-            opacity: _showDebug ? 1 : 0,
-            duration: UiDuration.fast,
-            curve: UiCurves.iosSmooth,
-            child: RepaintBoundary(
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: const BoxDecoration(
-                    color: Color(0xF21C1C1E),
-                    borderRadius: BorderRadius.vertical(top: UiRadius.lg),
-                    border: Border(
-                      top: BorderSide(color: Color(0x2EFFFFFF), width: 0.5),
-                    ),
-                  ),
-                  padding: EdgeInsets.only(bottom: bottomPadding),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 10, 9),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  'DEBUG LOG',
-                                  style: TextStyle(
-                                    color: Color(0xFFF2F2F7),
-                                    fontSize: 11,
-                                    fontFamily: 'monospace',
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.8,
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => setState(() => _logs.clear()),
-                                  child: const SizedBox(
-                                    height: 44,
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'CLEAR',
-                                          style: TextStyle(
-                                            color: Color(0xFF8E8E93),
-                                            fontSize: 10,
-                                            fontFamily: 'monospace',
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.5,
-                                            decoration: TextDecoration.none,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Semantics(
-                                  button: true,
-                                  label: l10n.hideDebug,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: _toggleDebug,
-                                    child: SizedBox(
-                                      width: 44,
-                                      height: 44,
-                                      child: Center(
-                                        child: Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0x14FFFFFF),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: const UiIcon(
-                                            UiIcons.close,
-                                            color: Color(0xFFAEAEB2),
-                                            size: 15,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Wrap(
-                              spacing: 16,
-                              runSpacing: 4,
-                              children: [
-                                metric('PHASE', _phase.name),
-                                metric('TICKS', '$_tickCount'),
-                                metric(
-                                  'STATE',
-                                  _isTicking ? 'running' : 'paused',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(
-                        height: 0.5,
-                        thickness: 0.5,
-                        color: Color(0x24FFFFFF),
-                      ),
-                      Expanded(
-                        child: _logs.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No log entries',
-                                  style: TextStyle(
-                                    color: Color(0xFF636366),
-                                    fontSize: 11,
-                                    fontFamily: 'monospace',
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                itemCount: _logs.length,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                itemBuilder: (context, index) => Text(
-                                  _logs[index],
-                                  style: const TextStyle(
-                                    color: Color(0xFFA1A1A6),
-                                    fontSize: 10.5,
-                                    fontFamily: 'monospace',
-                                    height: 1.35,
-                                    decoration: TextDecoration.none,
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
+    return SizedBox(
+      height: height,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 4,
+                  children: [
+                    metric('PHASE', widget.phase()),
+                    metric('TICKS', '${widget.tickCount()}'),
+                    metric('STATE', widget.ticking() ? 'running' : 'paused'),
+                  ],
                 ),
               ),
-            ),
+              UiButton(
+                label: 'Clear',
+                size: UiButtonSize.small,
+                variant: UiButtonVariant.ghost,
+                enableHaptic: false,
+                onPressed: () {
+                  widget.onClear();
+                  setState(() {});
+                },
+              ),
+            ],
           ),
-        ),
+          const SizedBox(height: UiSpacing.sm),
+          Divider(height: 0.5, thickness: 0.5, color: colors.separator),
+          const SizedBox(height: UiSpacing.sm),
+          Expanded(
+            child: logs.isEmpty
+                ? Center(
+                    child: Text(
+                      'No log entries',
+                      style: TextStyle(
+                        color: colors.textTertiary,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: logs.length,
+                    itemBuilder: (context, index) => Text(
+                      logs[index],
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 10.5,
+                        fontFamily: 'monospace',
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
 }
-
-enum _GameMenuAction { debug, pause, rotate, exit }
 
 class _GameControls extends StatefulWidget {
   const _GameControls({
@@ -1955,13 +1911,38 @@ class _GameControls extends StatefulWidget {
 class _GameControlsState extends State<_GameControls>
     with SingleTickerProviderStateMixin {
   static const double _collapsedSize = 44;
-  static const double _expandedWidth = 188;
-  static const double _expandedHeight = 106;
+  static const double _expandedWidth = 184;
+  static const double _expandedHeight = 104;
+  static const Curve _debugReveal = Interval(
+    0.14,
+    0.60,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _pauseReveal = Interval(
+    0.20,
+    0.66,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _rotateReveal = Interval(
+    0.26,
+    0.72,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _exitReveal = Interval(
+    0.32,
+    0.84,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _dividerReveal = Interval(
+    0.22,
+    0.60,
+    curve: Curves.easeOutCubic,
+  );
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: UiDuration.slow,
-    reverseDuration: UiDuration.base,
+    duration: UiDuration.page,
+    reverseDuration: const Duration(milliseconds: 280),
     value: widget.expanded ? 1 : 0,
   );
 
@@ -1990,23 +1971,24 @@ class _GameControlsState extends State<_GameControls>
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          final progress = reduceMotion
+          final rawProgress = reduceMotion
               ? (widget.expanded ? 1.0 : 0.0)
-              : CurvedAnimation(
-                  parent: _controller,
-                  curve: UiCurves.iosStandard,
-                  reverseCurve: UiCurves.iosSmooth,
-                ).value;
-          final reveal = ((progress - 0.2) / 0.8).clamp(0.0, 1.0);
-          final width = Tween<double>(
-            begin: _collapsedSize,
-            end: _expandedWidth,
-          ).transform(progress);
-          final height = Tween<double>(
-            begin: _collapsedSize,
-            end: _expandedHeight,
-          ).transform(progress);
-          final radius = Tween<double>(begin: 22, end: 24).transform(progress);
+              : _controller.value;
+          final geometryProgress =
+              (_controller.status == AnimationStatus.reverse
+                      ? UiCurves.iosSmooth
+                      : UiCurves.iosStandard)
+                  .transform(rawProgress);
+          final expandedWidth = widget.showRotate ? _expandedWidth : 140.0;
+          final width =
+              _collapsedSize +
+              ((expandedWidth - _collapsedSize) * geometryProgress);
+          final height =
+              _collapsedSize +
+              ((_expandedHeight - _collapsedSize) * geometryProgress);
+          final target = widget.expanded ? 1.0 : 0.0;
+          double reveal(Curve curve) =>
+              reduceMotion ? target : curve.transform(rawProgress);
 
           return Semantics(
             container: true,
@@ -2016,7 +1998,7 @@ class _GameControlsState extends State<_GameControls>
               height: height,
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
+                borderRadius: BorderRadius.circular(22),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -2024,12 +2006,12 @@ class _GameControlsState extends State<_GameControls>
                     Color.lerp(
                       const Color(0xD13A3A3C),
                       const Color(0xEB3A3A3C),
-                      progress,
+                      geometryProgress,
                     )!,
                     Color.lerp(
                       const Color(0xE628282A),
                       const Color(0xF22C2C2E),
-                      progress,
+                      geometryProgress,
                     )!,
                   ],
                 ),
@@ -2037,7 +2019,7 @@ class _GameControlsState extends State<_GameControls>
                   color: Color.lerp(
                     const Color(0x30FFFFFF),
                     const Color(0x3DFFFFFF),
-                    progress,
+                    geometryProgress,
                   )!,
                   width: 0.5,
                 ),
@@ -2046,10 +2028,10 @@ class _GameControlsState extends State<_GameControls>
                     color: Color.lerp(
                       const Color(0x38000000),
                       const Color(0x52000000),
-                      progress,
+                      geometryProgress,
                     )!,
-                    blurRadius: 10 + (8 * progress),
-                    offset: Offset(0, 3 + (3 * progress)),
+                    blurRadius: 10 + (8 * geometryProgress),
+                    offset: Offset(0, 3 + (3 * geometryProgress)),
                   ),
                 ],
               ),
@@ -2065,82 +2047,97 @@ class _GameControlsState extends State<_GameControls>
                       color: Color.lerp(
                         const Color(0x24FFFFFF),
                         const Color(0x47FFFFFF),
-                        progress,
+                        geometryProgress,
                       )!,
                     ),
                   ),
                   IgnorePointer(
                     ignoring: !widget.expanded,
-                    child: Opacity(
-                      opacity: reveal,
-                      child: Transform.scale(
-                        scale: 0.96 + (0.04 * reveal),
-                        alignment: Alignment.topRight,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: 4,
-                              right: _collapsedSize,
-                              top: 0,
-                              height: _collapsedSize,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  _GlassIconAction(
-                                    icon: LucideIcons.bug,
-                                    label: widget.showDebugLabel,
-                                    selected: widget.debugVisible,
-                                    onTap: widget.onDebug,
-                                  ),
-                                  _GlassIconAction(
-                                    icon: widget.ticking
-                                        ? LucideIcons.pause
-                                        : LucideIcons.play,
-                                    label: widget.pauseLabel,
-                                    onTap: widget.onPause,
-                                  ),
-                                  if (widget.showRotate)
-                                    _GlassIconAction(
-                                      icon: LucideIcons.rotateCw,
-                                      label: widget.rotateLabel,
-                                      onTap: widget.onRotate,
-                                    ),
-                                ],
-                              ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 4,
+                          top: 4,
+                          width: _collapsedSize,
+                          height: _collapsedSize,
+                          child: _ControlReveal(
+                            progress: reveal(_debugReveal),
+                            child: _GlassIconAction(
+                              icon: LucideIcons.bug,
+                              label: widget.showDebugLabel,
+                              selected: widget.debugVisible,
+                              onTap: widget.onDebug,
                             ),
-                            const Positioned(
-                              left: 12,
-                              right: 12,
-                              top: 51.5,
-                              child: Divider(
-                                height: 0.5,
-                                thickness: 0.5,
-                                color: Color(0x24FFFFFF),
-                              ),
-                            ),
-                            Positioned(
-                              left: 4,
-                              right: 4,
-                              top: 52,
-                              height: 50,
-                              child: _GlassExitAction(
-                                label: widget.exitLabel,
-                                onTap: widget.onExit,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          left: 48,
+                          top: 4,
+                          width: _collapsedSize,
+                          height: _collapsedSize,
+                          child: _ControlReveal(
+                            progress: reveal(_pauseReveal),
+                            child: _GlassIconAction(
+                              icon: widget.ticking
+                                  ? LucideIcons.pause
+                                  : LucideIcons.play,
+                              label: widget.pauseLabel,
+                              onTap: widget.onPause,
+                            ),
+                          ),
+                        ),
+                        if (widget.showRotate)
+                          Positioned(
+                            left: 92,
+                            top: 4,
+                            width: _collapsedSize,
+                            height: _collapsedSize,
+                            child: _ControlReveal(
+                              progress: reveal(_rotateReveal),
+                              child: _GlassIconAction(
+                                icon: LucideIcons.rotateCw,
+                                label: widget.rotateLabel,
+                                onTap: widget.onRotate,
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          top: 52,
+                          child: Opacity(
+                            opacity: reveal(_dividerReveal).clamp(0.0, 1.0),
+                            child: const Divider(
+                              height: 0.5,
+                              thickness: 0.5,
+                              color: Color(0x24FFFFFF),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 4,
+                          right: 4,
+                          top: 56,
+                          height: 44,
+                          child: _ControlReveal(
+                            progress: reveal(_exitReveal),
+                            verticalOffset: 5,
+                            child: _GlassExitAction(
+                              label: widget.exitLabel,
+                              onTap: widget.onExit,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Positioned(
-                    right: 0,
-                    top: 0,
+                    right: 4 * geometryProgress,
+                    top: 4 * geometryProgress,
                     width: _collapsedSize,
                     height: _collapsedSize,
                     child: _MorphingMenuButton(
-                      progress: progress,
+                      progress: rawProgress,
                       expanded: widget.expanded,
                       onTap: widget.onToggle,
                     ),
@@ -2150,6 +2147,30 @@ class _GameControlsState extends State<_GameControls>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ControlReveal extends StatelessWidget {
+  const _ControlReveal({
+    required this.progress,
+    required this.child,
+    this.verticalOffset = 7,
+  });
+
+  final double progress;
+  final double verticalOffset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibility = progress.clamp(0.0, 1.0);
+    return Opacity(
+      opacity: visibility,
+      child: Transform.translate(
+        offset: Offset(0, verticalOffset * (1 - progress)),
+        child: Transform.scale(scale: 0.88 + (0.12 * progress), child: child),
       ),
     );
   }
@@ -2193,7 +2214,7 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
           widget.onTap();
         },
         child: AnimatedScale(
-          scale: _pressed ? 0.86 : 1,
+          scale: _pressed ? 0.90 : 1,
           duration: UiDuration.fast,
           curve: UiCurves.iosSnappy,
           child: Stack(
@@ -2285,7 +2306,7 @@ class _GlassIconActionState extends State<_GlassIconAction> {
           height: 44,
           child: Center(
             child: AnimatedScale(
-              scale: _pressed ? 0.84 : 1,
+              scale: _pressed ? 0.90 : 1,
               duration: UiDuration.fast,
               curve: UiCurves.iosSnappy,
               child: AnimatedContainer(
