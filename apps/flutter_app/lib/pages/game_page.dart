@@ -1114,7 +1114,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         : PrefsKeys.gameOrientationPortrait;
     setState(() {
       _orientation = next;
-      _showOverlay = false;
     });
     _log('Orientation → $next');
     unawaited(_applyOrientation());
@@ -1234,6 +1233,37 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     setState(() => _showOverlay = !_showOverlay);
   }
 
+  void _selectGameMenuAction(_GameMenuAction action) {
+    setState(() => _showOverlay = false);
+    switch (action) {
+      case _GameMenuAction.debug:
+        _toggleDebug();
+        break;
+      case _GameMenuAction.pause:
+        unawaited(_togglePause());
+        break;
+      case _GameMenuAction.rotate:
+        _toggleOrientation();
+        break;
+      case _GameMenuAction.exit:
+        unawaited(_exitGame());
+        break;
+    }
+  }
+
+  Future<void> _togglePause() async {
+    if (_isTicking) {
+      _stopTickLoop();
+      await _bridge.enginePause();
+      _log('User paused');
+      return;
+    }
+    await _bridge.engineResume();
+    _forcePresentFrames = 8;
+    _startTickLoop();
+    _log('User resumed');
+  }
+
   void _toggleDebug() {
     setState(() => _showDebug = !_showDebug);
   }
@@ -1266,6 +1296,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bool surfaceActive = _phase == _EnginePhase.running;
+    final l10n = AppLocalizations.of(context)!;
 
     return PopScope(
       canPop: false,
@@ -1300,40 +1331,47 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               EnginePerformanceOverlay(
                 key: _perfOverlayKey0,
                 rendererInfo: _rendererInfo,
+                engineName: _engine.label,
+                pacingMode: _fpsLimitEnabled
+                    ? 'Cap $_targetFps FPS'
+                    : Platform.operatingSystem == 'ohos'
+                    ? 'DisplaySync'
+                    : 'VSync',
+                hidden: _showOverlay,
               ),
 
-            // Floating menu button (top-right) — only while the game is up.
-            if (_phase == _EnginePhase.running)
-              Positioned(
-                right: 16,
-                top: MediaQuery.of(context).padding.top + 8,
-                child: AnimatedOpacity(
-                  opacity: _showOverlay ? 1.0 : 0.6,
-                  duration: const Duration(milliseconds: 200),
-                  child: Material(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: _toggleOverlay,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Icon(
-                          _showOverlay ? LucideIcons.x : LucideIcons.menu,
-                          color: Colors.white70,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
+            if (_showOverlay && _phase == _EnginePhase.running)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleOverlay,
                 ),
               ),
 
-            // Overlay controls
-            if (_showOverlay && _phase == _EnginePhase.running) _buildOverlay(),
+            // Floating game controls — only while the game is up.
+            if (_phase == _EnginePhase.running)
+              Positioned(
+                right: 16,
+                top: MediaQuery.paddingOf(context).top + 8,
+                child: _GameControls(
+                  expanded: _showOverlay,
+                  debugVisible: _showDebug,
+                  ticking: _isTicking,
+                  showRotate: PrefsKeys.orientationSupported,
+                  showDebugLabel: _showDebug ? l10n.hideDebug : l10n.showDebug,
+                  pauseLabel: _isTicking ? l10n.pause : l10n.resume,
+                  rotateLabel: l10n.rotateScreen,
+                  exitLabel: l10n.exitGame,
+                  onToggle: _toggleOverlay,
+                  onDebug: () => _selectGameMenuAction(_GameMenuAction.debug),
+                  onPause: () => _selectGameMenuAction(_GameMenuAction.pause),
+                  onRotate: () => _selectGameMenuAction(_GameMenuAction.rotate),
+                  onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
+                ),
+              ),
 
             // Debug panel
-            if (_showDebug) _buildDebugPanel(),
+            _buildDebugPanel(),
           ],
         ),
       ),
@@ -1675,164 +1713,680 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildOverlay() {
-    final colors = context.uiColors;
+  Widget _buildDebugPanel() {
     final l10n = AppLocalizations.of(context)!;
+    const labelStyle = TextStyle(
+      color: Color(0xFF8E8E93),
+      fontSize: 10,
+      fontFamily: 'monospace',
+      fontWeight: FontWeight.w500,
+      letterSpacing: 0.5,
+      height: 1.3,
+      decoration: TextDecoration.none,
+    );
+    const valueStyle = TextStyle(
+      color: Color(0xFFD1D1D6),
+      fontSize: 10,
+      fontFamily: 'monospace',
+      fontWeight: FontWeight.w600,
+      fontFeatures: [FontFeature.tabularFigures()],
+      letterSpacing: 0.2,
+      height: 1.3,
+      decoration: TextDecoration.none,
+    );
+
+    Widget metric(String label, String value) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: labelStyle),
+          const SizedBox(width: 5),
+          Text(value, style: valueStyle),
+        ],
+      );
+    }
+
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
     return Positioned(
-      right: 16,
-      top: MediaQuery.of(context).padding.top + 52,
-      child: Material(
-        color: colors.surfaceElevated,
-        borderRadius: UiRadius.brLg,
-        elevation: 8,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
-          child: IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _overlayItem(
-                  icon: LucideIcons.bug,
-                  label: _showDebug ? l10n.hideDebug : l10n.showDebug,
-                  onTap: _toggleDebug,
-                ),
-                _overlayItem(
-                  icon: LucideIcons.pause,
-                  label: _isTicking ? l10n.pause : l10n.resume,
-                  onTap: () async {
-                    if (_isTicking) {
-                      _stopTickLoop();
-                      await _bridge.enginePause();
-                      _log('User paused');
-                    } else {
-                      await _bridge.engineResume();
-                      _forcePresentFrames = 8;
-                      _startTickLoop();
-                      _log('User resumed');
-                    }
-                    setState(() => _showOverlay = false);
-                  },
-                ),
-                if (PrefsKeys.orientationSupported)
-                  _overlayItem(
-                    icon: _orientation == PrefsKeys.gameOrientationPortrait
-                        ? LucideIcons.rectangleHorizontal
-                        : LucideIcons.rectangleVertical,
-                    label: l10n.rotateScreen,
-                    onTap: _toggleOrientation,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 220 + bottomPadding,
+      child: IgnorePointer(
+        ignoring: !_showDebug,
+        child: AnimatedSlide(
+          offset: _showDebug ? Offset.zero : const Offset(0, 1.05),
+          duration: UiDuration.base,
+          curve: UiCurves.iosStandard,
+          child: AnimatedOpacity(
+            opacity: _showDebug ? 1 : 0,
+            duration: UiDuration.fast,
+            curve: UiCurves.iosSmooth,
+            child: RepaintBoundary(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: const BoxDecoration(
+                    color: Color(0xF21C1C1E),
+                    borderRadius: BorderRadius.vertical(top: UiRadius.lg),
+                    border: Border(
+                      top: BorderSide(color: Color(0x2EFFFFFF), width: 0.5),
+                    ),
                   ),
-                Divider(color: colors.separator, height: 1),
-                _overlayItem(
-                  icon: LucideIcons.logOut,
-                  label: l10n.exitGame,
-                  onTap: _exitGame,
-                  destructive: true,
+                  padding: EdgeInsets.only(bottom: bottomPadding),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 10, 9),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  'DEBUG LOG',
+                                  style: TextStyle(
+                                    color: Color(0xFFF2F2F7),
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.8,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setState(() => _logs.clear()),
+                                  child: const SizedBox(
+                                    height: 44,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          'CLEAR',
+                                          style: TextStyle(
+                                            color: Color(0xFF8E8E93),
+                                            fontSize: 10,
+                                            fontFamily: 'monospace',
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.5,
+                                            decoration: TextDecoration.none,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Semantics(
+                                  button: true,
+                                  label: l10n.hideDebug,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: _toggleDebug,
+                                    child: SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: Center(
+                                        child: Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0x14FFFFFF),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: const UiIcon(
+                                            UiIcons.close,
+                                            color: Color(0xFFAEAEB2),
+                                            size: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Wrap(
+                              spacing: 16,
+                              runSpacing: 4,
+                              children: [
+                                metric('PHASE', _phase.name),
+                                metric('TICKS', '$_tickCount'),
+                                metric(
+                                  'STATE',
+                                  _isTicking ? 'running' : 'paused',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(
+                        height: 0.5,
+                        thickness: 0.5,
+                        color: Color(0x24FFFFFF),
+                      ),
+                      Expanded(
+                        child: _logs.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'No log entries',
+                                  style: TextStyle(
+                                    color: Color(0xFF636366),
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: _logs.length,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                itemBuilder: (context, index) => Text(
+                                  _logs[index],
+                                  style: const TextStyle(
+                                    color: Color(0xFFA1A1A6),
+                                    fontSize: 10.5,
+                                    fontFamily: 'monospace',
+                                    height: 1.35,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _overlayItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool destructive = false,
-  }) {
-    final color = destructive
-        ? context.uiColors.danger
-        : context.uiColors.textPrimary;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 12),
-            Text(label, style: TextStyle(color: color, fontSize: 14)),
-          ],
-        ),
-      ),
-    );
+enum _GameMenuAction { debug, pause, rotate, exit }
+
+class _GameControls extends StatefulWidget {
+  const _GameControls({
+    required this.expanded,
+    required this.debugVisible,
+    required this.ticking,
+    required this.showRotate,
+    required this.showDebugLabel,
+    required this.pauseLabel,
+    required this.rotateLabel,
+    required this.exitLabel,
+    required this.onToggle,
+    required this.onDebug,
+    required this.onPause,
+    required this.onRotate,
+    required this.onExit,
+  });
+
+  final bool expanded;
+  final bool debugVisible;
+  final bool ticking;
+  final bool showRotate;
+  final String showDebugLabel;
+  final String pauseLabel;
+  final String rotateLabel;
+  final String exitLabel;
+  final VoidCallback onToggle;
+  final VoidCallback onDebug;
+  final VoidCallback onPause;
+  final VoidCallback onRotate;
+  final VoidCallback onExit;
+
+  @override
+  State<_GameControls> createState() => _GameControlsState();
+}
+
+class _GameControlsState extends State<_GameControls>
+    with SingleTickerProviderStateMixin {
+  static const double _collapsedSize = 44;
+  static const double _expandedWidth = 188;
+  static const double _expandedHeight = 106;
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: UiDuration.slow,
+    reverseDuration: UiDuration.base,
+    value: widget.expanded ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(covariant _GameControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.expanded == oldWidget.expanded) return;
+    if (widget.expanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
   }
 
-  Widget _buildDebugPanel() {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 200,
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.85),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: Colors.white10,
-              child: Row(
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final progress = reduceMotion
+              ? (widget.expanded ? 1.0 : 0.0)
+              : CurvedAnimation(
+                  parent: _controller,
+                  curve: UiCurves.iosStandard,
+                  reverseCurve: UiCurves.iosSmooth,
+                ).value;
+          final reveal = ((progress - 0.2) / 0.8).clamp(0.0, 1.0);
+          final width = Tween<double>(
+            begin: _collapsedSize,
+            end: _expandedWidth,
+          ).transform(progress);
+          final height = Tween<double>(
+            begin: _collapsedSize,
+            end: _expandedHeight,
+          ).transform(progress);
+          final radius = Tween<double>(begin: 22, end: 24).transform(progress);
+
+          return Semantics(
+            container: true,
+            label: 'Game controls',
+            child: Container(
+              width: width,
+              height: height,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(
+                      const Color(0xD13A3A3C),
+                      const Color(0xEB3A3A3C),
+                      progress,
+                    )!,
+                    Color.lerp(
+                      const Color(0xE628282A),
+                      const Color(0xF22C2C2E),
+                      progress,
+                    )!,
+                  ],
+                ),
+                border: Border.all(
+                  color: Color.lerp(
+                    const Color(0x30FFFFFF),
+                    const Color(0x3DFFFFFF),
+                    progress,
+                  )!,
+                  width: 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color.lerp(
+                      const Color(0x38000000),
+                      const Color(0x52000000),
+                      progress,
+                    )!,
+                    blurRadius: 10 + (8 * progress),
+                    offset: Offset(0, 3 + (3 * progress)),
+                  ),
+                ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Text(
-                    'Debug  |  Phase: ${_phase.name}  |  '
-                    'Ticks: $_tickCount  |  '
-                    'Ticking: $_isTicking',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    top: 0,
+                    height: 0.5,
+                    child: ColoredBox(
+                      color: Color.lerp(
+                        const Color(0x24FFFFFF),
+                        const Color(0x47FFFFFF),
+                        progress,
+                      )!,
                     ),
                   ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _logs.clear()),
-                    child: const Text(
-                      'Clear',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                  IgnorePointer(
+                    ignoring: !widget.expanded,
+                    child: Opacity(
+                      opacity: reveal,
+                      child: Transform.scale(
+                        scale: 0.96 + (0.04 * reveal),
+                        alignment: Alignment.topRight,
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: 4,
+                              right: _collapsedSize,
+                              top: 0,
+                              height: _collapsedSize,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _GlassIconAction(
+                                    icon: LucideIcons.bug,
+                                    label: widget.showDebugLabel,
+                                    selected: widget.debugVisible,
+                                    onTap: widget.onDebug,
+                                  ),
+                                  _GlassIconAction(
+                                    icon: widget.ticking
+                                        ? LucideIcons.pause
+                                        : LucideIcons.play,
+                                    label: widget.pauseLabel,
+                                    onTap: widget.onPause,
+                                  ),
+                                  if (widget.showRotate)
+                                    _GlassIconAction(
+                                      icon: LucideIcons.rotateCw,
+                                      label: widget.rotateLabel,
+                                      onTap: widget.onRotate,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const Positioned(
+                              left: 12,
+                              right: 12,
+                              top: 51.5,
+                              child: Divider(
+                                height: 0.5,
+                                thickness: 0.5,
+                                color: Color(0x24FFFFFF),
+                              ),
+                            ),
+                            Positioned(
+                              left: 4,
+                              right: 4,
+                              top: 52,
+                              height: 50,
+                              child: _GlassExitAction(
+                                label: widget.exitLabel,
+                                onTap: widget.onExit,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _toggleDebug,
-                    child: const Icon(
-                      LucideIcons.x,
-                      color: Colors.white54,
-                      size: 16,
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    width: _collapsedSize,
+                    height: _collapsedSize,
+                    child: _MorphingMenuButton(
+                      progress: progress,
+                      expanded: widget.expanded,
+                      onTap: widget.onToggle,
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: _logs.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No logs',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _logs.length,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      itemBuilder: (context, index) => Text(
-                        _logs[index],
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MorphingMenuButton extends StatefulWidget {
+  const _MorphingMenuButton({
+    required this.progress,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final double progress;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  State<_MorphingMenuButton> createState() => _MorphingMenuButtonState();
+}
+
+class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.expanded ? 'Close game controls' : 'Open game controls',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed ? 0.86 : 1,
+          duration: UiDuration.fast,
+          curve: UiCurves.iosSnappy,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedOpacity(
+                opacity: _pressed ? 1 : 0,
+                duration: UiDuration.fast,
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0x24FFFFFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox.expand(),
+                ),
+              ),
+              Opacity(
+                opacity: (1 - widget.progress).clamp(0.0, 1.0),
+                child: Transform.rotate(
+                  angle: widget.progress * 0.7,
+                  child: const UiIcon(
+                    UiIcons.moreHorizontal,
+                    size: 20,
+                    color: Color(0xEBFFFFFF),
+                  ),
+                ),
+              ),
+              Opacity(
+                opacity: widget.progress.clamp(0.0, 1.0),
+                child: Transform.rotate(
+                  angle: (1 - widget.progress) * -0.7,
+                  child: const UiIcon(
+                    UiIcons.close,
+                    size: 18,
+                    color: Color(0xD6FFFFFF),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassIconAction extends StatefulWidget {
+  const _GlassIconAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  State<_GlassIconAction> createState() => _GlassIconActionState();
+}
+
+class _GlassIconActionState extends State<_GlassIconAction> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AnimatedScale(
+              scale: _pressed ? 0.84 : 1,
+              duration: UiDuration.fast,
+              curve: UiCurves.iosSnappy,
+              child: AnimatedContainer(
+                width: 34,
+                height: 34,
+                duration: UiDuration.fast,
+                curve: UiCurves.iosSmooth,
+                decoration: BoxDecoration(
+                  color: _pressed
+                      ? const Color(0x29FFFFFF)
+                      : widget.selected
+                      ? const Color(0x3D0A84FF)
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: UiIcon(
+                  widget.icon,
+                  size: 17,
+                  color: widget.selected
+                      ? const Color(0xFF64D2FF)
+                      : const Color(0xE6FFFFFF),
+                ),
+              ),
             ),
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassExitAction extends StatefulWidget {
+  const _GlassExitAction({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_GlassExitAction> createState() => _GlassExitActionState();
+}
+
+class _GlassExitActionState extends State<_GlassExitAction> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed ? 0.98 : 1,
+          duration: UiDuration.fast,
+          curve: UiCurves.iosSnappy,
+          child: AnimatedContainer(
+            duration: UiDuration.fast,
+            curve: UiCurves.iosSmooth,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _pressed ? const Color(0x1FFF453A) : Colors.transparent,
+              borderRadius: UiRadius.brLg,
+            ),
+            child: Row(
+              children: [
+                const UiIcon(
+                  LucideIcons.logOut,
+                  size: 17,
+                  color: Color(0xFFFF6961),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFFF6961),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.1,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

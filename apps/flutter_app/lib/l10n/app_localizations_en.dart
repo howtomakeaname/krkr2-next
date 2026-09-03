@@ -313,10 +313,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
-  String get hideDebug => 'Hide Debug';
+  String get hideDebug => 'Close Debug Log';
 
   @override
-  String get showDebug => 'Show Debug';
+  String get showDebug => 'Open Debug Log';
 
   @override
   String get pause => 'Pause';
