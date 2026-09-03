@@ -182,6 +182,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
   Future<void> _openScrape() async {
     final l10n = AppLocalizations.of(context)!;
+    final metadataLanguage = Localizations.localeOf(context).toLanguageTag();
 
     final controller = TextEditingController(text: game.displayTitle);
     final keyword = await UiDialog.show<String>(
@@ -237,7 +238,10 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
     List<GameMetadataCandidate> candidates;
     try {
-      candidates = await _scraper.search(trimmed);
+      candidates = await _scraper.search(
+        trimmed,
+        preferredLanguage: metadataLanguage,
+      );
     } catch (_) {
       if (!mounted) return;
       Navigator.of(context).pop(); // close loading dialog

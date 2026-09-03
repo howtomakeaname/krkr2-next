@@ -58,14 +58,21 @@ class VndbClient {
   }
 
   /// Search visual novels by keyword. Returns empty list on network/API error.
-  Future<List<GameMetadataCandidate>> search(String keyword) async {
+  ///
+  /// VNDB's search already matches titles, aliases and release titles across
+  /// languages. [preferredLanguage] controls which localized title is shown
+  /// and later persisted for each result.
+  Future<List<GameMetadataCandidate>> search(
+    String keyword, {
+    String preferredLanguage = 'en',
+  }) async {
     if (keyword.trim().isEmpty) return [];
 
     final uri = Uri.parse('$_baseUrl/$_vnEndpoint');
     final body = jsonEncode({
       'filters': ['search', '=', keyword.trim()],
       'fields':
-          'id,title,alttitle,image{url,dims,thumbnail,thumbnail_dims},developers{name}',
+          'id,title,alttitle,titles{lang,title,official,main},image{url,dims,thumbnail,thumbnail_dims},developers{name}',
       'results': _resultsLimit,
     });
 
@@ -86,13 +93,15 @@ class VndbClient {
       for (final item in results) {
         if (item is! Map<String, dynamic>) continue;
         final id = item['id']?.toString();
-        String title = item['title'] is String
-            ? (item['title'] as String).trim()
-            : '';
-        if (title.isEmpty && item['alttitle'] is String) {
-          title = (item['alttitle'] as String).trim();
-        }
-        if (title.isEmpty) continue;
+        final defaultTitle = _trimmedString(item['title']);
+        final alternateTitle = _trimmedString(item['alttitle']);
+        final localizedTitles = _parseTitles(item['titles']);
+        final title = _pickLocalizedTitle(
+          localizedTitles,
+          preferredLanguage,
+          fallback: defaultTitle ?? alternateTitle,
+        );
+        if (title == null) continue;
 
         String coverUrl = '';
         String? thumbnailUrl;
@@ -131,6 +140,12 @@ class VndbClient {
             developer: developer,
             sourceId: id,
             sourceLabel: 'VNDB',
+            alternativeTitles: _pickAlternativeTitles(
+              localizedTitles,
+              preferredLanguage,
+              selectedTitle: title,
+              fallbackTitles: [defaultTitle, alternateTitle],
+            ),
           ),
         );
       }
@@ -138,6 +153,143 @@ class VndbClient {
     } catch (_) {
       return [];
     }
+  }
+
+  static String? _trimmedString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static List<_VndbTitle> _parseTitles(Object? value) {
+    if (value is! List) return const [];
+
+    final titles = <_VndbTitle>[];
+    for (final item in value) {
+      if (item is! Map<String, dynamic>) continue;
+      final language = _trimmedString(item['lang']);
+      final title = _trimmedString(item['title']);
+      if (language == null || title == null) continue;
+      titles.add(
+        _VndbTitle(
+          language: language,
+          title: title,
+          official: item['official'] == true,
+          main: item['main'] == true,
+        ),
+      );
+    }
+    return titles;
+  }
+
+  static String? _pickLocalizedTitle(
+    List<_VndbTitle> titles,
+    String preferredLanguage, {
+    String? fallback,
+  }) {
+    final baseLanguage = _baseLanguage(preferredLanguage);
+
+    // The legacy top-level title is VNDB's romanized main title, so it remains
+    // the most readable fallback for an English UI without an English title.
+    if (baseLanguage == 'en') {
+      final english = _bestTitleForLanguage(titles, 'en');
+      if (english != null) return english.title;
+      if (fallback != null) return fallback;
+    }
+
+    for (final language in _titleLanguagePriority(preferredLanguage)) {
+      final match = _bestTitleForLanguage(titles, language);
+      if (match != null) return match.title;
+    }
+    if (fallback != null) return fallback;
+
+    for (final title in titles) {
+      if (title.main) return title.title;
+    }
+    for (final title in titles) {
+      if (title.official) return title.title;
+    }
+    return titles.isEmpty ? null : titles.first.title;
+  }
+
+  static List<String> _pickAlternativeTitles(
+    List<_VndbTitle> titles,
+    String preferredLanguage, {
+    required String selectedTitle,
+    required List<String?> fallbackTitles,
+  }) {
+    final values = <String>[];
+    final seen = <String>{selectedTitle.toLowerCase()};
+
+    void add(String? value) {
+      final normalized = value?.trim();
+      if (normalized == null || normalized.isEmpty) return;
+      if (seen.add(normalized.toLowerCase())) values.add(normalized);
+    }
+
+    for (final language in _alternativeLanguagePriority(preferredLanguage)) {
+      final match = _bestTitleForLanguage(titles, language);
+      if (match == null) continue;
+      add(match.title);
+    }
+    for (final fallback in fallbackTitles) {
+      add(fallback);
+    }
+    return values;
+  }
+
+  static _VndbTitle? _bestTitleForLanguage(
+    List<_VndbTitle> titles,
+    String language,
+  ) {
+    final normalizedLanguage = language.toLowerCase();
+    _VndbTitle? first;
+    for (final title in titles) {
+      if (title.language.toLowerCase() != normalizedLanguage) continue;
+      first ??= title;
+      if (title.official) return title;
+    }
+    return first;
+  }
+
+  static List<String> _titleLanguagePriority(String preferredLanguage) {
+    final base = _baseLanguage(preferredLanguage);
+    if (base == 'zh') {
+      final variants = _chineseVariants(preferredLanguage);
+      return [...variants, 'en', 'ja'];
+    }
+    if (base == 'ja') return const ['ja', 'en', 'zh-Hans', 'zh-Hant'];
+    if (base == 'en') return const ['en', 'ja', 'zh-Hans', 'zh-Hant'];
+    return [base, 'en', 'ja', 'zh-Hans', 'zh-Hant'];
+  }
+
+  static List<String> _alternativeLanguagePriority(String preferredLanguage) {
+    final base = _baseLanguage(preferredLanguage);
+    if (base == 'zh') {
+      final variants = _chineseVariants(preferredLanguage);
+      return [variants.first, 'en', 'ja', variants.last];
+    }
+    if (base == 'ja') return const ['ja', 'en', 'zh-Hans', 'zh-Hant'];
+    if (base == 'en') return const ['en', 'ja', 'zh-Hans', 'zh-Hant'];
+    return [base, 'en', 'ja', 'zh-Hans', 'zh-Hant'];
+  }
+
+  static List<String> _chineseVariants(String preferredLanguage) {
+    final locale = preferredLanguage.replaceAll('_', '-').toLowerCase();
+    final traditional =
+        locale.contains('hant') ||
+        locale.endsWith('-tw') ||
+        locale.endsWith('-hk') ||
+        locale.endsWith('-mo');
+    return traditional
+        ? const ['zh-Hant', 'zh-Hans']
+        : const ['zh-Hans', 'zh-Hant'];
+  }
+
+  static String _baseLanguage(String language) {
+    final normalized = language.replaceAll('_', '-').toLowerCase();
+    final separator = normalized.indexOf('-');
+    return separator < 0 ? normalized : normalized.substring(0, separator);
   }
 
   static GameImageDimensions? _parseDimensions(Object? value) {
@@ -229,4 +381,18 @@ class _VndbTag {
 
   final String name;
   final double rating;
+}
+
+class _VndbTitle {
+  const _VndbTitle({
+    required this.language,
+    required this.title,
+    required this.official,
+    required this.main,
+  });
+
+  final String language;
+  final String title;
+  final bool official;
+  final bool main;
 }

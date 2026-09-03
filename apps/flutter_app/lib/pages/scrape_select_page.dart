@@ -74,6 +74,14 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
     );
   }
 
+  String? _candidateSubtitle(GameMetadataCandidate candidate) {
+    final parts = <String>[
+      ...candidate.alternativeTitles.take(2),
+      ?candidate.sourceLabel?.trim(),
+    ]..removeWhere((part) => part.isEmpty);
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   Future<void> _confirm() async {
     final l10n = AppLocalizations.of(context)!;
     if (_selected == null) {
@@ -162,7 +170,7 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
                       return UiListTile(
                         leading: _buildCandidateLeading(c),
                         title: c.title,
-                        subtitle: c.sourceLabel,
+                        subtitle: _candidateSubtitle(c),
                         trailing: UiRadio<GameMetadataCandidate>(
                           value: c,
                           groupValue: _selected,

@@ -84,6 +84,92 @@ void main() {
     },
   );
 
+  test(
+    'prefers the current locale title and keeps zh en ja alternatives',
+    () async {
+      final requestedFields = <String>[];
+      final client = MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        requestedFields.add(body['fields'] as String);
+        return http.Response(
+          jsonEncode({
+            'results': [
+              {
+                'id': 'v18149',
+                'title': 'Otome * Domain',
+                'alttitle': 'オトメ＊ドメイン',
+                'titles': [
+                  {
+                    'lang': 'en',
+                    'title': 'Otome * Domain',
+                    'official': true,
+                    'main': false,
+                  },
+                  {
+                    'lang': 'ja',
+                    'title': 'オトメ＊ドメイン',
+                    'official': true,
+                    'main': true,
+                  },
+                  {
+                    'lang': 'zh-Hans',
+                    'title': '少女＊领域',
+                    'official': true,
+                    'main': false,
+                  },
+                  {
+                    'lang': 'zh-Hant',
+                    'title': '少女＊領域',
+                    'official': true,
+                    'main': false,
+                  },
+                ],
+                'image': null,
+                'developers': <Object?>[],
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final vndb = VndbClient(client: client);
+
+      final simplified = (await vndb.search(
+        'Otome Domain',
+        preferredLanguage: 'zh',
+      )).single;
+      final traditional = (await vndb.search(
+        'Otome Domain',
+        preferredLanguage: 'zh-Hant-TW',
+      )).single;
+      final english = (await vndb.search(
+        'Otome Domain',
+        preferredLanguage: 'en-US',
+      )).single;
+      final japanese = (await vndb.search(
+        'Otome Domain',
+        preferredLanguage: 'ja-JP',
+      )).single;
+
+      expect(simplified.title, '少女＊领域');
+      expect(simplified.alternativeTitles.take(2), [
+        'Otome * Domain',
+        'オトメ＊ドメイン',
+      ]);
+      expect(traditional.title, '少女＊領域');
+      expect(english.title, 'Otome * Domain');
+      expect(english.alternativeTitles.take(2), ['オトメ＊ドメイン', '少女＊领域']);
+      expect(japanese.title, 'オトメ＊ドメイン');
+      expect(japanese.alternativeTitles.take(2), ['Otome * Domain', '少女＊领域']);
+      expect(requestedFields, hasLength(4));
+      expect(
+        requestedFields,
+        everyElement(contains('titles{lang,title,official,main}')),
+      );
+    },
+  );
+
   test('fetches details only for the selected search result', () async {
     final requestBodies = <Map<String, dynamic>>[];
     final client = MockClient((request) async {

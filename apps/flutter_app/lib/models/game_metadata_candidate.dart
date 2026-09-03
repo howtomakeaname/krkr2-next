@@ -10,6 +10,7 @@ class GameMetadataCandidate {
     this.developer,
     this.sourceId,
     this.sourceLabel,
+    this.alternativeTitles = const [],
     this.details,
   });
 
@@ -30,6 +31,10 @@ class GameMetadataCandidate {
   final String? sourceId;
   final String? sourceLabel;
 
+  /// Other useful localized titles, ordered for the current app locale.
+  /// The selected [title] itself is not repeated here.
+  final List<String> alternativeTitles;
+
   /// Metadata that is intentionally fetched only after this candidate has
   /// been selected. Search results leave this null to keep their request
   /// lightweight.
@@ -45,6 +50,7 @@ class GameMetadataCandidate {
       developer: developer,
       sourceId: sourceId,
       sourceLabel: sourceLabel,
+      alternativeTitles: alternativeTitles,
       details: details ?? this.details,
     );
   }

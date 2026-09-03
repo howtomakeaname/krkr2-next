@@ -16,6 +16,7 @@ void main() {
         developer: 'Selected developer',
         sourceId: 'v42',
         sourceLabel: 'VNDB',
+        alternativeTitles: const ['別タイトル', 'Alternative title'],
       );
       final scraper = GameMetadataScraper(
         vndbClient: VndbClient(
@@ -32,6 +33,7 @@ void main() {
       expect(enriched.coverImageUrl, 'https://images.example/full.jpg');
       expect(enriched.thumbnailUrl, 'https://images.example/thumbnail.jpg');
       expect(enriched.developer, 'Selected developer');
+      expect(enriched.alternativeTitles, ['別タイトル', 'Alternative title']);
       expect(enriched.details, isNull);
     },
   );

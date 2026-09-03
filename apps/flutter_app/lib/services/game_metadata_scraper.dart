@@ -15,8 +15,11 @@ class GameMetadataScraper {
   final CoverDownloader _downloader;
 
   /// Search by keyword (e.g. game name). Returns list of candidates.
-  Future<List<GameMetadataCandidate>> search(String keyword) async {
-    return _vndb.search(keyword);
+  Future<List<GameMetadataCandidate>> search(
+    String keyword, {
+    String preferredLanguage = 'en',
+  }) async {
+    return _vndb.search(keyword, preferredLanguage: preferredLanguage);
   }
 
   /// Load large per-game fields only after the user selects a candidate.
