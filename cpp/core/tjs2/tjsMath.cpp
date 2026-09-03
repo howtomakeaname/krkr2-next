@@ -11,6 +11,7 @@
 #include "tjsCommHead.h"
 
 #include "tjsMath.h"
+#include <cstdlib>
 #include <ctime>
 
 #ifdef _WIN32
@@ -314,6 +315,21 @@ namespace TJS {
             return TJS_S_OK;
         }
         TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ random)
+        //----------------------------------------------------------------------
+        // Kirikiri2 / TJS1 leftover used by older KAG games:
+        //   randomSeed(System.getTickCount());
+        TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ randomSeed) {
+            tjs_uint32 seed = 0;
+            if(numparams >= 1 && param[0]->Type() != tvtVoid) {
+                seed = (tjs_uint32)param[0]->AsInteger();
+            } else {
+                seed = (tjs_uint32)time(nullptr);
+            }
+            tTJSXorshift::init(seed);
+            ::srand((unsigned)seed);
+            return TJS_S_OK;
+        }
+        TJS_END_NATIVE_STATIC_METHOD_DECL(/*func. name*/ randomSeed)
         //----------------------------------------------------------------------
         TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/ round) {
             if(numparams < 1)
