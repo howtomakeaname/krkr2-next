@@ -685,11 +685,29 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     );
     final clock = Stopwatch()..start();
     _ohosTickClock = clock;
-    final interval = Duration(
-      microseconds: (Duration.microsecondsPerSecond / tickFps).round(),
-    );
-    _ohosTickTimer = Timer.periodic(interval, (_) {
+    _scheduleNextOhosTick(clock, tickFps, 1);
+  }
+
+  void _scheduleNextOhosTick(Stopwatch clock, int tickFps, int frameNumber) {
+    if (!mounted || !_isTicking || !identical(_ohosTickClock, clock)) return;
+
+    final int elapsedUs = clock.elapsedMicroseconds;
+    final int firstFutureFrame =
+        (elapsedUs * tickFps ~/ Duration.microsecondsPerSecond) + 1;
+    final int scheduledFrame = frameNumber < firstFutureFrame
+        ? firstFutureFrame
+        : frameNumber;
+    final int targetUs =
+        (scheduledFrame * Duration.microsecondsPerSecond + tickFps - 1) ~/
+        tickFps;
+    // OHOS timers have millisecond-level scheduling granularity. Round the
+    // delay up and keep an absolute deadline so 120 FPS alternates 8/9 ms
+    // instead of becoming a fixed 8 ms (125 FPS). If a tick is late, the
+    // firstFutureFrame calculation skips expired deadlines without catch-up.
+    final int delayMs = ((targetUs - elapsedUs + 999) ~/ 1000).clamp(1, 1000);
+    _ohosTickTimer = Timer(Duration(milliseconds: delayMs), () {
       unawaited(_runEngineTick(clock.elapsed));
+      _scheduleNextOhosTick(clock, tickFps, scheduledFrame + 1);
     });
   }
 
