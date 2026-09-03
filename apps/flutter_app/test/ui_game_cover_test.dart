@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -11,7 +12,7 @@ void main() {
 
   for (final sourceSize in <Size>[const Size(400, 200), const Size(200, 400)]) {
     testWidgets(
-      'keeps ${sourceSize.width}x${sourceSize.height} cover aspect when decoded',
+      'uses one crop layer for ${sourceSize.width}x${sourceSize.height} cover',
       (tester) async {
         final bytes = await tester.runAsync(
           () => _createPng(sourceSize.width.toInt(), sourceSize.height.toInt()),
@@ -39,13 +40,17 @@ void main() {
               ),
             )
             .toList();
-        expect(imageWidgets.map((image) => image.fit), [
-          BoxFit.cover,
-          BoxFit.contain,
-        ]);
+        expect(imageWidgets, hasLength(1));
+        expect(imageWidgets.single.fit, BoxFit.cover);
 
-        final resized = imageWidgets.last.image as ResizeImage;
+        final resized = imageWidgets.single.image as ResizeImage;
         expect(resized.policy, ResizeImagePolicy.fit);
+        expect(resized.width, isNull);
+        final pixelRatio = tester.view.devicePixelRatio;
+        expect(
+          resized.height,
+          math.max((120 * pixelRatio).ceil(), (90 * pixelRatio).ceil() * 2),
+        );
 
         await tester.runAsync(
           () =>
@@ -60,13 +65,12 @@ void main() {
                 matching: find.byType(RawImage),
               ),
             )
-            .last
+            .single
             .image!;
         expect(
           decoded.width * sourceSize.height,
           decoded.height * sourceSize.width,
         );
-        expect(decoded.width, lessThanOrEqualTo(resized.width!));
         expect(decoded.height, lessThanOrEqualTo(resized.height!));
       },
     );

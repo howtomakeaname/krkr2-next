@@ -5,12 +5,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/ui_theme.dart';
 
-/// Displays game artwork without discarding part of the source image.
+/// Displays game artwork as a single edge-to-edge cover.
 ///
-/// Game covers are not always portrait posters. Some user-selected images are
-/// square or landscape artwork, so the artwork itself uses [BoxFit.contain].
-/// A dimmed, edge-to-edge copy fills any remaining space without an expensive
-/// runtime blur.
+/// [BoxFit.cover] preserves the source aspect ratio and crops only the edges
+/// that do not fit the card. Keeping one image layer avoids the duplicated-art
+/// effect produced by a contained image over a second background copy.
 class UiGameCover extends StatelessWidget {
   const UiGameCover({
     super.key,
@@ -49,10 +48,6 @@ class UiGameCover extends StatelessWidget {
           ),
         );
 
-    final ambientShade = Theme.of(context).brightness == Brightness.dark
-        ? const Color(0x66000000)
-        : const Color(0x80000000);
-
     return ClipRRect(
       borderRadius: borderRadius,
       child: ColoredBox(
@@ -66,32 +61,18 @@ class UiGameCover extends StatelessWidget {
                     constraints,
                     image!,
                   );
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image(
-                        image: provider,
-                        fit: BoxFit.cover,
-                        alignment: alignment,
-                        filterQuality: FilterQuality.low,
-                        excludeFromSemantics: true,
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                      ColoredBox(color: ambientShade),
-                      Image(
-                        image: provider,
-                        fit: BoxFit.contain,
-                        alignment: alignment,
-                        filterQuality: filterQuality,
-                        semanticLabel: semanticLabel,
-                        frameBuilder: (context, child, frame, synchronous) {
-                          return synchronous || frame != null
-                              ? child
-                              : fallback;
-                        },
-                        errorBuilder: (_, _, _) => fallback,
-                      ),
-                    ],
+                  return Image(
+                    image: provider,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
+                    alignment: alignment,
+                    filterQuality: filterQuality,
+                    semanticLabel: semanticLabel,
+                    frameBuilder: (context, child, frame, synchronous) {
+                      return synchronous || frame != null ? child : fallback;
+                    },
+                    errorBuilder: (_, _, _) => fallback,
                   );
                 },
               ),
@@ -113,14 +94,21 @@ class UiGameCover extends StatelessWidget {
     }
 
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final cacheWidth = math.max(1, (constraints.maxWidth * pixelRatio).ceil());
-    final cacheHeight = math.max(
+    final renderedWidth = math.max(
+      1,
+      (constraints.maxWidth * pixelRatio).ceil(),
+    );
+    final renderedHeight = math.max(
       1,
       (constraints.maxHeight * pixelRatio).ceil(),
     );
+
+    // Decode by height only so a landscape source is not first shrunk to fit
+    // inside the portrait card and then enlarged again by BoxFit.cover. The
+    // extra headroom also keeps common tall cover ratios sharp after cropping.
+    final cacheHeight = math.max(renderedHeight, renderedWidth * 2);
     return ResizeImage(
       provider,
-      width: cacheWidth,
       height: cacheHeight,
       policy: ResizeImagePolicy.fit,
     );
