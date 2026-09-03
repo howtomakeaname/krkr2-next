@@ -1515,11 +1515,17 @@ tTVPWaveSoundBufferThread::tTVPWaveSoundBufferThread() :
 //---------------------------------------------------------------------------
 tTVPWaveSoundBufferThread::~tTVPWaveSoundBufferThread() {
     SetPriority(ttpNormal);
+    // Terminate() must precede WaitFor(): Execute() only leaves its loop
+    // once GetTerminated() is set, so joining first blocks the caller
+    // (the TJS thread, invalidating the last WaveSoundBuffer) forever.
+    Terminate();
     Resume();
     Event.Set();
     WaitFor();
+    // Drop TVP_EV_WAVE_SND_BUF_THREAD messages still queued for the main
+    // thread; their closures capture this object.
+    EventQueue.Clear();
     EventQueue.Deallocate();
-    Terminate();
 }
 
 //---------------------------------------------------------------------------
