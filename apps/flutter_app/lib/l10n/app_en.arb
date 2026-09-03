@@ -268,6 +268,10 @@
   "copiedToClipboard": "Copied to clipboard",
   "gameFormat": "Format",
   "gamePath": "Path",
+  "gameDescription": "About",
+  "gameKeywords": "Keywords",
+  "showMore": "More",
+  "showLess": "Less",
 
   "scrapeMetadata": "Scrape info",
   "scrapeMetadataDialogTitle": "Scrape info",

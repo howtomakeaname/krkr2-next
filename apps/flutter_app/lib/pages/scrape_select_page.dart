@@ -86,7 +86,9 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
     }
     setState(() => _applying = true);
 
-    final candidate = _selected!;
+    // Description and VNDB tags are intentionally fetched only for the chosen
+    // result. The scraper returns the base candidate when this request fails.
+    final candidate = await scraper.fetchDetails(_selected!);
     final previousCoverPath = game.coverPath;
     final localPath = await scraper.downloadCover(candidate);
     await gameManager.renameGame(game.path, candidate.title);
@@ -107,9 +109,12 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
         }
       }
     }
-    if (candidate.developer != null && candidate.developer!.isNotEmpty) {
-      await gameManager.setDeveloper(game.path, candidate.developer);
-    }
+    await gameManager.setScrapedMetadata(
+      game.path,
+      developer: candidate.developer,
+      description: candidate.details?.description,
+      keywords: candidate.details?.keywords,
+    );
 
     if (!mounted) return;
     setState(() => _applying = false);

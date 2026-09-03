@@ -536,6 +536,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gamePath => 'Path';
 
   @override
+  String get gameDescription => 'About';
+
+  @override
+  String get gameKeywords => 'Keywords';
+
+  @override
+  String get showMore => 'More';
+
+  @override
+  String get showLess => 'Less';
+
+  @override
   String get scrapeMetadata => 'Scrape info';
 
   @override

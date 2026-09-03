@@ -50,6 +50,7 @@ class GameDetailPage extends StatefulWidget {
 
 class _GameDetailPageState extends State<GameDetailPage> {
   bool _changed = false;
+  bool _showAllKeywords = false;
   final GameMetadataScraper _scraper = GameMetadataScraper();
 
   GameInfo get game => widget.game;
@@ -264,6 +265,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
     );
     if (applied == true && mounted) {
       _changed = true;
+      _showAllKeywords = false;
       setState(() {});
     }
   }
@@ -406,10 +408,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
-          leading: UiButton.icon(
-            icon: LucideIcons.arrowLeft,
-            onPressed: _pop,
-          ),
+          leading: UiButton.icon(icon: LucideIcons.arrowLeft, onPressed: _pop),
           actions: [
             Builder(
               builder: (btnContext) => UiButton.icon(
@@ -595,11 +594,103 @@ class _GameDetailPageState extends State<GameDetailPage> {
       child: Column(
         children: [
           _buildInfoSection(l10n),
+          if (_hasScrapedText) _buildMetadataSection(l10n),
           _buildLaunchButton(l10n),
           _buildManageSection(l10n),
           _buildDangerSection(l10n),
           const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  bool get _hasScrapedText =>
+      (game.description?.trim().isNotEmpty ?? false) ||
+      game.keywords.isNotEmpty;
+
+  Widget _buildMetadataSection(AppLocalizations l10n) {
+    final colors = context.uiColors;
+    final description = game.description?.trim();
+    final keywords = game.keywords
+        .map((keyword) => keyword.trim())
+        .where((keyword) => keyword.isNotEmpty)
+        .toList(growable: false);
+    final visibleKeywords = _showAllKeywords
+        ? keywords
+        : keywords.take(_collapsedKeywordCount).toList(growable: false);
+    final hiddenKeywordCount = keywords.length - visibleKeywords.length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: UiCard(
+        color: colors.surfaceElevated,
+        padding: const EdgeInsets.all(UiSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (description != null && description.isNotEmpty) ...[
+              _metadataHeading(l10n.gameDescription),
+              const SizedBox(height: UiSpacing.sm),
+              _ExpandableDescription(
+                text: description,
+                moreLabel: l10n.showMore,
+                lessLabel: l10n.showLess,
+              ),
+            ],
+            if (description != null &&
+                description.isNotEmpty &&
+                keywords.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: UiSpacing.lg),
+                child: Divider(height: 1, color: colors.separator),
+              ),
+            if (keywords.isNotEmpty) ...[
+              _metadataHeading(l10n.gameKeywords),
+              const SizedBox(height: UiSpacing.sm),
+              AnimatedSize(
+                duration: UiDuration.base,
+                curve: UiCurves.iosSmooth,
+                alignment: Alignment.topLeft,
+                child: Wrap(
+                  key: ValueKey<bool>(_showAllKeywords),
+                  spacing: UiSpacing.sm,
+                  runSpacing: UiSpacing.sm,
+                  children: [
+                    for (final keyword in visibleKeywords)
+                      UiTag(label: keyword, dense: true),
+                    if (hiddenKeywordCount > 0)
+                      UiTag(
+                        label: '+$hiddenKeywordCount',
+                        tone: UiTagTone.brand,
+                        dense: true,
+                        onTap: () => setState(() => _showAllKeywords = true),
+                      )
+                    else if (_showAllKeywords &&
+                        keywords.length > _collapsedKeywordCount)
+                      UiTag(
+                        label: l10n.showLess,
+                        tone: UiTagTone.brand,
+                        dense: true,
+                        onTap: () => setState(() => _showAllKeywords = false),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static const int _collapsedKeywordCount = 6;
+
+  Widget _metadataHeading(String text) {
+    return Text(
+      text,
+      style: context.uiType.footnote.copyWith(
+        color: context.uiColors.textSecondary,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
@@ -765,5 +856,105 @@ class _GameDetailPageState extends State<GameDetailPage> {
     if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
     if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+class _ExpandableDescription extends StatefulWidget {
+  const _ExpandableDescription({
+    required this.text,
+    required this.moreLabel,
+    required this.lessLabel,
+  });
+
+  final String text;
+  final String moreLabel;
+  final String lessLabel;
+
+  @override
+  State<_ExpandableDescription> createState() => _ExpandableDescriptionState();
+}
+
+class _ExpandableDescriptionState extends State<_ExpandableDescription> {
+  static const int _collapsedLines = 4;
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(covariant _ExpandableDescription oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) _expanded = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+    final style = context.uiType.body.copyWith(color: colors.textPrimary);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: _collapsedLines,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final canExpand = painter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSize(
+              duration: UiDuration.base,
+              curve: UiCurves.iosSmooth,
+              alignment: Alignment.topCenter,
+              child: Text(
+                widget.text,
+                style: style,
+                maxLines: _expanded ? null : _collapsedLines,
+                overflow: _expanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+              ),
+            ),
+            if (canExpand || _expanded) ...[
+              const SizedBox(height: UiSpacing.xs),
+              Semantics(
+                button: true,
+                expanded: _expanded,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: UiSpacing.xs),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _expanded ? widget.lessLabel : widget.moreLabel,
+                          style: context.uiType.footnote.copyWith(
+                            color: colors.brand,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: UiSpacing.xs),
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0,
+                          duration: UiDuration.base,
+                          curve: UiCurves.iosSmooth,
+                          child: Icon(
+                            LucideIcons.chevronDown,
+                            size: 14,
+                            color: colors.brand,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
   }
 }

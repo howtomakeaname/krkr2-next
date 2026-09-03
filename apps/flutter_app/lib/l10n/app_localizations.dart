@@ -1036,6 +1036,30 @@ abstract class AppLocalizations {
   /// **'Path'**
   String get gamePath;
 
+  /// No description provided for @gameDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get gameDescription;
+
+  /// No description provided for @gameKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'Keywords'**
+  String get gameKeywords;
+
+  /// No description provided for @showMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get showMore;
+
+  /// No description provided for @showLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Less'**
+  String get showLess;
+
   /// No description provided for @scrapeMetadata.
   ///
   /// In en, this message translates to:

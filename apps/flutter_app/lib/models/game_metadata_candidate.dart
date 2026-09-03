@@ -10,6 +10,7 @@ class GameMetadataCandidate {
     this.developer,
     this.sourceId,
     this.sourceLabel,
+    this.details,
   });
 
   final String title;
@@ -28,6 +29,35 @@ class GameMetadataCandidate {
   final String? developer;
   final String? sourceId;
   final String? sourceLabel;
+
+  /// Metadata that is intentionally fetched only after this candidate has
+  /// been selected. Search results leave this null to keep their request
+  /// lightweight.
+  final GameMetadataDetails? details;
+
+  GameMetadataCandidate copyWith({GameMetadataDetails? details}) {
+    return GameMetadataCandidate(
+      title: title,
+      coverImageUrl: coverImageUrl,
+      thumbnailUrl: thumbnailUrl,
+      coverImageDimensions: coverImageDimensions,
+      thumbnailDimensions: thumbnailDimensions,
+      developer: developer,
+      sourceId: sourceId,
+      sourceLabel: sourceLabel,
+      details: details ?? this.details,
+    );
+  }
+}
+
+/// Additional fields returned by a provider's per-game details request.
+class GameMetadataDetails {
+  const GameMetadataDetails({this.description, this.keywords = const []});
+
+  final String? description;
+
+  /// Provider tags ordered from most relevant to least relevant.
+  final List<String> keywords;
 }
 
 /// Pixel dimensions of an image returned by a metadata provider.
