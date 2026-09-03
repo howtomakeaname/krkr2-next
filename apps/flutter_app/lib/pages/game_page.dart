@@ -418,11 +418,22 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         return null;
       }
 
-      // Accept either startup.tjs in root or data/system/initialize.tjs
-      final startup = File('$path/startup.tjs');
-      final init = File('$path/data/system/initialize.tjs');
-      final initUpper = File('$path/data/system/Initialize.tjs');
+      // Folder with only data.xp3: startup.tjs is inside the archive.
+      final launchPath = GameEngine.resolveKrkrLaunchPath(path);
+      if (_isArchivePath(launchPath)) {
+        if (!await File(launchPath).exists()) {
+          return l10n?.archiveNotExist(launchPath);
+        }
+        return null;
+      }
+
+      // Loose startup.tjs, or unpacked data/system/initialize.tjs.
+      final startup = File('$launchPath/startup.tjs');
+      final startupUpper = File('$launchPath/Startup.tjs');
+      final init = File('$launchPath/data/system/initialize.tjs');
+      final initUpper = File('$launchPath/data/system/Initialize.tjs');
       if (!await startup.exists() &&
+          !await startupUpper.exists() &&
           !await init.exists() &&
           !await initUpper.exists()) {
         return l10n?.missingStartupScript(path);
@@ -553,6 +564,13 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     // On Android, auto-detect if the user selected the data/ folder
     // itself and step up to the real game root.
     normalizedGamePath = await _adjustGamePathForAndroid(normalizedGamePath);
+    if (_engine == GameEngine.krkr2) {
+      final resolved = GameEngine.resolveKrkrLaunchPath(normalizedGamePath);
+      if (resolved != normalizedGamePath) {
+        _log('Resolved KrKr launch path: $normalizedGamePath → $resolved');
+        normalizedGamePath = resolved;
+      }
+    }
     _log('engine_open_game($normalizedGamePath)...');
     _log('Starting application — this may take a moment...');
 
