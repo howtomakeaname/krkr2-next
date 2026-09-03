@@ -98,8 +98,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       GlobalKey<EngineSurfaceState>();
 
   Ticker? _ticker;
+  // Fallback driver used only if the OHOS DisplaySync callback does not start.
   Timer? _ohosTickTimer;
   Stopwatch? _ohosTickClock;
+  bool _receivedOhosVsync = false;
   bool _tickInFlight = false;
   bool _isTicking = false;
   bool _autoPausedByLifecycle = false;
@@ -165,6 +167,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       unawaited(_savePendingPlaySession());
     }
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.operatingSystem == 'ohos') {
+      _platformChannel.setMethodCallHandler(_handleOhosPlatformCall);
+    }
     final session = _activeEngineRuntime;
     final normalizedPath = _normalizeGamePath(widget.gamePath);
     if (session != null && session.gamePath == normalizedPath) {
@@ -270,6 +275,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
     _stopStartupPolling();
     _stopMemoryStatsPolling();
+    if (Platform.operatingSystem == 'ohos') {
+      _platformChannel.setMethodCallHandler(null);
+    }
     _bootLogScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _stopTickLoop(notify: false);
@@ -639,6 +647,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   // the vsync interval (which is always ~16ms on a 60Hz display).
   Duration _lastRenderedElapsed = Duration.zero;
   Duration _lastTickElapsed = Duration.zero;
+  int _tickDeltaCarryUs = 0;
 
   void _startTickLoop() {
     if (_isTicking) return;
@@ -649,6 +658,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
     _lastTickElapsed = Duration.zero;
     _lastRenderedElapsed = Duration.zero;
+    _tickDeltaCarryUs = 0;
 
     if (Platform.operatingSystem == 'ohos') {
       // A Flutter Ticker schedules a Flutter scene every vsync. OHOS external
@@ -657,10 +667,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       // each NativeImage buffer twice. The second acquire returns NO_BUFFER,
       // spams an error every frame, and adds input/raster jitter.
       //
-      // Drive only the native producer from a lightweight timer and let the
-      // texture callback be the sole compositor wake-up. With frame limiting
-      // disabled, the OHOS plugin resolves the current display's highest
-      // advertised refresh rate; the system still makes the final LTPO choice.
+      // Drive only the native producer from HarmonyOS DisplaySync callbacks and
+      // let the texture callback be the sole compositor wake-up. DisplaySync
+      // follows the cadence selected by the system, so the producer does not
+      // render 120 frames into a display currently running at 90 Hz.
       unawaited(_startOhosTickDriver());
       return;
     }
@@ -672,6 +682,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   Future<void> _startOhosTickDriver() async {
+    _receivedOhosVsync = false;
     final int preferredFps = _fpsLimitEnabled ? _targetFps : 0;
     final int resolvedFps = await _setOhosGameFrameRate(preferredFps);
     if (!mounted || !_isTicking) return;
@@ -680,15 +691,51 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         ? resolvedFps
         : (_fpsLimitEnabled ? _targetFps : PrefsKeys.defaultFps);
     _log(
-      'OHOS tick rate=$tickFps '
+      'OHOS DisplaySync expected=$tickFps '
       '(limit=${_fpsLimitEnabled ? _targetFps : 'system maximum'})',
     );
-    final clock = Stopwatch()..start();
-    _ohosTickClock = clock;
-    _scheduleNextOhosTick(clock, tickFps, 1);
+    if (_receivedOhosVsync) return;
+
+    // DisplaySync.start() normally dispatches immediately. Keep a conservative
+    // fallback for older/broken plugin builds or a missing UI context, otherwise
+    // the game would freeze completely instead of merely losing adaptive pace.
+    _ohosTickTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || !_isTicking || _receivedOhosVsync) return;
+      _log(
+        'OHOS DisplaySync did not start; using timer fallback at $tickFps FPS',
+      );
+      final clock = Stopwatch()..start();
+      _ohosTickClock = clock;
+      _scheduleNextOhosFallbackTick(clock, tickFps, 1);
+    });
   }
 
-  void _scheduleNextOhosTick(Stopwatch clock, int tickFps, int frameNumber) {
+  Future<Object?> _handleOhosPlatformCall(MethodCall call) async {
+    if (call.method != 'onGameVsync') {
+      throw MissingPluginException(
+        'Unknown OHOS platform call: ${call.method}',
+      );
+    }
+    final Object? arguments = call.arguments;
+    if (arguments is! List<Object?> || arguments.isEmpty) return false;
+    final Object? timestampValue = arguments.first;
+    if (timestampValue is! num) return false;
+
+    _receivedOhosVsync = true;
+    _ohosTickTimer?.cancel();
+    _ohosTickTimer = null;
+    _ohosTickClock?.stop();
+    _ohosTickClock = null;
+    if (!mounted || !_isTicking) return false;
+    await _runEngineTick(Duration(microseconds: timestampValue.round()));
+    return true;
+  }
+
+  void _scheduleNextOhosFallbackTick(
+    Stopwatch clock,
+    int tickFps,
+    int frameNumber,
+  ) {
     if (!mounted || !_isTicking || !identical(_ohosTickClock, clock)) return;
 
     final int elapsedUs = clock.elapsedMicroseconds;
@@ -707,18 +754,26 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     final int delayMs = ((targetUs - elapsedUs + 999) ~/ 1000).clamp(1, 1000);
     _ohosTickTimer = Timer(Duration(milliseconds: delayMs), () {
       unawaited(_runEngineTick(clock.elapsed));
-      _scheduleNextOhosTick(clock, tickFps, scheduledFrame + 1);
+      _scheduleNextOhosFallbackTick(clock, tickFps, scheduledFrame + 1);
     });
   }
 
   Future<void> _runEngineTick(Duration elapsed) async {
     if (_tickInFlight || !_isTicking) return;
 
-    final int deltaMs = _lastTickElapsed == Duration.zero
-        ? 16
-        : (((elapsed - _lastTickElapsed).inMicroseconds + 500) ~/
-                  Duration.microsecondsPerMillisecond)
-              .clamp(1, 100);
+    final int deltaMs;
+    if (_lastTickElapsed == Duration.zero) {
+      deltaMs = 16;
+    } else {
+      final int deltaUs = (elapsed - _lastTickElapsed).inMicroseconds.clamp(
+        Duration.microsecondsPerMillisecond,
+        100 * Duration.microsecondsPerMillisecond,
+      );
+      final int accumulatedUs = deltaUs + _tickDeltaCarryUs;
+      deltaMs = accumulatedUs ~/ Duration.microsecondsPerMillisecond;
+      _tickDeltaCarryUs =
+          accumulatedUs - deltaMs * Duration.microsecondsPerMillisecond;
+    }
     _lastTickElapsed = elapsed;
 
     _tickInFlight = true;
@@ -799,6 +854,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     _ohosTickTimer = null;
     _ohosTickClock?.stop();
     _ohosTickClock = null;
+    _receivedOhosVsync = false;
+    _tickDeltaCarryUs = 0;
     if (Platform.operatingSystem == 'ohos') {
       unawaited(_setOhosGameFrameRate(-1));
     }
