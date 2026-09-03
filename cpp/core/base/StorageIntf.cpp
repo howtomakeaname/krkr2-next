@@ -1060,7 +1060,9 @@ static tjs_uint TVPRebuildAutoPathTable() {
 
             TVPStorageMediaManager.GetListAt(path, &lister);
             for(auto &i : lister.list) {
-                TVPAutoPathTable.Add(i, path);
+                ttstr key = i;
+                tTVPArchive::NormalizeInArchiveStorageName(key);
+                TVPAutoPathTable.Add(key, path);
                 count++;
             }
         }
@@ -1124,12 +1126,20 @@ ttstr TVPGetPlacedPath(const ttstr &name) {
     // search through auto path table
 
     ttstr storagename = TVPExtractStorageName(normalized);
+    // Archive index keys are always lowercased. On OHOS we no longer
+    // fold file:// paths, so a search for "Utility.tjs" must still
+    // hit the "utility.tjs" auto-path entry (LoadScript in 透明药
+    // etc. would otherwise skip every system/*.tjs).
+    ttstr lookup = storagename;
+    tTVPArchive::NormalizeInArchiveStorageName(lookup);
 
     TVPRebuildAutoPathTable(); // ensure auto path table
-    ttstr *result = TVPAutoPathTable.Find(storagename);
+    ttstr *result = TVPAutoPathTable.Find(lookup);
+    if(!result && lookup != storagename)
+        result = TVPAutoPathTable.Find(storagename);
     if(result) {
         // found in table
-        ttstr found = *result + storagename;
+        ttstr found = *result + lookup;
         TVPAutoPathCache.Add(name, found);
         return found;
     }
