@@ -43,8 +43,3 @@ NCB_PRE_REGIST_CALLBACK(layerExSave_stub);
 #define NCB_MODULE_NAME TJS_W("layerExAVI.dll")
 static void layerExAVI_stub() {}
 NCB_PRE_REGIST_CALLBACK(layerExAVI_stub);
-
-#undef NCB_MODULE_NAME
-#define NCB_MODULE_NAME TJS_W("layerExDraw.dll")
-static void layerExDraw_stub() {}
-NCB_PRE_REGIST_CALLBACK(layerExDraw_stub);
