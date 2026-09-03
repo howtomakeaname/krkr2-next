@@ -21,6 +21,7 @@ import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
 import UIAbility from '@ohos.app.ability.UIAbility';
 import display from '@ohos.display';
+import { displaySync } from '@kit.ArkGraphics2D';
 
 const TAG = 'FlutterEngineBridgePlugin';
 
@@ -48,6 +49,10 @@ export default class FlutterEngineBridgePlugin
 
   private ability: UIAbility | null = null;
   private flutterEngine: FlutterEngine | null = null;
+  private gameDisplaySync: displaySync.DisplaySync | null = null;
+  private gameDisplaySyncCallback: ((info: displaySync.IntervalInfo) => void) | null = null;
+  private gameDisplaySyncGeneration: number = 0;
+  private gameVsyncMessageInFlight: boolean = false;
   private highFrameRateTimer: number = -1;
 
   constructor() {
@@ -70,7 +75,7 @@ export default class FlutterEngineBridgePlugin
       this.channel = null;
     }
     this.releaseAllTextures();
-    this.stopHighFrameRateVote();
+    this.stopGameDisplaySync();
     this.flutterEngine = null;
     this.textureRegistry = null;
   }
@@ -82,7 +87,7 @@ export default class FlutterEngineBridgePlugin
   }
 
   onDetachedFromAbility(): void {
-    this.stopHighFrameRateVote();
+    this.stopGameDisplaySync();
     this.ability = null;
   }
 
@@ -348,43 +353,61 @@ export default class FlutterEngineBridgePlugin
     this.textureRegistry?.unregisterTexture(textureId);
   }
 
-  /**
-   * Keep the Flutter window in a high-refresh state while a game is running.
-   *
-   * DisplaySync controls callback cadence but does not cast a persistent vote
-   * for the Flutter window: RenderService still drops the panel to 60 Hz. The
-   * Flutter OHOS embedder's LTPO entry point votes on its own NativeVSync and
-   * raises the actual compositor/display cadence. Its vote expires after three
-   * seconds by design, so refresh it below that timeout while the game lives.
-   */
+  /** Drive the Dart-side game loop from the cadence selected by HarmonyOS. */
   private setGameFrameRate(preferred: number): number {
-    this.stopHighFrameRateVote();
-    // Negative values release the game request. Zero means uncapped: drive the
-    // producer at the display's highest advertised refresh rate and let the
-    // system choose the actual LTPO cadence. Positive values are user limits.
+    this.stopGameDisplaySync();
+    // Negative values release the game request. Zero means uncapped: request
+    // the display's highest advertised rate, while leaving min at zero so the
+    // system can select a lower LTPO tier. Positive values are user limits.
     if (preferred < 0) {
       Log.i(TAG, 'setGameFrameRate: released');
       return 0;
     }
-    const schedulerFps = preferred > 0
-      ? Math.round(preferred)
-      : this.getMaximumDisplayRefreshRate();
-    if (schedulerFps <= 60) {
-      Log.i(TAG, `setGameFrameRate: scheduler=${schedulerFps}, high-refresh vote not needed`);
-      return schedulerFps;
-    }
-    const flutterEngine = this.flutterEngine;
-    if (flutterEngine == null) {
-      throw new Error('Flutter engine is not attached');
-    }
-    const vote = (): void => {
-      flutterEngine.getFlutterNapi().LTPODispatchHighFrameRate();
+    const maximumFps = this.getMaximumDisplayRefreshRate();
+    const expectedFps = preferred > 0
+      ? Math.min(Math.round(preferred), maximumFps)
+      : maximumFps;
+    const frameSync = displaySync.create();
+    const generation = ++this.gameDisplaySyncGeneration;
+    const callback = (info: displaySync.IntervalInfo): void => {
+      this.dispatchGameVsync(generation, info);
     };
-    vote();
-    this.highFrameRateTimer = setInterval(vote, 2000);
+    frameSync.setExpectedFrameRateRange({
+      min: 0,
+      expected: expectedFps,
+      max: expectedFps,
+    });
+    frameSync.on('frame', callback);
+    this.gameDisplaySync = frameSync;
+    this.gameDisplaySyncCallback = callback;
+    frameSync.start();
+    this.startHighFrameRateVote(expectedFps);
     Log.i(TAG,
-      `setGameFrameRate: preferred=${Math.round(preferred)}, scheduler=${schedulerFps}, LTPO vote active`);
-    return schedulerFps;
+      `setGameFrameRate: preferred=${Math.round(preferred)}, expected=${expectedFps}, DisplaySync active`);
+    return expectedFps;
+  }
+
+  private dispatchGameVsync(generation: number, info: displaySync.IntervalInfo): void {
+    const channel = this.channel;
+    if (generation !== this.gameDisplaySyncGeneration ||
+      this.gameDisplaySync == null || channel == null || this.gameVsyncMessageInFlight) {
+      return;
+    }
+    this.gameVsyncMessageInFlight = true;
+    const complete = (): void => {
+      if (generation === this.gameDisplaySyncGeneration) {
+        this.gameVsyncMessageInFlight = false;
+      }
+    };
+    channel.invokeMethod(
+      'onGameVsync',
+      [Math.round(info.timestamp / 1000), Math.round(info.targetTimestamp / 1000)],
+      {
+        success: complete,
+        error: complete,
+        notImplemented: complete,
+      },
+    );
   }
 
   private getMaximumDisplayRefreshRate(): number {
@@ -399,6 +422,44 @@ export default class FlutterEngineBridgePlugin
     Log.i(TAG,
       `display refresh: current=${displayInfo.refreshRate}, supported=${JSON.stringify(supportedRates)}, maximum=${maximum}`);
     return maximum;
+  }
+
+  private stopGameDisplaySync(): void {
+    this.stopHighFrameRateVote();
+    ++this.gameDisplaySyncGeneration;
+    this.gameVsyncMessageInFlight = false;
+    const frameSync = this.gameDisplaySync;
+    const callback = this.gameDisplaySyncCallback;
+    this.gameDisplaySync = null;
+    this.gameDisplaySyncCallback = null;
+    if (frameSync == null) {
+      return;
+    }
+    frameSync.stop();
+    if (callback != null) {
+      frameSync.off('frame', callback);
+    }
+  }
+
+  /**
+   * Ask Flutter's window-bound NativeVSync for high refresh while DisplaySync
+   * delivers the system-selected cadence to the producer. Without this window
+   * vote, a standalone DisplaySync request can remain at the idle 60 Hz tier.
+   */
+  private startHighFrameRateVote(expectedFps: number): void {
+    if (expectedFps <= 60) {
+      return;
+    }
+    const flutterEngine = this.flutterEngine;
+    if (flutterEngine == null) {
+      throw new Error('Flutter engine is not attached');
+    }
+    const vote = (): void => {
+      flutterEngine.getFlutterNapi().LTPODispatchHighFrameRate();
+    };
+    vote();
+    // The embedder's touch-up vote expires after three seconds.
+    this.highFrameRateTimer = setInterval(vote, 2000);
   }
 
   private stopHighFrameRateVote(): void {
