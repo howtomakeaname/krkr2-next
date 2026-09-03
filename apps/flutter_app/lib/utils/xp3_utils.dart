@@ -133,6 +133,7 @@ Future<void> xp3Extract(
   String xp3Path,
   String destDir, {
   void Function(double progress, String currentFile)? onProgress,
+  bool Function(String name)? include,
 }) async {
   final file = File(xp3Path);
   final raf = await file.open(mode: FileMode.read);
@@ -244,6 +245,9 @@ Future<void> xp3Extract(
       final entry = entries[idx];
       final relativePath = entry.name.replaceAll('\\', '/');
       onProgress?.call(idx / entries.length, relativePath);
+      if (include != null && !include(entry.name) && !include(relativePath)) {
+        continue;
+      }
 
       final outPath = p.join(destDir, relativePath);
       final outFile = File(outPath);

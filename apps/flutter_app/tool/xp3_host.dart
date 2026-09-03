@@ -45,8 +45,11 @@ void main(List<String> args) async {
         'total=${total / 1024 / 1024}MB in ${infos.length} files; shown=${shown / 1024 / 1024}MB');
   } else if (mode == 'extract') {
     final dest = args[2];
+    final pattern = args.length > 3 ? args[3].toLowerCase() : null;
     await Directory(dest).create(recursive: true);
-    await xp3Extract(xp3, dest, onProgress: (p, f) {
+    await xp3Extract(xp3, dest, include: pattern == null
+        ? null
+        : (n) => n.toLowerCase().contains(pattern), onProgress: (p, f) {
       if (p.isNaN || f.isEmpty) return;
       stdout.writeln('${(p * 100).toStringAsFixed(1)}%  $f');
     });
