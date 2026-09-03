@@ -546,6 +546,54 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
             // ((ttstr)val).AsStdString();
             TVPNativeDataPath = ApplicationSpecialPath::GetDataPathDirectory(
                 config_datapath, ExePath());
+#if defined(__OHOS__)
+            // Download/<bundle>/games is readable but not a reliable write
+            // target (file-manager ownership). Keep saves in the sandbox
+            // the Flutter host already proved writable (KRKR_FILES_DIR).
+            if(const char *filesDir = std::getenv("KRKR_FILES_DIR");
+               filesDir && *filesDir) {
+                std::string p(filesDir);
+                if(!p.empty() && p.back() != '/')
+                    p += '/';
+                p += "savedata/";
+                std::string exe = ExePath().AsNarrowStdString();
+                while(!exe.empty() &&
+                      (exe.back() == '/' || exe.back() == '\\')) {
+                    exe.pop_back();
+                }
+                auto slash = exe.find_last_of("/\\");
+                std::string leaf = (slash == std::string::npos)
+                    ? exe
+                    : exe.substr(slash + 1);
+                auto endsWithCi = [](const std::string &s, const char *ext) {
+                    const size_t n = std::char_traits<char>::length(ext);
+                    if(s.size() < n)
+                        return false;
+                    for(size_t i = 0; i < n; ++i) {
+                        const char a = s[s.size() - n + i];
+                        const char b = ext[i];
+                        if((a | 32) != (b | 32))
+                            return false;
+                    }
+                    return true;
+                };
+                if(endsWithCi(leaf, ".xp3") || endsWithCi(leaf, ".pfs")) {
+                    const std::string parent = (slash == std::string::npos)
+                        ? leaf
+                        : exe.substr(0, slash);
+                    const auto s2 = parent.find_last_of("/\\");
+                    leaf = (s2 == std::string::npos)
+                        ? parent
+                        : parent.substr(s2 + 1);
+                }
+                if(!leaf.empty()) {
+                    p += leaf;
+                    if(p.back() != '/')
+                        p += '/';
+                    TVPNativeDataPath = ttstr(p.c_str());
+                }
+            }
+#endif
 
             if(stop_after_datapath_got)
                 return;
@@ -576,6 +624,12 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
         // set data path
         TVPDataPath = TVPNormalizeStorageName(TVPNativeDataPath);
         TVPAddImportantLog(TVPFormatMessage(TVPInfoDataPath, TVPDataPath));
+        // Create savedata/ before startup scripts run. Games such as
+        // 透明药 call Array.saveStruct() during Initialize.tjs; if the
+        // folder is only created later (first debug log), that write
+        // throws, System.exceptionHandler swallows it, and later
+        // CharDataInit() is missing.
+        TVPEnsureDataPathDirectory();
 
         // set log output directory
         TVPSetLogLocation(TVPNativeDataPath);

@@ -515,8 +515,21 @@ void tTVPApplication::BringToFront() {
 	}
 }
 #endif
+static ttstr _last_shown_exception;
+
+bool TVPIsProjectStartupComplete() { return _project_startup; }
+
+const ttstr &TVPGetLastShownException() { return _last_shown_exception; }
+
 void tTVPApplication::ShowException(const ttstr &e) {
+    _last_shown_exception = e;
     TVPShowSimpleMessageBox(e, TVPGetErrorDialogTitle());
+    // Flutter/OHOS embeds the runtime: aborting the process here
+    // (exit → SIGABRT) hides the TJS error from the host. Leave the
+    // process alive; engine_api reports the failure to the host instead.
+    if(TVPHostSuppressProcessExit) {
+        return;
+    }
     TVPSystemUninit();
     TVPExitApplication(0);
 }

@@ -26,6 +26,7 @@
 #include "EventIntf.h"
 #include "Platform.h"
 #include "StorageImpl.h"
+#include "SysInitImpl.h"
 
 #include "krkr_egl_context.h"
 
@@ -277,6 +278,9 @@ tjs_uint32 TVPGetRoughTickCount32() {
 }
 
 void TVPExitApplication(int code) {
+    if(TVPHostSuppressProcessExit) {
+        return;
+    }
     TVPDeliverCompactEvent(TVP_COMPACT_LEVEL_MAX);
     exit(code);
 }

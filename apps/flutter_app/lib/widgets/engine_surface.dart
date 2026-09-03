@@ -188,17 +188,6 @@ class EngineSurfaceState extends State<EngineSurface> {
       16384,
     );
 
-    if (_isOhos) {
-      // Keep the engine pbuffer at the game's native size (e.g. 1280x720
-      // landscape). Resizing it to the portrait full-screen layout would
-      // make every glReadPixels readback cost ~15MB/frame; RawImage with
-      // BoxFit.contain scales the frame to the widget size anyway.
-      _surfaceWidth = 0;
-      _surfaceHeight = 0;
-      await _ensureRenderTarget();
-      return;
-    }
-
     if (width == _surfaceWidth && height == _surfaceHeight) {
       await _ensureRenderTarget();
       return;
@@ -225,22 +214,16 @@ class EngineSurfaceState extends State<EngineSurface> {
   Future<void> _ensureRenderTarget() async {
     switch (widget.surfaceMode) {
       case EngineSurfaceMode.gpuZeroCopy:
-        if (Platform.isAndroid) {
+        if (Platform.isAndroid || _isOhos) {
+          // OHOS: the engine renders straight into the embedder texture's
+          // OHNativeWindow (eglSwapBuffers). This used to deadlock while
+          // the Dart UI isolate shared the platform thread — the raster
+          // side could only drain the buffer queue once this isolate
+          // yielded. EntryAbility now starts the engine with the UI thread
+          // unmerged, so the raster thread consumes buffers independently
+          // and the software RawImage path (glReadPixels + ~40 ms of
+          // copy/decode per frame on this isolate) is no longer needed.
           await _ensureSurfaceTexture();
-        } else if (_isOhos) {
-          // OHOS zero-copy is disabled: presenting to the embedder texture's
-          // OHNativeWindow via eglSwapBuffers can block the tick thread
-          // forever. The embedder only consumes queued buffers while it is
-          // compositing a Flutter scene, and compositing needs this very
-          // isolate to yield first — once the buffer queue fills,
-          // eglSwapBuffers deadlocks the UI isolate (observed as a frozen
-          // frame plus endless raster JANK reports). The plugin's
-          // updateTextureRgba is also a no-op on OHOS, so the legacy plugin
-          // texture cannot display frames either. Leave all texture ids
-          // null: _pollFrame then takes the RawImage path
-          // (engineReadFrame → decodeImageFromPixels), which requires
-          // nothing from the embedder.
-          widget.onLog?.call('OHOS: using software RawImage frame path');
         } else {
           await _ensureIOSurfaceTexture();
         }
@@ -401,6 +384,16 @@ class EngineSurfaceState extends State<EngineSurface> {
           height: _surfaceHeight,
         );
         if (result != null && mounted) {
+          if (_isOhos && _nativeWindowPtr != 0) {
+            // The ArkTS side only resized the buffer queue; the engine's
+            // EGL window surface and draw-device size follow the same
+            // OHNativeWindow, so re-attach with the new dimensions.
+            await widget.bridge.engineSetRenderTargetNativeWindow(
+              address: _nativeWindowPtr,
+              width: _surfaceWidth,
+              height: _surfaceHeight,
+            );
+          }
           _frameWidth = _surfaceWidth;
           _frameHeight = _surfaceHeight;
           widget.onLog?.call(

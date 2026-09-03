@@ -366,17 +366,49 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get scanSandboxForGames => '扫描应用沙箱';
+  String get rescanGamesDir => '重新扫描游戏目录';
 
   @override
-  String get scanSandboxForGamesDesc =>
-      '查找通过 hdc file send 送入的游戏（XP3 / Artemis .pfs）';
+  String rescanGamesDirDesc(String path) {
+    return '查找放入 $path 或经 hdc 送入的游戏（XP3 / Artemis .pfs）';
+  }
 
   @override
-  String get noGamesFoundInSandbox => '应用沙箱中没有找到游戏。';
+  String get noGamesFoundInSandbox => '游戏目录和应用沙箱中都没有找到游戏。';
 
   @override
-  String get allSandboxGamesRegistered => '沙箱中的游戏都已在库中。';
+  String get allSandboxGamesRegistered => '找到的游戏都已在库中。';
+
+  @override
+  String get noNewGamesFound => '没有发现新游戏。';
+
+  @override
+  String noGamesHintOhos(String path) {
+    return '用「文件管理」把游戏文件夹复制到：\n$path\n然后下拉刷新';
+  }
+
+  @override
+  String get settingsGames => '游戏';
+
+  @override
+  String get publicGamesDir => '游戏存放目录';
+
+  @override
+  String publicGamesDirHint(String path) {
+    return '用「文件管理」把整个游戏文件夹复制到 $path，回到首页下拉刷新即可识别。点按可复制路径。';
+  }
+
+  @override
+  String get pullToRefresh => '下拉刷新';
+
+  @override
+  String get releaseToRefresh => '释放刷新';
+
+  @override
+  String get refreshing => '正在刷新';
+
+  @override
+  String get refreshDone => '刷新成功';
 
   @override
   String get screenOrientation => '屏幕方向';

@@ -79,4 +79,58 @@ enum GameEngine {
     }
     return false;
   }
+
+  /// Whether [dirPath] directly contains a `.xp3` archive.
+  static bool directoryHasXp3(String dirPath) {
+    return _xp3FilesIn(dirPath).isNotEmpty;
+  }
+
+  /// Path the KrKr runtime should actually open.
+  ///
+  /// Typical releases are a folder with `data.xp3` (and maybe `patch.xp3`)
+  /// and no loose `startup.tjs` — that script lives inside the archive.
+  /// The launcher keeps the folder as the library entry (so the card title
+  /// stays the folder name) and this rewrites to `data.xp3` for
+  /// `engine_open_game`. Sibling `patch.tjs` is then picked up via AppPath.
+  static String resolveKrkrLaunchPath(String path) {
+    if (isKrkrArchive(path) || isPfsPack(path)) return path;
+    try {
+      final dir = Directory(path);
+      if (!dir.existsSync()) return path;
+      for (final name in const [
+        'startup.tjs',
+        'Startup.tjs',
+        'STARTUP.TJS',
+      ]) {
+        if (File('$path/$name').existsSync()) return path;
+      }
+      for (final name in const ['initialize.tjs', 'Initialize.tjs']) {
+        if (File('$path/data/system/$name').existsSync()) return path;
+      }
+      final xp3s = _xp3FilesIn(path);
+      if (xp3s.isEmpty) return path;
+      for (final file in xp3s) {
+        final base = file.split(RegExp(r'[/\\]')).last.toLowerCase();
+        if (base == 'data.xp3') return file;
+      }
+      xp3s.sort();
+      return xp3s.first;
+    } on FileSystemException {
+      return path;
+    }
+  }
+
+  static List<String> _xp3FilesIn(String dirPath) {
+    try {
+      final dir = Directory(dirPath);
+      if (!dir.existsSync()) return const [];
+      return [
+        for (final entity in dir.listSync(followLinks: false))
+          if (entity is File && entity.path.toLowerCase().endsWith('.xp3'))
+            entity.path,
+      ];
+    } on FileSystemException {
+      return const [];
+    }
+  }
 }

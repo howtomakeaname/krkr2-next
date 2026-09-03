@@ -133,14 +133,19 @@ void tTVPFileMedia::NormalizeDomainName(ttstr &name) {
 
 //---------------------------------------------------------------------------
 void tTVPFileMedia::NormalizePathName(ttstr &name) {
-    // normalize path name
-    // make all characters small
+    // Windows (and Kirikiri's archive index) treat paths as
+    // case-insensitive, so the historical file:// media lowercases
+    // everything. OHOS public dirs are mixed-case and case-sensitive
+    // (`/storage/Users/currentUser/Download/...`); folding them makes
+    // open/opendir return ENOENT and the game never finds startup.tjs.
+#if !defined(__OHOS__)
     tjs_char *p = name.Independ();
     while(*p) {
         if(*p >= TJS_W('A') && *p <= TJS_W('Z'))
             *p += TJS_W('a') - TJS_W('A');
         p++;
     }
+#endif
 #if defined(__APPLE__)
     _tjs_normalize_nfc(name);
 #endif
@@ -391,10 +396,10 @@ void tTVPFileMedia::GetLocallyAccessibleName(ttstr &name) {
     //     pp++;
     // }
 #else // posix
-#if defined(__ANDROID__)
-    // Android sandbox frequently denies directory probing from "/" and we
-    // don't need case-insensitive recovery there. Fast-path absolute storage
-    // names to a direct POSIX path.
+#if defined(__ANDROID__) || defined(__OHOS__)
+    // Android / OHOS sandboxes deny directory probing from "/". Fast-path
+    // absolute storage names to a direct POSIX path (OHOS also keeps the
+    // original case — see NormalizePathName).
     if(!TJS_strncmp(ptr, TJS_W("./"), 2)) {
         ptr += 2; // skip "./"
         if(*ptr) {

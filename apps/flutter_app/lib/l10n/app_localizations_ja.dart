@@ -370,17 +370,49 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get scanSandboxForGames => 'アプリサンドボックスをスキャン';
+  String get rescanGamesDir => 'ゲームフォルダを再スキャン';
 
   @override
-  String get scanSandboxForGamesDesc =>
-      'hdc file send で転送したゲームを検索（XP3 / Artemis .pfs）';
+  String rescanGamesDirDesc(String path) {
+    return '$path に置いた、または hdc で転送したゲームを検索（XP3 / Artemis .pfs）';
+  }
 
   @override
-  String get noGamesFoundInSandbox => 'アプリサンドボックスにゲームが見つかりません。';
+  String get noGamesFoundInSandbox => 'ゲームフォルダとアプリサンドボックスにゲームが見つかりません。';
 
   @override
-  String get allSandboxGamesRegistered => 'サンドボックス内のゲームはすべてライブラリに登録済みです。';
+  String get allSandboxGamesRegistered => '見つかったゲームはすべてライブラリに登録済みです。';
+
+  @override
+  String get noNewGamesFound => '新しいゲームは見つかりませんでした。';
+
+  @override
+  String noGamesHintOhos(String path) {
+    return '「ファイル」アプリでゲームフォルダを次の場所にコピー：\n$path\nその後、下に引いて更新';
+  }
+
+  @override
+  String get settingsGames => 'ゲーム';
+
+  @override
+  String get publicGamesDir => 'ゲーム保存フォルダ';
+
+  @override
+  String publicGamesDirHint(String path) {
+    return '「ファイル」アプリでゲームフォルダごと $path にコピーし、ホーム画面で下に引いて更新すると認識されます。タップでパスをコピー。';
+  }
+
+  @override
+  String get pullToRefresh => '引っ張って更新';
+
+  @override
+  String get releaseToRefresh => '離して更新';
+
+  @override
+  String get refreshing => '更新中';
+
+  @override
+  String get refreshDone => '更新完了';
 
   @override
   String get screenOrientation => '画面の向き';

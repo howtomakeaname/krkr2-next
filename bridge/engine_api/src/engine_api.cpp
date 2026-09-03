@@ -202,6 +202,26 @@ std::once_flag g_loggers_init_once;
 std::shared_ptr<spdlog::sinks::sink> g_startup_log_sink;
 constexpr size_t kMaxStartupLogs = 4000;
 
+// Runtime spdlog lines destined for the startup-log queue are staged here
+// by the log sink. The sink runs on whatever thread logs (timer thread,
+// sound decoder, storage workers, ...) and therefore must only touch a
+// leaf lock: engine_tick holds g_registry_mutex for the whole frame, so a
+// background thread that logs while holding one of its own locks (e.g.
+// TVPTimerCS) would deadlock against the tick thread if the sink took
+// g_registry_mutex. The API thread merges this queue into the owning
+// handle's startup logs in engine_drain_startup_logs.
+std::atomic<bool> g_startup_log_capture{false};
+std::mutex g_startup_log_mutex;  // leaf lock: never take another lock inside
+std::deque<std::string> g_startup_log_lines;
+
+void SetStartupLogCapture(bool enabled) {
+  g_startup_log_capture.store(enabled, std::memory_order_release);
+  if (!enabled) {
+    std::lock_guard<std::mutex> guard(g_startup_log_mutex);
+    g_startup_log_lines.clear();
+  }
+}
+
 void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg& msg);
 
 class StartupLogSink final : public spdlog::sinks::sink {
@@ -407,18 +427,7 @@ void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg& msg) {
   }
 #endif
 
-  engine_handle_s* target = nullptr;
-  {
-    std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
-    if (!g_runtime_startup_active || g_runtime_startup_owner == nullptr) {
-      return;
-    }
-    if (!IsHandleLiveLocked(g_runtime_startup_owner)) {
-      return;
-    }
-    target = reinterpret_cast<engine_handle_s*>(g_runtime_startup_owner);
-  }
-  if (target == nullptr) {
+  if (!g_startup_log_capture.load(std::memory_order_acquire)) {
     return;
   }
 
@@ -430,7 +439,35 @@ void PushRuntimeSpdlogToStartupQueue(const spdlog::details::log_msg& msg) {
   line.append(level);
   line.append("] ");
   line.append(payload);
-  PushStartupLog(target, line);
+  std::lock_guard<std::mutex> guard(g_startup_log_mutex);
+  g_startup_log_lines.push_back(std::move(line));
+  while (g_startup_log_lines.size() > kMaxStartupLogs) {
+    g_startup_log_lines.pop_front();
+  }
+}
+
+// Move sink-staged runtime lines into the owning handle's startup queue.
+// Called on the API thread with g_registry_mutex held.
+void MergeStagedStartupLogsLocked(engine_handle_t handle,
+                                  engine_handle_s* impl) {
+  if (!g_runtime_startup_active || g_runtime_startup_owner != handle) {
+    return;
+  }
+  std::deque<std::string> staged;
+  {
+    std::lock_guard<std::mutex> guard(g_startup_log_mutex);
+    staged.swap(g_startup_log_lines);
+  }
+  if (staged.empty()) {
+    return;
+  }
+  std::lock_guard<std::mutex> guard(impl->startup.mutex);
+  for (auto& line : staged) {
+    impl->startup.logs.push_back(std::move(line));
+  }
+  while (impl->startup.logs.size() > kMaxStartupLogs) {
+    impl->startup.logs.pop_front();
+  }
 }
 
 void SetStartupState(engine_handle_s* impl, uint32_t state) {
@@ -691,6 +728,20 @@ engine_result_t OpenGameCore(engine_handle_t handle,
     return ENGINE_RESULT_INVALID_STATE;
   }
 
+  if (!TVPIsProjectStartupComplete()) {
+    // StartApplication swallowed a startup-script exception via
+    // ShowException (process exit is suppressed in embedded mode).
+    // Surface the TJS error text instead of pretending the game started.
+    std::string message = TVPGetLastShownException().AsNarrowStdString();
+    if (message.empty()) {
+      message = "startup script failed";
+    }
+    spdlog::error("engine_open_game: startup script failed: {}", message);
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    SetHandleErrorLocked(impl, message.c_str());
+    return ENGINE_RESULT_INTERNAL_ERROR;
+  }
+
   EngineLoop::CreateInstance();
   if (auto* loop = EngineLoop::GetInstance(); loop != nullptr) {
     loop->Start();
@@ -712,6 +763,7 @@ engine_result_t OpenGameCore(engine_handle_t handle,
 
   if (g_runtime_startup_active && g_runtime_startup_owner == handle) {
     g_runtime_startup_active = false;
+  SetStartupLogCapture(false);
     g_runtime_startup_owner = nullptr;
   }
   g_runtime_active = true;
@@ -770,6 +822,7 @@ void RunOpenGameAsync(engine_handle_t handle,
     std::lock_guard<std::recursive_mutex> registry_guard(g_registry_mutex);
     if (g_runtime_startup_active && g_runtime_startup_owner == handle) {
       g_runtime_startup_active = false;
+  SetStartupLogCapture(false);
       g_runtime_startup_owner = nullptr;
     }
   }
@@ -946,15 +999,16 @@ engine_result_t ArtemisTickLocked(engine_handle_s* impl) {
   }
 
   const bool dirty = impl->artemis->ConsumeFrameDirty();
-  impl->frame.rendered_this_tick = dirty || impl->frame.force_present;
+  const bool present = dirty || impl->frame.force_present;
+  impl->frame.rendered_this_tick = present;
   impl->frame.force_present = false;
-  if (dirty) {
+  if (present) {
     impl->frame.width = impl->artemis->StageWidth();
     impl->frame.height = impl->artemis->StageHeight();
     impl->frame.stride_bytes = impl->frame.width * 4u;
     impl->frame.ready = true;
     impl->frame.serial += 1;
-    impl->perf.dirty += 1;
+    if (dirty) impl->perf.dirty += 1;
   }
   ClearHandleErrorLocked(impl);
   SetThreadError(nullptr);
@@ -1087,6 +1141,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
     }
     if (g_runtime_startup_active && g_runtime_startup_owner == handle) {
       g_runtime_startup_active = false;
+  SetStartupLogCapture(false);
       g_runtime_startup_owner = nullptr;
     }
     startup_worker = DetachStartupWorker(impl);
@@ -1221,6 +1276,7 @@ engine_result_t engine_open_game(engine_handle_t handle,
   TVPTerminateOnNoWindowStartup = false;
   TVPHostSuppressProcessExit = true;
   g_runtime_startup_active = true;
+  SetStartupLogCapture(true);
   g_runtime_startup_owner = handle;
   ResetStartupState(impl);
   SetStartupState(impl, ENGINE_STARTUP_STATE_RUNNING);
@@ -1244,6 +1300,7 @@ engine_result_t engine_open_game(engine_handle_t handle,
     SetHandleErrorLocked(impl, "engine_open_game failed");
   }
   g_runtime_startup_active = false;
+  SetStartupLogCapture(false);
   g_runtime_startup_owner = nullptr;
   SetStartupState(impl, ENGINE_STARTUP_STATE_FAILED);
   PushStartupLog(impl, std::string("ERROR: ") + impl->last_error);
@@ -1354,6 +1411,7 @@ engine_result_t engine_open_game_async(engine_handle_t handle,
     PushStartupLog(impl, "engine_open_game_async: queued startup");
     MarkStartupWorkerRunning(impl, true);
     g_runtime_startup_active = true;
+  SetStartupLogCapture(true);
     g_runtime_startup_owner = handle;
 
     try {
@@ -1365,6 +1423,7 @@ engine_result_t engine_open_game_async(engine_handle_t handle,
       MarkStartupWorkerRunning(impl, false);
       SetStartupState(impl, ENGINE_STARTUP_STATE_FAILED);
       g_runtime_startup_active = false;
+  SetStartupLogCapture(false);
       g_runtime_startup_owner = nullptr;
       return SetHandleErrorAndReturnLocked(
           impl, ENGINE_RESULT_INTERNAL_ERROR, "failed to create startup thread");
@@ -1428,6 +1487,8 @@ engine_result_t engine_drain_startup_logs(engine_handle_t handle,
   if (result != ENGINE_RESULT_OK) {
     return result;
   }
+
+  MergeStagedStartupLogsLocked(handle, impl);
 
   uint32_t written = 0;
   {

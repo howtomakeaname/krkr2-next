@@ -103,6 +103,9 @@ tTVPTimerThread::~tTVPTimerThread() {
     Resume();
     Event.Set();
     WaitFor();
+    // Drop TVP_EV_TIMER_THREAD messages still queued for the main thread;
+    // their closures capture this object.
+    EventQueue.Clear();
     EventQueue.Deallocate();
 }
 

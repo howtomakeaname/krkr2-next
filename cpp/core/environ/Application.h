@@ -12,6 +12,12 @@
 
 ttstr ExePath();
 
+// True once StartApplication() ran the startup script to completion.
+bool TVPIsProjectStartupComplete();
+// Text of the last error routed through tTVPApplication::ShowException
+// (script error during startup). Empty when none was reported.
+const ttstr &TVPGetLastShownException();
+
 // 見通しのよい方法に変更した方が良い
 extern int _argc;
 extern char **_argv;

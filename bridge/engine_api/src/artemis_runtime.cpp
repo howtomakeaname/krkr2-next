@@ -192,7 +192,7 @@ struct ArtemisRuntime::Impl {
   void ProcessInput();
   void StepScript();
   void StageFromWindow(float wx, float wy, float* sx, float* sy) const;
-  void Present();
+  void Present(bool force = false);
   bool ReadbackFrame();
 };
 
@@ -550,11 +550,11 @@ bool ArtemisRuntime::Impl::ReadbackFrame() {
   return true;
 }
 
-void ArtemisRuntime::Impl::Present() {
+void ArtemisRuntime::Impl::Present(bool force) {
   auto& egl = krkr::GetEngineEGLContext();
   const bool to_window = egl.HasNativeWindow() && native_win_w > 0 && native_win_h > 0;
   const uint64_t rev = compositor.Revision();
-  if (!to_window && rev == drawn_revision) {
+  if (!force && !to_window && rev == drawn_revision) {
     // Static frame: the pbuffer still holds identical pixels; skip both
     // the GL pass and the readback (same gate as the krkr2 software path).
     frame_dirty = false;
@@ -611,7 +611,7 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
     return TickStatus::kError;
   }
   s.tick_count += 1;
-  s.frame_dirty = false;
+  const bool force_present = s.frame_dirty;
   if (!s.MakeCurrent(error)) return TickStatus::kError;
 
   // [reset] tag = engine reboot (language-select flow ends this way):
@@ -632,6 +632,7 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
 
   if (s.paused) {
     // Keep presenting the last frame but freeze the script/input clocks.
+    if (force_present) s.Present(true);
     return TickStatus::kOk;
   }
 
@@ -646,7 +647,7 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
   // Advance [lytween] / [trans] animations to this frame's time before
   // compositing (bumps the layer revision while anything is moving).
   if (s.lua) s.compositor.Update(s.lua->NowMs());
-  s.Present();
+  s.Present(force_present);
   if (s.lua) s.lua->EndFrame();  // clear per-frame edges
 
   if (s.tick_count % 600 == 0) {
@@ -713,7 +714,10 @@ void ArtemisRuntime::Pause() {
   Impl& s = *impl_;
   if (s.paused) return;
   s.paused = true;
-  if (s.lua) s.lua->PauseAudio();
+  if (s.lua) {
+    s.lua->PauseClock();
+    s.lua->PauseAudio();
+  }
 }
 
 void ArtemisRuntime::Resume() {
@@ -721,7 +725,11 @@ void ArtemisRuntime::Resume() {
   if (!s.paused) return;
   s.paused = false;
   s.frame_dirty = true;
-  if (s.lua) s.lua->ResumeAudio();
+  if (s.lua) {
+    s.lua->ResumeClock();
+    s.lua->ResumeAudio();
+  }
+  s.Log("artemis: resume, clock unfrozen, frame present requested");
 }
 
 void ArtemisRuntime::MarkFrameDirty() {

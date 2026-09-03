@@ -28,6 +28,7 @@ class SettingsPage extends StatefulWidget {
     required this.angleBackend,
     required this.gameOrientation,
     this.restartPending = false,
+    this.publicGamesDir,
   });
 
   final EngineMode engineMode;
@@ -41,6 +42,10 @@ class SettingsPage extends StatefulWidget {
   final String angleBackend;
   final String gameOrientation;
   final bool restartPending;
+
+  /// OHOS: user-facing label of the public drop folder
+  /// (`Download/<bundleName>/games`). Null on platforms without one.
+  final String? publicGamesDir;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -479,6 +484,36 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
               ],
             ),
+
+            // ── Games section (OHOS: public drop folder) ──
+            if (widget.publicGamesDir != null)
+              UiListSection(
+                header: l10n.settingsGames,
+                footer: l10n.publicGamesDirHint(widget.publicGamesDir!),
+                children: [
+                  UiListTile(
+                    icon: LucideIcons.folderOpen,
+                    title: l10n.publicGamesDir,
+                    subtitle: widget.publicGamesDir,
+                    trailing: Icon(
+                      LucideIcons.copy,
+                      size: 18,
+                      color: colors.textTertiary,
+                    ),
+                    onTap: () {
+                      Clipboard.setData(
+                        ClipboardData(text: widget.publicGamesDir!),
+                      );
+                      UiSnackbar.show(
+                        context,
+                        message: l10n.copiedToClipboard,
+                        type: UiSnackbarType.success,
+                        duration: const Duration(seconds: 2),
+                      );
+                    },
+                  ),
+                ],
+              ),
 
             // ── General section ──
             UiListSection(

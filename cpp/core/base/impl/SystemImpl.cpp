@@ -35,6 +35,7 @@
 #include "ScriptMgnIntf.h"
 #include "tjsArray.h"
 #include "Platform.h"
+#include <spdlog/spdlog.h>
 
 // 和系统宏冲突了
 #ifdef _WIN32
@@ -665,6 +666,7 @@ tTJSNativeClass *TVPCreateNativeClass_System() {
             return TJS_E_BADPARAMCOUNT;
 
         ttstr text = *param[0];
+        spdlog::info("System.inform: {}", text.AsStdString());
 
         ttstr caption;
         if(numparams >= 2 && param[1]->Type() != tvtVoid)

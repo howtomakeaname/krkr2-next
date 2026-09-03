@@ -68,6 +68,12 @@ class _UiPullRefreshState extends State<UiPullRefresh>
     with TickerProviderStateMixin {
   _RefreshMode _mode = _RefreshMode.idle;
   double _drag = 0;
+  // 松手后指示器正在自己收回，期间忽略列表回弹带来的滚动通知。
+  bool _settling = false;
+  // 列表当前自己越界了多少（BouncingScrollPhysics 的回弹位移）。
+  // 手指按着时列表已经被物理推下去了，内容只需再补 _drag 超出的部分，
+  // 否则会叠成双倍位移，看起来像整页被拽走。
+  double _overscroll = 0;
 
   late final AnimationController _settle = AnimationController(
     vsync: this,
@@ -96,11 +102,17 @@ class _UiPullRefreshState extends State<UiPullRefresh>
   }
 
   bool _handleScroll(ScrollNotification n) {
-    if (_mode == _RefreshMode.refreshing || _mode == _RefreshMode.done) {
+    final pixels = n.metrics.pixels;
+    final overscroll = pixels < 0 ? -pixels : 0.0;
+    if (overscroll != _overscroll) {
+      setState(() => _overscroll = overscroll);
+    }
+    if (_mode == _RefreshMode.refreshing ||
+        _mode == _RefreshMode.done ||
+        _settling) {
       return false;
     }
 
-    final pixels = n.metrics.pixels;
     // 只响应顶部越界滑动。
     if (pixels > 0) {
       if (_drag != 0) {
@@ -113,6 +125,16 @@ class _UiPullRefreshState extends State<UiPullRefresh>
     }
 
     if (n is ScrollUpdateNotification || n is OverscrollNotification) {
+      // BouncingScrollPhysics 下手指一抬列表就自己回弹，回弹期间的更新没有
+      // dragDetails。要在这一刻拍板，不能等 ScrollEnd——那时 _drag 早被回弹
+      // 更新冲回 0 了（Material RefreshIndicator 也是这么判的）。
+      final fingerDown = n is ScrollUpdateNotification
+          ? n.dragDetails != null
+          : (n as OverscrollNotification).dragDetails != null;
+      if (!fingerDown) {
+        _onRelease();
+        return false;
+      }
       final raw = -pixels.clamp(-widget.maxDistance * 4, 0.0).toDouble();
       final damped = _applyDamping(raw);
       setState(() {
@@ -122,17 +144,25 @@ class _UiPullRefreshState extends State<UiPullRefresh>
             : _RefreshMode.pulling;
       });
     } else if (n is ScrollEndNotification) {
-      if (_mode == _RefreshMode.ready) {
-        _startRefresh();
-      } else if (_drag > 0) {
-        _animateTo(0).then((_) {
-          if (mounted) {
-            setState(() => _mode = _RefreshMode.idle);
-          }
-        });
-      }
+      // Clamping 物理（无回弹）时松手直接到 ScrollEnd，这里兜底。
+      _onRelease();
     }
     return false;
+  }
+
+  /// 松手：够距离就刷新，不够就把指示器收回去。
+  void _onRelease() {
+    if (_mode == _RefreshMode.ready) {
+      _startRefresh();
+    } else if (_drag > 0) {
+      _settling = true;
+      _animateTo(0).then((_) {
+        _settling = false;
+        if (mounted) {
+          setState(() => _mode = _RefreshMode.idle);
+        }
+      });
+    }
   }
 
   Future<void> _animateTo(double target) async {
@@ -217,8 +247,9 @@ class _UiPullRefreshState extends State<UiPullRefresh>
               ),
             ),
           // 内容区域：刷新进行中向下偏移 indicatorHeight 腾出空间。
+          // 手指按着时列表已经被物理回弹推下去 _overscroll，这里只补差额。
           Transform.translate(
-            offset: Offset(0, _drag),
+            offset: Offset(0, (_drag - _overscroll).clamp(0.0, _drag)),
             child: ScrollConfiguration(
               behavior: const _BouncingScrollBehavior(),
               child: NotificationListener<ScrollNotification>(

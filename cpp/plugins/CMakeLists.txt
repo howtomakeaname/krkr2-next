@@ -33,6 +33,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     # Must be absolute: PUBLIC sources propagate to consumers in other
     # directories, and genex entries are resolved relative to the consumer.
     $<$<NOT:$<PLATFORM_ID:OHOS>>:${CMAKE_CURRENT_SOURCE_DIR}/krkrlive2d.cpp>
+    # Software subset of layerExDraw (GdiPlus.Appearance + Layer.drawXxx)
+    # for the OHOS build, where libgdiplus is not available.
+    $<$<PLATFORM_ID:OHOS>:${CMAKE_CURRENT_SOURCE_DIR}/layerExDrawLite.cpp>
     krkrgles.cpp
     drawDeviceD2DCompat.cpp
     wfBasicEffectCompat.cpp

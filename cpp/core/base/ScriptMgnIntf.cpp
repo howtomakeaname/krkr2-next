@@ -463,6 +463,12 @@ void TVPInitScriptEngine() {
     // script system initialization
     TVPScriptEngine->ExecScript(ttstr(TVPInitTJSScript));
 
+    // Global aliases for Kirikiri2 / TJS1 leftovers (e.g. 透明药
+    // Initialize.tjs: randomSeed(System.getTickCount());).
+    TVPScriptEngine->ExecScript(TJS_W(
+        "function randomSeed(s) { return Math.randomSeed(s); }\n"
+        "function random() { return Math.random(); }\n"));
+
     // set console output gateway handler
     TVPScriptEngine->SetConsoleOutput(TVPGetTJS2ConsoleOutputGateway());
 
@@ -723,6 +729,8 @@ void TVPExecuteStorage(const ttstr &name, iTJSDispatch2 *context,
 
     { // for bytecode
         ttstr place(TVPSearchPlacedPath(name));
+        spdlog::debug("execStorage: {} -> {}", name.AsStdString(),
+                      place.AsStdString());
         ttstr shortname(TVPExtractStorageName(place));
         std::unique_ptr<tTJSBinaryStream> stream{ TVPCreateBinaryStreamForRead(
             place, modestr) };
