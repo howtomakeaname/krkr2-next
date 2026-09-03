@@ -7,11 +7,13 @@ import '../models/game_metadata_candidate.dart';
 /// Client for VNDB Kana API (visual novel search).
 /// https://api.vndb.org/kana/
 class VndbClient {
+  VndbClient({http.Client? client}) : _client = client ?? http.Client();
+
   static const String _baseUrl = 'https://api.vndb.org/kana';
   static const String _vnEndpoint = 'vn';
   static const int _resultsLimit = 20;
 
-  final http.Client _client = http.Client();
+  final http.Client _client;
 
   /// Search visual novels by keyword. Returns empty list on network/API error.
   Future<List<GameMetadataCandidate>> search(String keyword) async {
@@ -20,7 +22,8 @@ class VndbClient {
     final uri = Uri.parse('$_baseUrl/$_vnEndpoint');
     final body = jsonEncode({
       'filters': ['search', '=', keyword.trim()],
-      'fields': 'id,title,alttitle,image{url,thumbnail},developers{name}',
+      'fields':
+          'id,title,alttitle,image{url,dims,thumbnail,thumbnail_dims},developers{name}',
       'results': _resultsLimit,
     });
 
@@ -51,6 +54,8 @@ class VndbClient {
 
         String coverUrl = '';
         String? thumbnailUrl;
+        GameImageDimensions? coverImageDimensions;
+        GameImageDimensions? thumbnailDimensions;
         final image = item['image'];
         if (image is Map<String, dynamic>) {
           if (image['url'] is String) {
@@ -60,6 +65,8 @@ class VndbClient {
             final t = (image['thumbnail'] as String).trim();
             if (t.isNotEmpty) thumbnailUrl = t;
           }
+          coverImageDimensions = _parseDimensions(image['dims']);
+          thumbnailDimensions = _parseDimensions(image['thumbnail_dims']);
         }
 
         String? developer;
@@ -72,18 +79,38 @@ class VndbClient {
           }
         }
 
-        list.add(GameMetadataCandidate(
-          title: title,
-          coverImageUrl: coverUrl,
-          thumbnailUrl: thumbnailUrl,
-          developer: developer,
-          sourceId: id,
-          sourceLabel: 'VNDB',
-        ));
+        list.add(
+          GameMetadataCandidate(
+            title: title,
+            coverImageUrl: coverUrl,
+            thumbnailUrl: thumbnailUrl,
+            coverImageDimensions: coverImageDimensions,
+            thumbnailDimensions: thumbnailDimensions,
+            developer: developer,
+            sourceId: id,
+            sourceLabel: 'VNDB',
+          ),
+        );
       }
       return list;
     } catch (_) {
       return [];
     }
+  }
+
+  static GameImageDimensions? _parseDimensions(Object? value) {
+    if (value is! List || value.length < 2) return null;
+
+    final width = _positiveInt(value[0]);
+    final height = _positiveInt(value[1]);
+    if (width == null || height == null) return null;
+
+    return GameImageDimensions(width: width, height: height);
+  }
+
+  static int? _positiveInt(Object? value) {
+    if (value is! num || !value.isFinite) return null;
+    final result = value.toInt();
+    return result > 0 ? result : null;
   }
 }

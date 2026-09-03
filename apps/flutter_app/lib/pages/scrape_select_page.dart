@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -85,10 +87,25 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
     setState(() => _applying = true);
 
     final candidate = _selected!;
+    final previousCoverPath = game.coverPath;
     final localPath = await scraper.downloadCover(candidate);
     await gameManager.renameGame(game.path, candidate.title);
     if (localPath != null) {
       await gameManager.setCoverImage(game.path, localPath);
+      if (previousCoverPath != null && previousCoverPath != localPath) {
+        try {
+          final usedByAnotherGame = gameManager.games.any(
+            (other) =>
+                other.path != game.path && other.coverPath == previousCoverPath,
+          );
+          if (!usedByAnotherGame) {
+            final previousCover = File(previousCoverPath);
+            if (await previousCover.exists()) await previousCover.delete();
+          }
+        } catch (_) {
+          // The new cover is already persisted; a stale file is non-fatal.
+        }
+      }
     }
     if (candidate.developer != null && candidate.developer!.isNotEmpty) {
       await gameManager.setDeveloper(game.path, candidate.developer);

@@ -1526,15 +1526,15 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (cover != null && !landscape) ...[
-                            ClipRRect(
-                              borderRadius: UiRadius.brLg,
-                              child: Image.file(
-                                cover,
-                                width: 88,
-                                height: 88,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    const SizedBox.shrink(),
+                            SizedBox(
+                              width: 84,
+                              height: 112,
+                              child: UiGameCover(
+                                image: FileImage(cover),
+                                borderRadius: UiRadius.brLg,
+                                filterQuality: FilterQuality.medium,
+                                semanticLabel: _bootTitle,
+                                placeholder: const SizedBox.shrink(),
                               ),
                             ),
                             const SizedBox(height: UiSpacing.lg),

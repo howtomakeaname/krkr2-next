@@ -1924,10 +1924,10 @@ class _CoverCard extends StatelessWidget {
 
   Widget _buildBackground(BuildContext context) {
     if (_hasCover) {
-      return Image.file(
-        File(game.coverPath!),
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholder(context),
+      return UiGameCover(
+        image: FileImage(File(game.coverPath!)),
+        placeholder: _buildPlaceholder(context),
+        semanticLabel: game.displayTitle,
       );
     }
     return _buildPlaceholder(context);

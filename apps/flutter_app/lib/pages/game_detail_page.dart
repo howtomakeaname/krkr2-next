@@ -549,10 +549,11 @@ class _GameDetailPageState extends State<GameDetailPage> {
         width: _coverCardWidth,
         height: height,
         child: _hasCover
-            ? Image.file(
-                File(game.coverPath!),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildCoverPlaceholder(height),
+            ? UiGameCover(
+                image: FileImage(File(game.coverPath!)),
+                placeholder: _buildCoverPlaceholder(height),
+                filterQuality: FilterQuality.medium,
+                semanticLabel: game.displayTitle,
               )
             : _buildCoverPlaceholder(height),
       ),
