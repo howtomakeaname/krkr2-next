@@ -20,6 +20,7 @@ import fileUri from '@ohos.file.fileuri';
 import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
 import UIAbility from '@ohos.app.ability.UIAbility';
+import display from '@ohos.display';
 
 const TAG = 'FlutterEngineBridgePlugin';
 
@@ -177,10 +178,9 @@ export default class FlutterEngineBridgePlugin
         break;
 
       case 'setGameFrameRate': {
-        const expected = (call.argument('expected') as number) ?? 0;
+        const preferred = (call.argument('preferred') as number) ?? 0;
         try {
-          this.setGameFrameRate(expected);
-          result.success(null);
+          result.success(this.setGameFrameRate(preferred));
         } catch (e) {
           Log.e(TAG, `setGameFrameRate failed: ${JSON.stringify(e)}`);
           result.error('frame_rate_failed', 'Unable to update the game frame rate', e);
@@ -357,11 +357,21 @@ export default class FlutterEngineBridgePlugin
    * raises the actual compositor/display cadence. Its vote expires after three
    * seconds by design, so refresh it below that timeout while the game lives.
    */
-  private setGameFrameRate(expected: number): void {
+  private setGameFrameRate(preferred: number): number {
     this.stopHighFrameRateVote();
-    if (expected <= 60) {
-      Log.i(TAG, 'setGameFrameRate: follow system');
-      return;
+    // Negative values release the game request. Zero means uncapped: drive the
+    // producer at the display's highest advertised refresh rate and let the
+    // system choose the actual LTPO cadence. Positive values are user limits.
+    if (preferred < 0) {
+      Log.i(TAG, 'setGameFrameRate: released');
+      return 0;
+    }
+    const schedulerFps = preferred > 0
+      ? Math.round(preferred)
+      : this.getMaximumDisplayRefreshRate();
+    if (schedulerFps <= 60) {
+      Log.i(TAG, `setGameFrameRate: scheduler=${schedulerFps}, high-refresh vote not needed`);
+      return schedulerFps;
     }
     const flutterEngine = this.flutterEngine;
     if (flutterEngine == null) {
@@ -372,7 +382,23 @@ export default class FlutterEngineBridgePlugin
     };
     vote();
     this.highFrameRateTimer = setInterval(vote, 2000);
-    Log.i(TAG, `setGameFrameRate: requested=${Math.round(expected)}, LTPO high-refresh vote active`);
+    Log.i(TAG,
+      `setGameFrameRate: preferred=${Math.round(preferred)}, scheduler=${schedulerFps}, LTPO vote active`);
+    return schedulerFps;
+  }
+
+  private getMaximumDisplayRefreshRate(): number {
+    const displayInfo = display.getDefaultDisplaySync();
+    let maximum = displayInfo.refreshRate > 0 ? Math.round(displayInfo.refreshRate) : 60;
+    const supportedRates = displayInfo.supportedRefreshRates;
+    if (supportedRates != null) {
+      for (const rate of supportedRates) {
+        maximum = Math.max(maximum, Math.round(rate));
+      }
+    }
+    Log.i(TAG,
+      `display refresh: current=${displayInfo.refreshRate}, supported=${JSON.stringify(supportedRates)}, maximum=${maximum}`);
+    return maximum;
   }
 
   private stopHighFrameRateVote(): void {

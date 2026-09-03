@@ -70,7 +70,6 @@ class _EngineRuntimeSession {
 
 class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   static const int _engineResultOk = 0;
-  static const int _ohosPreferredFps = 90;
   static const MethodChannel _platformChannel = MethodChannel(
     'flutter_engine_bridge',
   );
@@ -659,20 +658,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       // spams an error every frame, and adds input/raster jitter.
       //
       // Drive only the native producer from a lightweight timer and let the
-      // texture callback be the sole compositor wake-up. DisplaySync keeps the
-      // LTPO panel from dropping the game to 60 Hz after the touch boost ends.
-      final int requestedFps = _fpsLimitEnabled
-          ? _targetFps
-          : _ohosPreferredFps;
-      unawaited(_setOhosGameFrameRate(requestedFps));
-      final clock = Stopwatch()..start();
-      _ohosTickClock = clock;
-      final interval = Duration(
-        microseconds: (Duration.microsecondsPerSecond / requestedFps).round(),
-      );
-      _ohosTickTimer = Timer.periodic(interval, (_) {
-        unawaited(_runEngineTick(clock.elapsed));
-      });
+      // texture callback be the sole compositor wake-up. With frame limiting
+      // disabled, the OHOS plugin resolves the current display's highest
+      // advertised refresh rate; the system still makes the final LTPO choice.
+      unawaited(_startOhosTickDriver());
       return;
     }
 
@@ -680,6 +669,28 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       unawaited(_runEngineTick(elapsed));
     });
     _ticker!.start();
+  }
+
+  Future<void> _startOhosTickDriver() async {
+    final int preferredFps = _fpsLimitEnabled ? _targetFps : 0;
+    final int resolvedFps = await _setOhosGameFrameRate(preferredFps);
+    if (!mounted || !_isTicking) return;
+
+    final int tickFps = resolvedFps > 0
+        ? resolvedFps
+        : (_fpsLimitEnabled ? _targetFps : PrefsKeys.defaultFps);
+    _log(
+      'OHOS tick rate=$tickFps '
+      '(limit=${_fpsLimitEnabled ? _targetFps : 'system maximum'})',
+    );
+    final clock = Stopwatch()..start();
+    _ohosTickClock = clock;
+    final interval = Duration(
+      microseconds: (Duration.microsecondsPerSecond / tickFps).round(),
+    );
+    _ohosTickTimer = Timer.periodic(interval, (_) {
+      unawaited(_runEngineTick(clock.elapsed));
+    });
   }
 
   Future<void> _runEngineTick(Duration elapsed) async {
@@ -771,7 +782,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     _ohosTickClock?.stop();
     _ohosTickClock = null;
     if (Platform.operatingSystem == 'ohos') {
-      unawaited(_setOhosGameFrameRate(0));
+      unawaited(_setOhosGameFrameRate(-1));
     }
   }
 
@@ -786,14 +797,16 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _setOhosGameFrameRate(int expected) async {
+  Future<int> _setOhosGameFrameRate(int preferred) async {
     try {
-      await _platformChannel.invokeMethod<void>(
-        'setGameFrameRate',
-        <String, Object>{'expected': expected},
-      );
+      return await _platformChannel.invokeMethod<int>(
+            'setGameFrameRate',
+            <String, Object>{'preferred': preferred},
+          ) ??
+          preferred;
     } catch (e) {
-      _log('setGameFrameRate($expected) failed: $e');
+      _log('setGameFrameRate($preferred) failed: $e');
+      return preferred;
     }
   }
 
