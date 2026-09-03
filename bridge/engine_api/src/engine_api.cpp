@@ -946,15 +946,16 @@ engine_result_t ArtemisTickLocked(engine_handle_s* impl) {
   }
 
   const bool dirty = impl->artemis->ConsumeFrameDirty();
-  impl->frame.rendered_this_tick = dirty || impl->frame.force_present;
+  const bool present = dirty || impl->frame.force_present;
+  impl->frame.rendered_this_tick = present;
   impl->frame.force_present = false;
-  if (dirty) {
+  if (present) {
     impl->frame.width = impl->artemis->StageWidth();
     impl->frame.height = impl->artemis->StageHeight();
     impl->frame.stride_bytes = impl->frame.width * 4u;
     impl->frame.ready = true;
     impl->frame.serial += 1;
-    impl->perf.dirty += 1;
+    if (dirty) impl->perf.dirty += 1;
   }
   ClearHandleErrorLocked(impl);
   SetThreadError(nullptr);

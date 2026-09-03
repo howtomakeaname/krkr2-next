@@ -77,6 +77,24 @@ LuaEngine::~LuaEngine() {
     if (L_) lua_close(L_);
 }
 void LuaEngine::PauseAudio() { if (audio_) audio_->PauseAll(); }
+
+std::chrono::steady_clock::time_point LuaEngine::ClockNow() const {
+    return clock_paused_ ? clock_pause_at_ : std::chrono::steady_clock::now();
+}
+
+void LuaEngine::PauseClock() {
+    if (clock_paused_) return;
+    clock_paused_ = true;
+    clock_pause_at_ = std::chrono::steady_clock::now();
+}
+
+void LuaEngine::ResumeClock() {
+    if (!clock_paused_) return;
+    const auto dt = std::chrono::steady_clock::now() - clock_pause_at_;
+    init_time_ += dt;
+    wait_until_ += dt;
+    clock_paused_ = false;
+}
 void LuaEngine::ResumeAudio() { if (audio_) audio_->ResumeAll(); }
 
 // ---- input & frame hooks ----
@@ -1217,7 +1235,7 @@ void LuaEngine::SetWaiting(bool w) {
 
 // [wt]/[wait] style time waits: hold the runner until the deadline passes.
 void LuaEngine::SetTimedWait(int ms) {
-    wait_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    wait_until_ = ClockNow() + std::chrono::milliseconds(ms);
     timed_wait_ = true;
     SetWaiting(true);
 }
@@ -1225,7 +1243,7 @@ void LuaEngine::SetTimedWait(int ms) {
 // Polled once per frame: auto-clears an expired timed wait so the runner
 // resumes without user input. Called by the frame loop before stepping.
 bool LuaEngine::IsWaiting() {
-    if (timed_wait_ && std::chrono::steady_clock::now() >= wait_until_) {
+    if (timed_wait_ && ClockNow() >= wait_until_) {
         timed_wait_ = false;
         SetWaiting(false);
     }
@@ -1430,13 +1448,13 @@ int LuaEngine::l_noop(lua_State *L) { return 0; }
 // e:now() — playtime in milliseconds since engine init (behavior parity).
 double LuaEngine::NowMs() const {
     return std::chrono::duration<double, std::milli>(
-               std::chrono::steady_clock::now() - init_time_).count();
+               ClockNow() - init_time_).count();
 }
 
 int LuaEngine::l_now(lua_State *L) {
     LuaEngine *self = Self(L);
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - self->init_time_).count();
+        self->ClockNow() - self->init_time_).count();
     lua_pushinteger(L, static_cast<lua_Integer>(ms));
     return 1;
 }

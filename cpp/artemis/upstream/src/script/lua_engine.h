@@ -61,6 +61,10 @@ public:
     // lifecycle audio mute (shell onPause/onResume hooks)
     void PauseAudio();
     void ResumeAudio();
+    // Freeze e:now() / timed [wait] so park/resume does not skip the
+    // scene. wait_until_ is an absolute steady_clock deadline.
+    void PauseClock();
+    void ResumeClock();
 
     // The [jump file=… label=…] tag hands control to the native script runner.
     void SetJumpHandler(std::function<void(const std::string &file,
@@ -263,6 +267,9 @@ private:
     int debug_mode_ = 0;
     int debug_level_ = 0;
     std::chrono::steady_clock::time_point init_time_;
+    std::chrono::steady_clock::time_point clock_pause_at_{};
+    bool clock_paused_ = false;
+    std::chrono::steady_clock::time_point ClockNow() const;
 
 public:
     ~LuaEngine(); // closes the lua_State
