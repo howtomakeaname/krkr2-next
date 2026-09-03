@@ -70,6 +70,7 @@ class _EngineRuntimeSession {
 
 class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   static const int _engineResultOk = 0;
+  static const int _ohosPreferredFps = 90;
   static const MethodChannel _platformChannel = MethodChannel(
     'flutter_engine_bridge',
   );
@@ -98,6 +99,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       GlobalKey<EngineSurfaceState>();
 
   Ticker? _ticker;
+  Timer? _ohosTickTimer;
+  Stopwatch? _ohosTickClock;
   bool _tickInFlight = false;
   bool _isTicking = false;
   bool _autoPausedByLifecycle = false;
@@ -439,7 +442,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         return l10n?.missingStartupScript(path);
       }
     } catch (e) {
-      return AppLocalizations.of(context)?.gamePathCheckFailed(e.toString());
+      return l10n?.gamePathCheckFailed(e.toString());
     }
     return null;
   }
@@ -482,6 +485,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
     if (Platform.isAndroid) {
       final granted = await _ensureAndroidAllFilesAccess();
+      if (!mounted) return;
       if (!granted) {
         _fail(
           AppLocalizations.of(context)?.androidAllFilesAccess ??
@@ -629,12 +633,13 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     });
   }
 
-  // --- Tick loop (vsync-driven) ---
+  // --- Tick loop ---
 
   // Track the elapsed timestamp of the last *rendered* frame so that
   // reportFrameDelta receives the true inter-frame interval instead of
   // the vsync interval (which is always ~16ms on a 60Hz display).
   Duration _lastRenderedElapsed = Duration.zero;
+  Duration _lastTickElapsed = Duration.zero;
 
   void _startTickLoop() {
     if (_isTicking) return;
@@ -643,94 +648,152 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     _log('Tick loop started');
     if (kDebugMode) _startMemoryStatsPolling();
 
-    Duration lastElapsed = Duration.zero;
+    _lastTickElapsed = Duration.zero;
     _lastRenderedElapsed = Duration.zero;
-    _ticker = Ticker((Duration elapsed) async {
-      if (_tickInFlight) return;
 
-      final int deltaMs = lastElapsed == Duration.zero
-          ? 16
-          : (elapsed - lastElapsed).inMilliseconds.clamp(1, 100);
-      lastElapsed = elapsed;
+    if (Platform.operatingSystem == 'ohos') {
+      // A Flutter Ticker schedules a Flutter scene every vsync. OHOS external
+      // textures already schedule a scene from their native frame-available
+      // callback, so using both drivers makes the raster thread try to consume
+      // each NativeImage buffer twice. The second acquire returns NO_BUFFER,
+      // spams an error every frame, and adds input/raster jitter.
+      //
+      // Drive only the native producer from a lightweight timer and let the
+      // texture callback be the sole compositor wake-up. DisplaySync keeps the
+      // LTPO panel from dropping the game to 60 Hz after the touch boost ends.
+      final int requestedFps = _fpsLimitEnabled
+          ? _targetFps
+          : _ohosPreferredFps;
+      unawaited(_setOhosGameFrameRate(requestedFps));
+      final clock = Stopwatch()..start();
+      _ohosTickClock = clock;
+      final interval = Duration(
+        microseconds: (Duration.microsecondsPerSecond / requestedFps).round(),
+      );
+      _ohosTickTimer = Timer.periodic(interval, (_) {
+        unawaited(_runEngineTick(clock.elapsed));
+      });
+      return;
+    }
 
-      _tickInFlight = true;
-      try {
-        final int result = await _bridge.engineTick(deltaMs: deltaMs);
-        if (!mounted) return;
-
-        if (result != _engineResultOk) {
-          _ticker?.stop();
-          _stopPlaySessionRun();
-          final error = _bridge.engineGetLastError();
-          _log('Tick ended: result=$result, error=$error');
-          if (error.contains('termination') || error.contains('terminated')) {
-            _exitGame();
-            return;
-          }
-          setState(() {
-            _isTicking = false;
-            _phase = _EnginePhase.error;
-            _errorMessage = 'engine_tick failed: $result ($error)';
-          });
-          return;
-        }
-
-        // Read the rendered flag exactly once. We pass it to pollFrame()
-        // so that engine_surface does NOT read it a second time (which
-        // would always see false because the flag is reset on read).
-        final bool rendered = await _bridge.engineGetFrameRenderedFlag();
-        final bool forcePresent = _forcePresentFrames > 0;
-        if (forcePresent) {
-          _forcePresentFrames -= 1;
-        }
-        if (rendered || forcePresent) {
-          if (_rendererInfo.isEmpty) {
-            _fetchRendererInfo();
-          }
-          // Compute the real inter-render interval for accurate FPS.
-          final int renderDeltaMs = _lastRenderedElapsed == Duration.zero
-              ? deltaMs
-              : (elapsed - _lastRenderedElapsed).inMilliseconds.clamp(1, 200);
-          _lastRenderedElapsed = elapsed;
-
-          _perfOverlayKey0.currentState?.reportFrameDelta(
-            renderDeltaMs.toDouble(),
-          );
-          // Kick the readback/decode off the tick critical path.
-          // engineTick and engineReadFrame share a native mutex, so the
-          // copy stays ordered; decodeImageFromPixels can overlap the
-          // next vsync. _frameInFlight drops a late poll instead of
-          // stacking them.
-          unawaited(
-            _surfaceKey.currentState?.pollFrame(
-              rendered: rendered || forcePresent,
-            ),
-          );
-        }
-        _tickCount += 1;
-
-        if (_tickCount % 300 == 0) {
-          final String dartPerf = EngineSurfacePerf.take();
-          _log('Tick alive: count=$_tickCount dartperf $dartPerf');
-          _writeDartPerf(dartPerf);
-        }
-      } finally {
-        _tickInFlight = false;
-      }
+    _ticker = Ticker((Duration elapsed) {
+      unawaited(_runEngineTick(elapsed));
     });
     _ticker!.start();
   }
 
-  void _stopTickLoop({bool notify = true}) {
-    _stopPlaySessionRun();
+  Future<void> _runEngineTick(Duration elapsed) async {
+    if (_tickInFlight || !_isTicking) return;
+
+    final int deltaMs = _lastTickElapsed == Duration.zero
+        ? 16
+        : (((elapsed - _lastTickElapsed).inMicroseconds + 500) ~/
+                  Duration.microsecondsPerMillisecond)
+              .clamp(1, 100);
+    _lastTickElapsed = elapsed;
+
+    _tickInFlight = true;
+    try {
+      final int result = await _bridge.engineTick(deltaMs: deltaMs);
+      if (!mounted || !_isTicking) return;
+
+      if (result != _engineResultOk) {
+        _cancelTickDriver();
+        _stopPlaySessionRun();
+        final error = _bridge.engineGetLastError();
+        _log('Tick ended: result=$result, error=$error');
+        if (error.contains('termination') || error.contains('terminated')) {
+          _exitGame();
+          return;
+        }
+        setState(() {
+          _isTicking = false;
+          _phase = _EnginePhase.error;
+          _errorMessage = 'engine_tick failed: $result ($error)';
+        });
+        return;
+      }
+
+      // Read the rendered flag exactly once. We pass it to pollFrame()
+      // so that engine_surface does NOT read it a second time (which
+      // would always see false because the flag is reset on read).
+      final bool rendered = await _bridge.engineGetFrameRenderedFlag();
+      final bool forcePresent = _forcePresentFrames > 0;
+      if (forcePresent) {
+        _forcePresentFrames -= 1;
+      }
+      if (rendered || forcePresent) {
+        if (_rendererInfo.isEmpty) {
+          _fetchRendererInfo();
+        }
+        // Compute the real inter-render interval for accurate FPS.
+        final double renderDeltaMs = _lastRenderedElapsed == Duration.zero
+            ? deltaMs.toDouble()
+            : (elapsed - _lastRenderedElapsed).inMicroseconds.clamp(
+                    Duration.microsecondsPerMillisecond,
+                    200 * Duration.microsecondsPerMillisecond,
+                  ) /
+                  Duration.microsecondsPerMillisecond;
+        _lastRenderedElapsed = elapsed;
+
+        _perfOverlayKey0.currentState?.reportFrameDelta(
+          renderDeltaMs.toDouble(),
+        );
+        // Kick the readback/decode off the tick critical path.
+        // engineTick and engineReadFrame share a native mutex, so the
+        // copy stays ordered; decodeImageFromPixels can overlap the
+        // next vsync. _frameInFlight drops a late poll instead of
+        // stacking them.
+        unawaited(
+          _surfaceKey.currentState?.pollFrame(
+            rendered: rendered || forcePresent,
+          ),
+        );
+      }
+      _tickCount += 1;
+
+      if (_tickCount % 300 == 0) {
+        final String dartPerf = EngineSurfacePerf.take();
+        _log('Tick alive: count=$_tickCount dartperf $dartPerf');
+        _writeDartPerf(dartPerf);
+      }
+    } finally {
+      _tickInFlight = false;
+    }
+  }
+
+  void _cancelTickDriver() {
     _ticker?.stop();
     _ticker?.dispose();
     _ticker = null;
+    _ohosTickTimer?.cancel();
+    _ohosTickTimer = null;
+    _ohosTickClock?.stop();
+    _ohosTickClock = null;
+    if (Platform.operatingSystem == 'ohos') {
+      unawaited(_setOhosGameFrameRate(0));
+    }
+  }
+
+  void _stopTickLoop({bool notify = true}) {
+    _stopPlaySessionRun();
+    _cancelTickDriver();
     _stopMemoryStatsPolling();
 
     _isTicking = false;
     if (notify && mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _setOhosGameFrameRate(int expected) async {
+    try {
+      await _platformChannel.invokeMethod<void>(
+        'setGameFrameRate',
+        <String, Object>{'expected': expected},
+      );
+    } catch (e) {
+      _log('setGameFrameRate($expected) failed: $e');
     }
   }
 
@@ -1125,67 +1188,67 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       child: Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Full-screen engine surface
-          Positioned.fill(
-            child: _phase == _EnginePhase.error
-                ? _buildErrorView()
-                : _phase == _EnginePhase.running
-                ? EngineSurface(
-                    key: _surfaceKey,
-                    bridge: _bridge,
-                    active: surfaceActive,
-                    surfaceMode: EngineSurfaceMode.gpuZeroCopy,
-                    externalTickDriven: _isTicking,
-                    onLog: (msg) => _log('surface: $msg'),
-                    onError: (msg) => _log('surface error: $msg'),
-                  )
-                : _buildBootLogView(),
-          ),
-
-          // Performance overlay (top-left)
-          if (_showPerfOverlay && _phase == _EnginePhase.running)
-            EnginePerformanceOverlay(
-              key: _perfOverlayKey0,
-              rendererInfo: _rendererInfo,
+          fit: StackFit.expand,
+          children: [
+            // Full-screen engine surface
+            Positioned.fill(
+              child: _phase == _EnginePhase.error
+                  ? _buildErrorView()
+                  : _phase == _EnginePhase.running
+                  ? EngineSurface(
+                      key: _surfaceKey,
+                      bridge: _bridge,
+                      active: surfaceActive,
+                      surfaceMode: EngineSurfaceMode.gpuZeroCopy,
+                      externalTickDriven: _isTicking,
+                      onLog: (msg) => _log('surface: $msg'),
+                      onError: (msg) => _log('surface error: $msg'),
+                    )
+                  : _buildBootLogView(),
             ),
 
-          // Floating menu button (top-right) — only while the game is up.
-          if (_phase == _EnginePhase.running)
-            Positioned(
-              right: 16,
-              top: MediaQuery.of(context).padding.top + 8,
-              child: AnimatedOpacity(
-                opacity: _showOverlay ? 1.0 : 0.6,
-                duration: const Duration(milliseconds: 200),
-                child: Material(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
+            // Performance overlay (top-left)
+            if (_showPerfOverlay && _phase == _EnginePhase.running)
+              EnginePerformanceOverlay(
+                key: _perfOverlayKey0,
+                rendererInfo: _rendererInfo,
+              ),
+
+            // Floating menu button (top-right) — only while the game is up.
+            if (_phase == _EnginePhase.running)
+              Positioned(
+                right: 16,
+                top: MediaQuery.of(context).padding.top + 8,
+                child: AnimatedOpacity(
+                  opacity: _showOverlay ? 1.0 : 0.6,
+                  duration: const Duration(milliseconds: 200),
+                  child: Material(
+                    color: Colors.black45,
                     borderRadius: BorderRadius.circular(8),
-                    onTap: _toggleOverlay,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(
-                        _showOverlay ? LucideIcons.x : LucideIcons.menu,
-                        color: Colors.white70,
-                        size: 24,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: _toggleOverlay,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Icon(
+                          _showOverlay ? LucideIcons.x : LucideIcons.menu,
+                          color: Colors.white70,
+                          size: 24,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-          // Overlay controls
-          if (_showOverlay && _phase == _EnginePhase.running) _buildOverlay(),
+            // Overlay controls
+            if (_showOverlay && _phase == _EnginePhase.running) _buildOverlay(),
 
-          // Debug panel
-          if (_showDebug) _buildDebugPanel(),
-        ],
+            // Debug panel
+            if (_showDebug) _buildDebugPanel(),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -1229,15 +1292,13 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
           layoutBuilder: (current, previous) => Stack(
             alignment: Alignment.center,
             fit: StackFit.expand,
-            children: [
-              ...previous,
-              ?current,
-            ],
+            children: [...previous, ?current],
           ),
           transitionBuilder: (child, animation) {
             final incoming = child.key == ValueKey<String>(label);
-            final begin =
-                incoming ? const Offset(0, 0.85) : const Offset(0, -0.85);
+            final begin = incoming
+                ? const Offset(0, 0.85)
+                : const Offset(0, -0.85);
             return FadeTransition(
               opacity: animation,
               child: SlideTransition(
@@ -1407,7 +1468,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                                           ? const Color(0xFFFF6961)
                                           : isOk
                                           ? const Color(0xFF34C77A)
-                                          : Colors.white.withValues(alpha: 0.55),
+                                          : Colors.white.withValues(
+                                              alpha: 0.55,
+                                            ),
                                       fontSize: 11,
                                       height: 1.35,
                                     ),
@@ -1424,7 +1487,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                       : l10n.gameBootLogs,
                   variant: UiButtonVariant.ghost,
                   size: UiButtonSize.small,
-                  onPressed: () => setState(() => _showBootLogs = !_showBootLogs),
+                  onPressed: () =>
+                      setState(() => _showBootLogs = !_showBootLogs),
                 ),
               ],
             ),

@@ -579,6 +579,17 @@ class EngineSurfaceState extends State<EngineSurface> {
         return;
       }
 
+      // Do not start a software readback while a zero-copy texture is being
+      // created. More importantly, a readback that started just before the
+      // async texture creation must never publish its native 1280x720 frame
+      // size after the texture has switched to a portrait window buffer.
+      // Doing so makes _buildTextureView contain-fit the already-letterboxed
+      // portrait buffer into a second 16:9 box, visibly crushing the game to
+      // a thin horizontal strip.
+      if (_ioSurfaceInitInFlight || _surfaceTextureInitInFlight) {
+        return;
+      }
+
       // Legacy path: read pixels
       final Stopwatch readSw = Stopwatch()..start();
       final EngineFrameData? frameData = await widget.bridge.engineReadFrame();
@@ -586,6 +597,9 @@ class EngineSurfaceState extends State<EngineSurface> {
       _EngineSurfacePerf.readCalls += 1;
       _EngineSurfacePerf.readUs += readSw.elapsedMicroseconds;
       if (frameData == null) {
+        return;
+      }
+      if (_ioSurfaceTextureId != null || _surfaceTextureId != null) {
         return;
       }
       final EngineFrameInfo frameInfo = frameData.info;
@@ -647,6 +661,10 @@ class EngineSurfaceState extends State<EngineSurface> {
         nextImage.dispose();
         return;
       }
+      if (_ioSurfaceTextureId != null || _surfaceTextureId != null) {
+        nextImage.dispose();
+        return;
+      }
 
       final ui.Image? previousImage = _frameImage;
       setState(() {
@@ -687,12 +705,21 @@ class EngineSurfaceState extends State<EngineSurface> {
     // The Texture widget renders at full physical resolution regardless of
     // the SizedBox logical size, so this only affects aspect ratio calculation.
     final double dpr = _devicePixelRatio > 0 ? _devicePixelRatio : 1.0;
-    final int physW = _frameWidth > 0
-        ? _frameWidth
-        : (_surfaceWidth > 0 ? _surfaceWidth : 1);
-    final int physH = _frameHeight > 0
-        ? _frameHeight
-        : (_surfaceHeight > 0 ? _surfaceHeight : 1);
+    // Zero-copy textures contain the complete render-target buffer, including
+    // the engine's own letterbox bars. Their layout aspect must therefore be
+    // the buffer aspect, never a late software frame's native game aspect.
+    final bool isZeroCopyTexture =
+        textureId == _ioSurfaceTextureId || textureId == _surfaceTextureId;
+    final int physW = isZeroCopyTexture && _surfaceWidth > 0
+        ? _surfaceWidth
+        : (_frameWidth > 0
+              ? _frameWidth
+              : (_surfaceWidth > 0 ? _surfaceWidth : 1));
+    final int physH = isZeroCopyTexture && _surfaceHeight > 0
+        ? _surfaceHeight
+        : (_frameHeight > 0
+              ? _frameHeight
+              : (_surfaceHeight > 0 ? _surfaceHeight : 1));
     final double logicalW = physW / dpr;
     final double logicalH = physH / dpr;
     return FittedBox(
