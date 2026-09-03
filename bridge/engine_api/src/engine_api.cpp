@@ -691,6 +691,20 @@ engine_result_t OpenGameCore(engine_handle_t handle,
     return ENGINE_RESULT_INVALID_STATE;
   }
 
+  if (!TVPIsProjectStartupComplete()) {
+    // StartApplication swallowed a startup-script exception via
+    // ShowException (process exit is suppressed in embedded mode).
+    // Surface the TJS error text instead of pretending the game started.
+    std::string message = TVPGetLastShownException().AsNarrowStdString();
+    if (message.empty()) {
+      message = "startup script failed";
+    }
+    spdlog::error("engine_open_game: startup script failed: {}", message);
+    std::lock_guard<std::recursive_mutex> guard(impl->mutex);
+    SetHandleErrorLocked(impl, message.c_str());
+    return ENGINE_RESULT_INTERNAL_ERROR;
+  }
+
   EngineLoop::CreateInstance();
   if (auto* loop = EngineLoop::GetInstance(); loop != nullptr) {
     loop->Start();
