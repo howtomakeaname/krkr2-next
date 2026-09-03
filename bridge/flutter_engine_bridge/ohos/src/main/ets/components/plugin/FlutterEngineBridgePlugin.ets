@@ -1,6 +1,7 @@
 import {
   AbilityAware,
   AbilityPluginBinding,
+  FlutterEngine,
   FlutterPlugin,
   FlutterPluginBinding,
   Log,
@@ -19,6 +20,7 @@ import fileUri from '@ohos.file.fileuri';
 import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
 import UIAbility from '@ohos.app.ability.UIAbility';
+import display from '@ohos.display';
 
 const TAG = 'FlutterEngineBridgePlugin';
 
@@ -45,6 +47,8 @@ export default class FlutterEngineBridgePlugin
   private legacyTextures: Map<number, SurfaceTextureEntry> = new Map();
 
   private ability: UIAbility | null = null;
+  private flutterEngine: FlutterEngine | null = null;
+  private highFrameRateTimer: number = -1;
 
   constructor() {
   }
@@ -54,6 +58,7 @@ export default class FlutterEngineBridgePlugin
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
+    this.flutterEngine = binding.getFlutterEngine();
     this.textureRegistry = binding.getTextureRegistry();
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'flutter_engine_bridge');
     this.channel.setMethodCallHandler(this);
@@ -65,6 +70,8 @@ export default class FlutterEngineBridgePlugin
       this.channel = null;
     }
     this.releaseAllTextures();
+    this.stopHighFrameRateVote();
+    this.flutterEngine = null;
     this.textureRegistry = null;
   }
 
@@ -75,6 +82,7 @@ export default class FlutterEngineBridgePlugin
   }
 
   onDetachedFromAbility(): void {
+    this.stopHighFrameRateVote();
     this.ability = null;
   }
 
@@ -168,6 +176,17 @@ export default class FlutterEngineBridgePlugin
         // the embedder; nothing to push manually (API parity with macOS).
         result.success(null);
         break;
+
+      case 'setGameFrameRate': {
+        const preferred = (call.argument('preferred') as number) ?? 0;
+        try {
+          result.success(this.setGameFrameRate(preferred));
+        } catch (e) {
+          Log.e(TAG, `setGameFrameRate failed: ${JSON.stringify(e)}`);
+          result.error('frame_rate_failed', 'Unable to update the game frame rate', e);
+        }
+        break;
+      }
 
       // --- Legacy RGBA texture mode (fallback, slower) ---
 
@@ -327,6 +346,67 @@ export default class FlutterEngineBridgePlugin
   private unregisterTexture(map: Map<number, SurfaceTextureEntry>, textureId: number): void {
     map.delete(textureId);
     this.textureRegistry?.unregisterTexture(textureId);
+  }
+
+  /**
+   * Keep the Flutter window in a high-refresh state while a game is running.
+   *
+   * DisplaySync controls callback cadence but does not cast a persistent vote
+   * for the Flutter window: RenderService still drops the panel to 60 Hz. The
+   * Flutter OHOS embedder's LTPO entry point votes on its own NativeVSync and
+   * raises the actual compositor/display cadence. Its vote expires after three
+   * seconds by design, so refresh it below that timeout while the game lives.
+   */
+  private setGameFrameRate(preferred: number): number {
+    this.stopHighFrameRateVote();
+    // Negative values release the game request. Zero means uncapped: drive the
+    // producer at the display's highest advertised refresh rate and let the
+    // system choose the actual LTPO cadence. Positive values are user limits.
+    if (preferred < 0) {
+      Log.i(TAG, 'setGameFrameRate: released');
+      return 0;
+    }
+    const schedulerFps = preferred > 0
+      ? Math.round(preferred)
+      : this.getMaximumDisplayRefreshRate();
+    if (schedulerFps <= 60) {
+      Log.i(TAG, `setGameFrameRate: scheduler=${schedulerFps}, high-refresh vote not needed`);
+      return schedulerFps;
+    }
+    const flutterEngine = this.flutterEngine;
+    if (flutterEngine == null) {
+      throw new Error('Flutter engine is not attached');
+    }
+    const vote = (): void => {
+      flutterEngine.getFlutterNapi().LTPODispatchHighFrameRate();
+    };
+    vote();
+    this.highFrameRateTimer = setInterval(vote, 2000);
+    Log.i(TAG,
+      `setGameFrameRate: preferred=${Math.round(preferred)}, scheduler=${schedulerFps}, LTPO vote active`);
+    return schedulerFps;
+  }
+
+  private getMaximumDisplayRefreshRate(): number {
+    const displayInfo = display.getDefaultDisplaySync();
+    let maximum = displayInfo.refreshRate > 0 ? Math.round(displayInfo.refreshRate) : 60;
+    const supportedRates = displayInfo.supportedRefreshRates;
+    if (supportedRates != null) {
+      for (const rate of supportedRates) {
+        maximum = Math.max(maximum, Math.round(rate));
+      }
+    }
+    Log.i(TAG,
+      `display refresh: current=${displayInfo.refreshRate}, supported=${JSON.stringify(supportedRates)}, maximum=${maximum}`);
+    return maximum;
+  }
+
+  private stopHighFrameRateVote(): void {
+    if (this.highFrameRateTimer < 0) {
+      return;
+    }
+    clearInterval(this.highFrameRateTimer);
+    this.highFrameRateTimer = -1;
   }
 
   private releaseAllTextures(): void {
