@@ -661,13 +661,13 @@ abstract class AppLocalizations {
   /// No description provided for @hideDebug.
   ///
   /// In en, this message translates to:
-  /// **'Hide Debug'**
+  /// **'Close Debug Log'**
   String get hideDebug;
 
   /// No description provided for @showDebug.
   ///
   /// In en, this message translates to:
-  /// **'Show Debug'**
+  /// **'Open Debug Log'**
   String get showDebug;
 
   /// No description provided for @pause.

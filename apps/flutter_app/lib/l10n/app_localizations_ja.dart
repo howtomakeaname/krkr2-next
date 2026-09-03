@@ -303,10 +303,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retry => '再試行';
 
   @override
-  String get hideDebug => 'デバッグを非表示';
+  String get hideDebug => 'デバッグログを閉じる';
 
   @override
-  String get showDebug => 'デバッグを表示';
+  String get showDebug => 'デバッグログを開く';
 
   @override
   String get pause => '一時停止';

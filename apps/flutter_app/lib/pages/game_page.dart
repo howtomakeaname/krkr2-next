@@ -1114,7 +1114,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         : PrefsKeys.gameOrientationPortrait;
     setState(() {
       _orientation = next;
-      _showOverlay = false;
     });
     _log('Orientation → $next');
     unawaited(_applyOrientation());
@@ -1234,8 +1233,59 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     setState(() => _showOverlay = !_showOverlay);
   }
 
-  void _toggleDebug() {
-    setState(() => _showDebug = !_showDebug);
+  void _selectGameMenuAction(_GameMenuAction action) {
+    setState(() => _showOverlay = false);
+    switch (action) {
+      case _GameMenuAction.debug:
+        unawaited(_toggleDebug());
+        break;
+      case _GameMenuAction.pause:
+        unawaited(_togglePause());
+        break;
+      case _GameMenuAction.rotate:
+        _toggleOrientation();
+        break;
+      case _GameMenuAction.exit:
+        unawaited(_exitGame());
+        break;
+    }
+  }
+
+  Future<void> _togglePause() async {
+    if (_isTicking) {
+      _stopTickLoop();
+      await _bridge.enginePause();
+      _log('User paused');
+      return;
+    }
+    await _bridge.engineResume();
+    _forcePresentFrames = 8;
+    _startTickLoop();
+    _log('User resumed');
+  }
+
+  Future<void> _toggleDebug() async {
+    if (_showDebug) {
+      await Navigator.of(context).maybePop();
+      return;
+    }
+
+    setState(() => _showDebug = true);
+    await UiBottomSheet.show<void>(
+      context,
+      title: 'Debug Log',
+      showCloseButton: true,
+      child: _GameDebugSheetContent(
+        phase: () => _phase.name,
+        tickCount: () => _tickCount,
+        ticking: () => _isTicking,
+        logs: () => _logs,
+        onClear: _logs.clear,
+      ),
+    );
+    if (mounted) {
+      setState(() => _showDebug = false);
+    }
   }
 
   Future<void> _parkRuntime() async {
@@ -1266,6 +1316,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bool surfaceActive = _phase == _EnginePhase.running;
+    final l10n = AppLocalizations.of(context)!;
 
     return PopScope(
       canPop: false,
@@ -1300,40 +1351,44 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               EnginePerformanceOverlay(
                 key: _perfOverlayKey0,
                 rendererInfo: _rendererInfo,
+                engineName: _engine.label,
+                pacingMode: _fpsLimitEnabled
+                    ? 'Cap $_targetFps FPS'
+                    : Platform.operatingSystem == 'ohos'
+                    ? 'DisplaySync'
+                    : 'VSync',
+                hidden: _showOverlay,
               ),
 
-            // Floating menu button (top-right) — only while the game is up.
-            if (_phase == _EnginePhase.running)
-              Positioned(
-                right: 16,
-                top: MediaQuery.of(context).padding.top + 8,
-                child: AnimatedOpacity(
-                  opacity: _showOverlay ? 1.0 : 0.6,
-                  duration: const Duration(milliseconds: 200),
-                  child: Material(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: _toggleOverlay,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Icon(
-                          _showOverlay ? LucideIcons.x : LucideIcons.menu,
-                          color: Colors.white70,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
+            if (_showOverlay && _phase == _EnginePhase.running)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleOverlay,
                 ),
               ),
 
-            // Overlay controls
-            if (_showOverlay && _phase == _EnginePhase.running) _buildOverlay(),
-
-            // Debug panel
-            if (_showDebug) _buildDebugPanel(),
+            // Floating game controls — only while the game is up.
+            if (_phase == _EnginePhase.running)
+              Positioned(
+                right: 16,
+                top: MediaQuery.paddingOf(context).top + 8,
+                child: _GameControls(
+                  expanded: _showOverlay,
+                  debugVisible: _showDebug,
+                  ticking: _isTicking,
+                  showRotate: PrefsKeys.orientationSupported,
+                  showDebugLabel: _showDebug ? l10n.hideDebug : l10n.showDebug,
+                  pauseLabel: _isTicking ? l10n.pause : l10n.resume,
+                  rotateLabel: l10n.rotateScreen,
+                  exitLabel: l10n.exitGame,
+                  onToggle: _toggleOverlay,
+                  onDebug: () => _selectGameMenuAction(_GameMenuAction.debug),
+                  onPause: () => _selectGameMenuAction(_GameMenuAction.pause),
+                  onRotate: () => _selectGameMenuAction(_GameMenuAction.rotate),
+                  onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
+                ),
+              ),
           ],
         ),
       ),
@@ -1674,165 +1729,685 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       ),
     );
   }
+}
 
-  Widget _buildOverlay() {
+enum _GameMenuAction { debug, pause, rotate, exit }
+
+class _GameDebugSheetContent extends StatefulWidget {
+  const _GameDebugSheetContent({
+    required this.phase,
+    required this.tickCount,
+    required this.ticking,
+    required this.logs,
+    required this.onClear,
+  });
+
+  final ValueGetter<String> phase;
+  final ValueGetter<int> tickCount;
+  final ValueGetter<bool> ticking;
+  final ValueGetter<List<String>> logs;
+  final VoidCallback onClear;
+
+  @override
+  State<_GameDebugSheetContent> createState() => _GameDebugSheetContentState();
+}
+
+class _GameDebugSheetContentState extends State<_GameDebugSheetContent> {
+  late final Timer _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.uiColors;
-    final l10n = AppLocalizations.of(context)!;
-    return Positioned(
-      right: 16,
-      top: MediaQuery.of(context).padding.top + 52,
-      child: Material(
-        color: colors.surfaceElevated,
-        borderRadius: UiRadius.brLg,
-        elevation: 8,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
-          child: IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _overlayItem(
-                  icon: LucideIcons.bug,
-                  label: _showDebug ? l10n.hideDebug : l10n.showDebug,
-                  onTap: _toggleDebug,
+    final logs = List<String>.of(widget.logs());
+    final height = (MediaQuery.sizeOf(context).height * 0.22)
+        .clamp(176.0, 230.0)
+        .toDouble();
+
+    Widget metric(String label, String value) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.5,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: 0.2,
+              height: 1.3,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return SizedBox(
+      height: height,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 4,
+                  children: [
+                    metric('PHASE', widget.phase()),
+                    metric('TICKS', '${widget.tickCount()}'),
+                    metric('STATE', widget.ticking() ? 'running' : 'paused'),
+                  ],
                 ),
-                _overlayItem(
-                  icon: LucideIcons.pause,
-                  label: _isTicking ? l10n.pause : l10n.resume,
-                  onTap: () async {
-                    if (_isTicking) {
-                      _stopTickLoop();
-                      await _bridge.enginePause();
-                      _log('User paused');
-                    } else {
-                      await _bridge.engineResume();
-                      _forcePresentFrames = 8;
-                      _startTickLoop();
-                      _log('User resumed');
-                    }
-                    setState(() => _showOverlay = false);
-                  },
-                ),
-                if (PrefsKeys.orientationSupported)
-                  _overlayItem(
-                    icon: _orientation == PrefsKeys.gameOrientationPortrait
-                        ? LucideIcons.rectangleHorizontal
-                        : LucideIcons.rectangleVertical,
-                    label: l10n.rotateScreen,
-                    onTap: _toggleOrientation,
+              ),
+              UiButton(
+                label: 'Clear',
+                size: UiButtonSize.small,
+                variant: UiButtonVariant.ghost,
+                enableHaptic: false,
+                onPressed: () {
+                  widget.onClear();
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: UiSpacing.sm),
+          Divider(height: 0.5, thickness: 0.5, color: colors.separator),
+          const SizedBox(height: UiSpacing.sm),
+          Expanded(
+            child: logs.isEmpty
+                ? Center(
+                    child: Text(
+                      'No log entries',
+                      style: TextStyle(
+                        color: colors.textTertiary,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: logs.length,
+                    itemBuilder: (context, index) => Text(
+                      logs[index],
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 10.5,
+                        fontFamily: 'monospace',
+                        height: 1.35,
+                      ),
+                    ),
                   ),
-                Divider(color: colors.separator, height: 1),
-                _overlayItem(
-                  icon: LucideIcons.logOut,
-                  label: l10n.exitGame,
-                  onTap: _exitGame,
-                  destructive: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GameControls extends StatefulWidget {
+  const _GameControls({
+    required this.expanded,
+    required this.debugVisible,
+    required this.ticking,
+    required this.showRotate,
+    required this.showDebugLabel,
+    required this.pauseLabel,
+    required this.rotateLabel,
+    required this.exitLabel,
+    required this.onToggle,
+    required this.onDebug,
+    required this.onPause,
+    required this.onRotate,
+    required this.onExit,
+  });
+
+  final bool expanded;
+  final bool debugVisible;
+  final bool ticking;
+  final bool showRotate;
+  final String showDebugLabel;
+  final String pauseLabel;
+  final String rotateLabel;
+  final String exitLabel;
+  final VoidCallback onToggle;
+  final VoidCallback onDebug;
+  final VoidCallback onPause;
+  final VoidCallback onRotate;
+  final VoidCallback onExit;
+
+  @override
+  State<_GameControls> createState() => _GameControlsState();
+}
+
+class _GameControlsState extends State<_GameControls>
+    with SingleTickerProviderStateMixin {
+  static const double _collapsedSize = 44;
+  static const double _expandedWidth = 184;
+  static const double _expandedHeight = 104;
+  static const Curve _debugReveal = Interval(
+    0.14,
+    0.60,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _pauseReveal = Interval(
+    0.20,
+    0.66,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _rotateReveal = Interval(
+    0.26,
+    0.72,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _exitReveal = Interval(
+    0.32,
+    0.84,
+    curve: UiCurves.iosSpringOut,
+  );
+  static const Curve _dividerReveal = Interval(
+    0.22,
+    0.60,
+    curve: Curves.easeOutCubic,
+  );
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: UiDuration.page,
+    reverseDuration: const Duration(milliseconds: 280),
+    value: widget.expanded ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(covariant _GameControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.expanded == oldWidget.expanded) return;
+    if (widget.expanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final rawProgress = reduceMotion
+              ? (widget.expanded ? 1.0 : 0.0)
+              : _controller.value;
+          final geometryProgress =
+              (_controller.status == AnimationStatus.reverse
+                      ? UiCurves.iosSmooth
+                      : UiCurves.iosStandard)
+                  .transform(rawProgress);
+          final expandedWidth = widget.showRotate ? _expandedWidth : 140.0;
+          final width =
+              _collapsedSize +
+              ((expandedWidth - _collapsedSize) * geometryProgress);
+          final height =
+              _collapsedSize +
+              ((_expandedHeight - _collapsedSize) * geometryProgress);
+          final target = widget.expanded ? 1.0 : 0.0;
+          double reveal(Curve curve) =>
+              reduceMotion ? target : curve.transform(rawProgress);
+
+          return Semantics(
+            container: true,
+            label: 'Game controls',
+            child: Container(
+              width: width,
+              height: height,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(
+                      const Color(0xD13A3A3C),
+                      const Color(0xEB3A3A3C),
+                      geometryProgress,
+                    )!,
+                    Color.lerp(
+                      const Color(0xE628282A),
+                      const Color(0xF22C2C2E),
+                      geometryProgress,
+                    )!,
+                  ],
                 ),
-              ],
+                border: Border.all(
+                  color: Color.lerp(
+                    const Color(0x30FFFFFF),
+                    const Color(0x3DFFFFFF),
+                    geometryProgress,
+                  )!,
+                  width: 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color.lerp(
+                      const Color(0x38000000),
+                      const Color(0x52000000),
+                      geometryProgress,
+                    )!,
+                    blurRadius: 10 + (8 * geometryProgress),
+                    offset: Offset(0, 3 + (3 * geometryProgress)),
+                  ),
+                ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    top: 0,
+                    height: 0.5,
+                    child: ColoredBox(
+                      color: Color.lerp(
+                        const Color(0x24FFFFFF),
+                        const Color(0x47FFFFFF),
+                        geometryProgress,
+                      )!,
+                    ),
+                  ),
+                  IgnorePointer(
+                    ignoring: !widget.expanded,
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 4,
+                          top: 4,
+                          width: _collapsedSize,
+                          height: _collapsedSize,
+                          child: _ControlReveal(
+                            progress: reveal(_debugReveal),
+                            child: _GlassIconAction(
+                              icon: LucideIcons.bug,
+                              label: widget.showDebugLabel,
+                              selected: widget.debugVisible,
+                              onTap: widget.onDebug,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 48,
+                          top: 4,
+                          width: _collapsedSize,
+                          height: _collapsedSize,
+                          child: _ControlReveal(
+                            progress: reveal(_pauseReveal),
+                            child: _GlassIconAction(
+                              icon: widget.ticking
+                                  ? LucideIcons.pause
+                                  : LucideIcons.play,
+                              label: widget.pauseLabel,
+                              onTap: widget.onPause,
+                            ),
+                          ),
+                        ),
+                        if (widget.showRotate)
+                          Positioned(
+                            left: 92,
+                            top: 4,
+                            width: _collapsedSize,
+                            height: _collapsedSize,
+                            child: _ControlReveal(
+                              progress: reveal(_rotateReveal),
+                              child: _GlassIconAction(
+                                icon: LucideIcons.rotateCw,
+                                label: widget.rotateLabel,
+                                onTap: widget.onRotate,
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          top: 52,
+                          child: Opacity(
+                            opacity: reveal(_dividerReveal).clamp(0.0, 1.0),
+                            child: const Divider(
+                              height: 0.5,
+                              thickness: 0.5,
+                              color: Color(0x24FFFFFF),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 4,
+                          right: 4,
+                          top: 56,
+                          height: 44,
+                          child: _ControlReveal(
+                            progress: reveal(_exitReveal),
+                            verticalOffset: 5,
+                            child: _GlassExitAction(
+                              label: widget.exitLabel,
+                              onTap: widget.onExit,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    right: 4 * geometryProgress,
+                    top: 4 * geometryProgress,
+                    width: _collapsedSize,
+                    height: _collapsedSize,
+                    child: _MorphingMenuButton(
+                      progress: rawProgress,
+                      expanded: widget.expanded,
+                      onTap: widget.onToggle,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ControlReveal extends StatelessWidget {
+  const _ControlReveal({
+    required this.progress,
+    required this.child,
+    this.verticalOffset = 7,
+  });
+
+  final double progress;
+  final double verticalOffset;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibility = progress.clamp(0.0, 1.0);
+    return Opacity(
+      opacity: visibility,
+      child: Transform.translate(
+        offset: Offset(0, verticalOffset * (1 - progress)),
+        child: Transform.scale(scale: 0.88 + (0.12 * progress), child: child),
+      ),
+    );
+  }
+}
+
+class _MorphingMenuButton extends StatefulWidget {
+  const _MorphingMenuButton({
+    required this.progress,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final double progress;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  State<_MorphingMenuButton> createState() => _MorphingMenuButtonState();
+}
+
+class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.expanded ? 'Close game controls' : 'Open game controls',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed ? 0.90 : 1,
+          duration: UiDuration.fast,
+          curve: UiCurves.iosSnappy,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedOpacity(
+                opacity: _pressed ? 1 : 0,
+                duration: UiDuration.fast,
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0x24FFFFFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox.expand(),
+                ),
+              ),
+              Opacity(
+                opacity: (1 - widget.progress).clamp(0.0, 1.0),
+                child: Transform.rotate(
+                  angle: widget.progress * 0.7,
+                  child: const UiIcon(
+                    UiIcons.moreHorizontal,
+                    size: 20,
+                    color: Color(0xEBFFFFFF),
+                  ),
+                ),
+              ),
+              Opacity(
+                opacity: widget.progress.clamp(0.0, 1.0),
+                child: Transform.rotate(
+                  angle: (1 - widget.progress) * -0.7,
+                  child: const UiIcon(
+                    UiIcons.close,
+                    size: 18,
+                    color: Color(0xD6FFFFFF),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassIconAction extends StatefulWidget {
+  const _GlassIconAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  State<_GlassIconAction> createState() => _GlassIconActionState();
+}
+
+class _GlassIconActionState extends State<_GlassIconAction> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AnimatedScale(
+              scale: _pressed ? 0.90 : 1,
+              duration: UiDuration.fast,
+              curve: UiCurves.iosSnappy,
+              child: AnimatedContainer(
+                width: 34,
+                height: 34,
+                duration: UiDuration.fast,
+                curve: UiCurves.iosSmooth,
+                decoration: BoxDecoration(
+                  color: _pressed
+                      ? const Color(0x29FFFFFF)
+                      : widget.selected
+                      ? const Color(0x3D0A84FF)
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: UiIcon(
+                  widget.icon,
+                  size: 17,
+                  color: widget.selected
+                      ? const Color(0xFF64D2FF)
+                      : const Color(0xE6FFFFFF),
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _overlayItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool destructive = false,
-  }) {
-    final color = destructive
-        ? context.uiColors.danger
-        : context.uiColors.textPrimary;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 12),
-            Text(label, style: TextStyle(color: color, fontSize: 14)),
-          ],
-        ),
-      ),
-    );
+class _GlassExitAction extends StatefulWidget {
+  const _GlassExitAction({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_GlassExitAction> createState() => _GlassExitActionState();
+}
+
+class _GlassExitActionState extends State<_GlassExitAction> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
   }
 
-  Widget _buildDebugPanel() {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 200,
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.85),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: Colors.white10,
-              child: Row(
-                children: [
-                  Text(
-                    'Debug  |  Phase: ${_phase.name}  |  '
-                    'Ticks: $_tickCount  |  '
-                    'Ticking: $_isTicking',
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          widget.onTap();
+        },
+        child: AnimatedScale(
+          scale: _pressed ? 0.98 : 1,
+          duration: UiDuration.fast,
+          curve: UiCurves.iosSnappy,
+          child: AnimatedContainer(
+            duration: UiDuration.fast,
+            curve: UiCurves.iosSmooth,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _pressed ? const Color(0x1FFF453A) : Colors.transparent,
+              borderRadius: UiRadius.brLg,
+            ),
+            child: Row(
+              children: [
+                const UiIcon(
+                  LucideIcons.logOut,
+                  size: 17,
+                  color: Color(0xFFFF6961),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                      color: Color(0xFFFF6961),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.1,
+                      decoration: TextDecoration.none,
                     ),
                   ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _logs.clear()),
-                    child: const Text(
-                      'Clear',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _toggleDebug,
-                    child: const Icon(
-                      LucideIcons.x,
-                      color: Colors.white54,
-                      size: 16,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(
-              child: _logs.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No logs',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _logs.length,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      itemBuilder: (context, index) => Text(
-                        _logs[index],
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-            ),
-          ],
+          ),
         ),
       ),
     );

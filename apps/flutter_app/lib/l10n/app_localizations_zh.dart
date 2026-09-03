@@ -300,10 +300,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
-  String get hideDebug => '隐藏调试';
+  String get hideDebug => '关闭调试日志';
 
   @override
-  String get showDebug => '显示调试';
+  String get showDebug => '打开调试日志';
 
   @override
   String get pause => '暂停';
