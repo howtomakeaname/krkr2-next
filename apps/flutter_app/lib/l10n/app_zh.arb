@@ -178,6 +178,10 @@
   "copiedToClipboard": "已复制到剪贴板",
   "gameFormat": "格式",
   "gamePath": "路径",
+  "gameDescription": "简介",
+  "gameKeywords": "关键词",
+  "showMore": "展开",
+  "showLess": "收起",
 
   "scrapeMetadata": "刮削信息",
   "scrapeMetadataDialogTitle": "刮削信息",

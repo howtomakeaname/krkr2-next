@@ -517,6 +517,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gamePath => '路径';
 
   @override
+  String get gameDescription => '简介';
+
+  @override
+  String get gameKeywords => '关键词';
+
+  @override
+  String get showMore => '展开';
+
+  @override
+  String get showLess => '收起';
+
+  @override
   String get scrapeMetadata => '刮削信息';
 
   @override

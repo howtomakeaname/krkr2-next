@@ -8,11 +8,14 @@ class GameInfo {
     required this.path,
     this.title,
     this.developer,
+    this.description,
+    List<String>? keywords,
     this.lastPlayed,
     this.coverPath,
     this.playDurationSeconds,
     GameEngine? engine,
-  }) : engine = engine ?? GameEngine.detect(path);
+  }) : keywords = keywords ?? <String>[],
+       engine = engine ?? GameEngine.detect(path);
 
   /// The root directory (or archive / pack file) of the game.
   String path;
@@ -22,6 +25,12 @@ class GameInfo {
 
   /// Developer / producer name (e.g. from scraping).
   String? developer;
+
+  /// Plain-text game synopsis supplied by a metadata provider.
+  String? description;
+
+  /// Searchable themes / tags supplied by a metadata provider.
+  List<String> keywords;
 
   /// Last time the game was launched.
   DateTime? lastPlayed;
@@ -56,28 +65,39 @@ class GameInfo {
   }
 
   Map<String, dynamic> toJson() => {
-        'path': path,
-        'title': title,
-        'developer': developer,
-        'lastPlayed': lastPlayed?.toIso8601String(),
-        'coverPath': coverPath,
-        'playDurationSeconds': playDurationSeconds,
-        'engine': engine.id,
-      };
+    'path': path,
+    'title': title,
+    'developer': developer,
+    'description': description,
+    'keywords': keywords,
+    'lastPlayed': lastPlayed?.toIso8601String(),
+    'coverPath': coverPath,
+    'playDurationSeconds': playDurationSeconds,
+    'engine': engine.id,
+  };
 
   factory GameInfo.fromJson(Map<String, dynamic> json) => GameInfo(
-        path: json['path'] as String,
-        title: json['title'] as String?,
-        developer: json['developer'] as String?,
-        lastPlayed: json['lastPlayed'] != null
-            ? DateTime.tryParse(json['lastPlayed'] as String)
-            : null,
-        coverPath: json['coverPath'] as String?,
-        playDurationSeconds: json['playDurationSeconds'] as int?,
-        // Entries written before the engine field existed are re-detected
-        // from their path (cheap: extension check, or one directory listing).
-        engine: GameEngine.fromId(json['engine'] as String?),
-      );
+    path: json['path'] as String,
+    title: json['title'] as String?,
+    developer: json['developer'] as String?,
+    description: json['description'] is String
+        ? json['description'] as String
+        : null,
+    // Metadata fields were added after the initial storage format. Missing
+    // or malformed values therefore safely become an empty list.
+    keywords: switch (json['keywords']) {
+      final List<dynamic> values => values.whereType<String>().toList(),
+      _ => <String>[],
+    },
+    lastPlayed: json['lastPlayed'] != null
+        ? DateTime.tryParse(json['lastPlayed'] as String)
+        : null,
+    coverPath: json['coverPath'] as String?,
+    playDurationSeconds: json['playDurationSeconds'] as int?,
+    // Entries written before the engine field existed are re-detected
+    // from their path (cheap: extension check, or one directory listing).
+    engine: GameEngine.fromId(json['engine'] as String?),
+  );
 
   static List<GameInfo> listFromJsonString(String jsonString) {
     try {

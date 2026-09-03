@@ -199,6 +199,40 @@ class GameManager {
     }
   }
 
+  /// Persist the textual fields returned by a metadata scrape in one write.
+  ///
+  /// Passing null/empty values clears metadata from an earlier scrape so a
+  /// newly selected result cannot leave unrelated text behind.
+  Future<void> setScrapedMetadata(
+    String path, {
+    String? developer,
+    String? description,
+    List<String>? keywords,
+  }) async {
+    final index = _games.indexWhere((g) => g.path == path);
+    if (index < 0) return;
+
+    _games[index]
+      ..developer = _normalizedText(developer)
+      ..description = _normalizedText(description)
+      ..keywords = _normalizedKeywords(keywords);
+    await _save();
+  }
+
+  String? _normalizedText(String? value) {
+    final normalized = value?.trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  List<String> _normalizedKeywords(List<String>? values) {
+    if (values == null) return <String>[];
+    final seen = <String>{};
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty && seen.add(value.toLowerCase()))
+        .toList(growable: false);
+  }
+
   List<String> _readSettledSessionIds(SharedPreferences prefs) {
     return List<String>.from(
       prefs.getStringList(PrefsKeys.settledPlaySessionIds) ?? const <String>[],

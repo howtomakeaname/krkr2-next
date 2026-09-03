@@ -55,6 +55,7 @@ export 'components/ui_timeline.dart';
 export 'components/ui_pagination.dart';
 export 'components/ui_breadcrumb.dart';
 export 'components/ui_image_viewer.dart';
+export 'components/ui_game_cover.dart';
 export 'components/ui_color_picker.dart';
 export 'components/ui_signature.dart';
 export 'components/ui_tree.dart';

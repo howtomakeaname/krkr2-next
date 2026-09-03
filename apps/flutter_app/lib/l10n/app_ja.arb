@@ -178,6 +178,10 @@
   "copiedToClipboard": "クリップボードにコピーしました",
   "gameFormat": "フォーマット",
   "gamePath": "パス",
+  "gameDescription": "あらすじ",
+  "gameKeywords": "キーワード",
+  "showMore": "もっと見る",
+  "showLess": "閉じる",
 
   "scrapeMetadata": "情報を取得",
   "scrapeMetadataDialogTitle": "情報を取得",

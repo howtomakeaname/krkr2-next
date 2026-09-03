@@ -522,6 +522,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gamePath => 'パス';
 
   @override
+  String get gameDescription => 'あらすじ';
+
+  @override
+  String get gameKeywords => 'キーワード';
+
+  @override
+  String get showMore => 'もっと見る';
+
+  @override
+  String get showLess => '閉じる';
+
+  @override
   String get scrapeMetadata => '情報を取得';
 
   @override
