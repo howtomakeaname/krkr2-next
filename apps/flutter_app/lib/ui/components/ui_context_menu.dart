@@ -11,6 +11,43 @@ import 'ui_icon.dart';
 
 const double _menuVerticalPadding = 4;
 const double _menuDividerExtent = 0.5;
+const double _menuWidth = 250;
+
+double _menuItemExtent(BuildContext context, UiMenuItem item) {
+  if (item.subtitle == null || item.subtitle!.isEmpty) return 44;
+
+  var textWidth = _menuWidth - UiSpacing.lg * 2;
+  if (item.selected) textWidth -= 16 + UiSpacing.sm;
+  if (item.icon != null) textWidth -= 20 + UiSpacing.sm;
+
+  final typography = context.uiType;
+  final textDirection = Directionality.of(context);
+  final textScaler = MediaQuery.textScalerOf(context);
+  final locale = Localizations.maybeLocaleOf(context);
+
+  double textHeight(String text, TextStyle style, int maxLines) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+      maxLines: maxLines,
+      ellipsis: '…',
+    )..layout(maxWidth: textWidth);
+    return painter.height;
+  }
+
+  final labelHeight = textHeight(
+    item.label,
+    typography.body.copyWith(fontSize: 17, height: 1.25),
+    1,
+  );
+  final subtitleHeight = textHeight(item.subtitle!, typography.caption, 2);
+  return math.max(
+    44,
+    (UiSpacing.sm * 2 + labelHeight + subtitleHeight).ceilToDouble(),
+  );
+}
 
 /// 菜单项。长按 [UiContextMenu] 与点按 [UiPopupMenu] 共用。
 class UiMenuItem {
@@ -237,7 +274,6 @@ class _AnchoredMenu extends StatefulWidget {
 }
 
 class _AnchoredMenuState extends State<_AnchoredMenu> {
-  static const double _menuWidth = 250;
   late CurvedAnimation _curved;
 
   @override
@@ -276,9 +312,12 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
     final curved = _curved;
     final alignEnd = widget.alignEnd ?? (anchor.center.dx >= size.width / 2);
 
+    final itemExtents = [
+      for (final item in items) _menuItemExtent(context, item),
+    ];
     var estimatedHeight = _menuVerticalPadding * 2;
-    for (final item in items) {
-      estimatedHeight += item.subtitle == null ? 44.0 : 60.0;
+    for (final extent in itemExtents) {
+      estimatedHeight += extent;
     }
     estimatedHeight +=
         math.max(0, items.length - 1) * _menuDividerExtent;
@@ -387,7 +426,10 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
                               ignoring: visibility < 0.98,
                               child: Opacity(
                                 opacity: contentOpacity,
-                                child: _GlassMenuContent(items: items),
+                                child: _GlassMenuContent(
+                                  items: items,
+                                  itemExtents: itemExtents,
+                                ),
                               ),
                             ),
                           ),
@@ -427,9 +469,13 @@ class _GlassMenuMaterial extends StatelessWidget {
 }
 
 class _GlassMenuContent extends StatelessWidget {
-  const _GlassMenuContent({required this.items});
+  const _GlassMenuContent({
+    required this.items,
+    required this.itemExtents,
+  });
 
   final List<UiMenuItem> items;
+  final List<double> itemExtents;
 
   @override
   Widget build(BuildContext context) {
@@ -448,10 +494,13 @@ class _GlassMenuContent extends StatelessWidget {
                   thickness: _menuDividerExtent,
                   color: colors.separator,
                 ),
-              _MenuRow(
-                item: items[i],
-                isFirst: i == 0,
-                isLast: i == items.length - 1,
+              SizedBox(
+                height: itemExtents[i],
+                child: _MenuRow(
+                  item: items[i],
+                  isFirst: i == 0,
+                  isLast: i == items.length - 1,
+                ),
               ),
             ],
           ],
@@ -592,6 +641,8 @@ class _MenuRowState extends State<_MenuRow> {
                         fontSize: 17,
                         height: 1.25,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (item.subtitle != null && item.subtitle!.isNotEmpty)
                       Text(
