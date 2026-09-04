@@ -116,6 +116,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileTopGames => 'Most Played';
 
   @override
+  String get profileStatistics => 'Play Statistics';
+
+  @override
+  String get profileViewStatistics => 'View Detailed Statistics';
+
+  @override
   String get profileGameRecords => 'Games';
 
   @override
@@ -128,6 +134,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String profilePlaySummary(String duration, int count) {
     return '$duration played · $count games';
   }
+
+  @override
+  String get playTimeLessThanMinute => 'Less than 1 min';
 
   @override
   String playTimeMinutes(int minutes) {

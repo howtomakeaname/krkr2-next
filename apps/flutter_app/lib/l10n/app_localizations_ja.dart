@@ -114,6 +114,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profileTopGames => 'よく遊ぶゲーム';
 
   @override
+  String get profileStatistics => 'プレイ統計';
+
+  @override
+  String get profileViewStatistics => '詳しい統計を見る';
+
+  @override
   String get profileGameRecords => 'ゲーム記録';
 
   @override
@@ -126,6 +132,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String profilePlaySummary(String duration, int count) {
     return 'プレイ時間 $duration · $count本';
   }
+
+  @override
+  String get playTimeLessThanMinute => '1分未満';
 
   @override
   String playTimeMinutes(int minutes) {

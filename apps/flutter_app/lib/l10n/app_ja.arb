@@ -37,6 +37,8 @@
   "profileGamesPlayed": "プレイしたゲーム",
   "profileAverageSession": "平均プレイ時間",
   "profileTopGames": "よく遊ぶゲーム",
+  "profileStatistics": "プレイ統計",
+  "profileViewStatistics": "詳しい統計を見る",
   "profileGameRecords": "ゲーム記録",
   "profileRecentGame": "最近プレイしたゲーム",
   "profileNoHistory": "記録はありません",
@@ -47,6 +49,7 @@
       "count": { "type": "int" }
     }
   },
+  "playTimeLessThanMinute": "1分未満",
   "playTimeMinutes": "{minutes}分",
   "@playTimeMinutes": {
     "placeholders": { "minutes": { "type": "int" } }

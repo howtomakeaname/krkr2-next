@@ -113,6 +113,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileTopGames => '常玩游戏';
 
   @override
+  String get profileStatistics => '游玩统计';
+
+  @override
+  String get profileViewStatistics => '查看详细统计';
+
+  @override
   String get profileGameRecords => '游戏记录';
 
   @override
@@ -125,6 +131,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String profilePlaySummary(String duration, int count) {
     return '已玩 $duration · $count 个游戏';
   }
+
+  @override
+  String get playTimeLessThanMinute => '不足 1 分钟';
 
   @override
   String playTimeMinutes(int minutes) {

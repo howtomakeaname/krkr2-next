@@ -37,6 +37,8 @@
   "profileGamesPlayed": "Games Played",
   "profileAverageSession": "Avg. Session",
   "profileTopGames": "Most Played",
+  "profileStatistics": "Play Statistics",
+  "profileViewStatistics": "View Detailed Statistics",
   "profileGameRecords": "Games",
   "profileRecentGame": "Recently Played",
   "profileNoHistory": "No activity yet",
@@ -47,6 +49,7 @@
       "count": { "type": "int" }
     }
   },
+  "playTimeLessThanMinute": "Less than 1 min",
   "playTimeMinutes": "{minutes} min",
   "@playTimeMinutes": {
     "placeholders": { "minutes": { "type": "int" } }

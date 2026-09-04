@@ -304,6 +304,18 @@ abstract class AppLocalizations {
   /// **'Most Played'**
   String get profileTopGames;
 
+  /// No description provided for @profileStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Statistics'**
+  String get profileStatistics;
+
+  /// No description provided for @profileViewStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'View Detailed Statistics'**
+  String get profileViewStatistics;
+
   /// No description provided for @profileGameRecords.
   ///
   /// In en, this message translates to:
@@ -327,6 +339,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} played · {count} games'**
   String profilePlaySummary(String duration, int count);
+
+  /// No description provided for @playTimeLessThanMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'Less than 1 min'**
+  String get playTimeLessThanMinute;
 
   /// No description provided for @playTimeMinutes.
   ///
