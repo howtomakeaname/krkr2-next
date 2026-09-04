@@ -119,6 +119,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileViewStatistics => '查看详细统计';
 
   @override
+  String get profileHonorTitle => '荣誉称号';
+
+  @override
+  String get profileHonorNewcomer => '初来乍到';
+
+  @override
+  String get profileHonorStoryTraveler => '剧情旅人';
+
+  @override
+  String get profileHonorImmersedReader => '沉浸读者';
+
+  @override
+  String get profileHonorVeteran => '资深玩家';
+
+  @override
+  String get profileHonorCollector => '游戏藏家';
+
+  @override
+  String get profileHonorCurator => '典藏家';
+
+  @override
+  String profileHonorNext(String title) {
+    return '下一称号：$title';
+  }
+
+  @override
+  String profileHonorRemainingBoth(String duration, int count) {
+    return '再游玩 $duration，并体验 $count 款游戏';
+  }
+
+  @override
+  String profileHonorRemainingTime(String duration) {
+    return '再游玩 $duration';
+  }
+
+  @override
+  String profileHonorRemainingGames(int count) {
+    return '再体验 $count 款游戏';
+  }
+
+  @override
+  String get profileHonorHighest => '已达到最高称号';
+
+  @override
   String get profileGameRecords => '游戏记录';
 
   @override

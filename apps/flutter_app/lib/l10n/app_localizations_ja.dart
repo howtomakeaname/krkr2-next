@@ -120,6 +120,50 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profileViewStatistics => '詳しい統計を見る';
 
   @override
+  String get profileHonorTitle => '称号';
+
+  @override
+  String get profileHonorNewcomer => 'はじめの一歩';
+
+  @override
+  String get profileHonorStoryTraveler => '物語の旅人';
+
+  @override
+  String get profileHonorImmersedReader => '没入する読者';
+
+  @override
+  String get profileHonorVeteran => 'ベテランプレイヤー';
+
+  @override
+  String get profileHonorCollector => 'ゲームコレクター';
+
+  @override
+  String get profileHonorCurator => '物語の蒐集家';
+
+  @override
+  String profileHonorNext(String title) {
+    return '次の称号：$title';
+  }
+
+  @override
+  String profileHonorRemainingBoth(String duration, int count) {
+    return 'あと$durationプレイし、$count本のゲームを体験';
+  }
+
+  @override
+  String profileHonorRemainingTime(String duration) {
+    return 'あと$durationプレイ';
+  }
+
+  @override
+  String profileHonorRemainingGames(int count) {
+    return 'あと$count本のゲームを体験';
+  }
+
+  @override
+  String get profileHonorHighest => '最高の称号に到達しました';
+
+  @override
   String get profileGameRecords => 'ゲーム記録';
 
   @override

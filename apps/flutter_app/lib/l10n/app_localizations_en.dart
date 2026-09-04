@@ -122,6 +122,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileViewStatistics => 'View Detailed Statistics';
 
   @override
+  String get profileHonorTitle => 'Honor Title';
+
+  @override
+  String get profileHonorNewcomer => 'New Arrival';
+
+  @override
+  String get profileHonorStoryTraveler => 'Story Traveler';
+
+  @override
+  String get profileHonorImmersedReader => 'Immersed Reader';
+
+  @override
+  String get profileHonorVeteran => 'Seasoned Player';
+
+  @override
+  String get profileHonorCollector => 'Game Collector';
+
+  @override
+  String get profileHonorCurator => 'Archive Curator';
+
+  @override
+  String profileHonorNext(String title) {
+    return 'Next: $title';
+  }
+
+  @override
+  String profileHonorRemainingBoth(String duration, int count) {
+    return 'Play $duration more and explore $count more games';
+  }
+
+  @override
+  String profileHonorRemainingTime(String duration) {
+    return 'Play $duration more';
+  }
+
+  @override
+  String profileHonorRemainingGames(int count) {
+    return 'Explore $count more games';
+  }
+
+  @override
+  String get profileHonorHighest => 'Highest title reached';
+
+  @override
   String get profileGameRecords => 'Games';
 
   @override

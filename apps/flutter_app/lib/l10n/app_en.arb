@@ -39,6 +39,33 @@
   "profileTopGames": "Most Played",
   "profileStatistics": "Play Statistics",
   "profileViewStatistics": "View Detailed Statistics",
+  "profileHonorTitle": "Honor Title",
+  "profileHonorNewcomer": "New Arrival",
+  "profileHonorStoryTraveler": "Story Traveler",
+  "profileHonorImmersedReader": "Immersed Reader",
+  "profileHonorVeteran": "Seasoned Player",
+  "profileHonorCollector": "Game Collector",
+  "profileHonorCurator": "Archive Curator",
+  "profileHonorNext": "Next: {title}",
+  "@profileHonorNext": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "profileHonorRemainingBoth": "Play {duration} more and explore {count} more games",
+  "@profileHonorRemainingBoth": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "profileHonorRemainingTime": "Play {duration} more",
+  "@profileHonorRemainingTime": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
+  "profileHonorRemainingGames": "Explore {count} more games",
+  "@profileHonorRemainingGames": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "profileHonorHighest": "Highest title reached",
   "profileGameRecords": "Games",
   "profileRecentGame": "Recently Played",
   "profileNoHistory": "No activity yet",

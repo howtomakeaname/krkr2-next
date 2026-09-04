@@ -316,6 +316,78 @@ abstract class AppLocalizations {
   /// **'View Detailed Statistics'**
   String get profileViewStatistics;
 
+  /// No description provided for @profileHonorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Honor Title'**
+  String get profileHonorTitle;
+
+  /// No description provided for @profileHonorNewcomer.
+  ///
+  /// In en, this message translates to:
+  /// **'New Arrival'**
+  String get profileHonorNewcomer;
+
+  /// No description provided for @profileHonorStoryTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'Story Traveler'**
+  String get profileHonorStoryTraveler;
+
+  /// No description provided for @profileHonorImmersedReader.
+  ///
+  /// In en, this message translates to:
+  /// **'Immersed Reader'**
+  String get profileHonorImmersedReader;
+
+  /// No description provided for @profileHonorVeteran.
+  ///
+  /// In en, this message translates to:
+  /// **'Seasoned Player'**
+  String get profileHonorVeteran;
+
+  /// No description provided for @profileHonorCollector.
+  ///
+  /// In en, this message translates to:
+  /// **'Game Collector'**
+  String get profileHonorCollector;
+
+  /// No description provided for @profileHonorCurator.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive Curator'**
+  String get profileHonorCurator;
+
+  /// No description provided for @profileHonorNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: {title}'**
+  String profileHonorNext(String title);
+
+  /// No description provided for @profileHonorRemainingBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Play {duration} more and explore {count} more games'**
+  String profileHonorRemainingBoth(String duration, int count);
+
+  /// No description provided for @profileHonorRemainingTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Play {duration} more'**
+  String profileHonorRemainingTime(String duration);
+
+  /// No description provided for @profileHonorRemainingGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore {count} more games'**
+  String profileHonorRemainingGames(int count);
+
+  /// No description provided for @profileHonorHighest.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest title reached'**
+  String get profileHonorHighest;
+
   /// No description provided for @profileGameRecords.
   ///
   /// In en, this message translates to:

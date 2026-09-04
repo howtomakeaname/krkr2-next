@@ -39,6 +39,33 @@
   "profileTopGames": "よく遊ぶゲーム",
   "profileStatistics": "プレイ統計",
   "profileViewStatistics": "詳しい統計を見る",
+  "profileHonorTitle": "称号",
+  "profileHonorNewcomer": "はじめの一歩",
+  "profileHonorStoryTraveler": "物語の旅人",
+  "profileHonorImmersedReader": "没入する読者",
+  "profileHonorVeteran": "ベテランプレイヤー",
+  "profileHonorCollector": "ゲームコレクター",
+  "profileHonorCurator": "物語の蒐集家",
+  "profileHonorNext": "次の称号：{title}",
+  "@profileHonorNext": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "profileHonorRemainingBoth": "あと{duration}プレイし、{count}本のゲームを体験",
+  "@profileHonorRemainingBoth": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "profileHonorRemainingTime": "あと{duration}プレイ",
+  "@profileHonorRemainingTime": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
+  "profileHonorRemainingGames": "あと{count}本のゲームを体験",
+  "@profileHonorRemainingGames": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "profileHonorHighest": "最高の称号に到達しました",
   "profileGameRecords": "ゲーム記録",
   "profileRecentGame": "最近プレイしたゲーム",
   "profileNoHistory": "記録はありません",
