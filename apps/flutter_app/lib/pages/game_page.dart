@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1524,17 +1525,22 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   hidden: _showOverlay,
                 ),
 
-              if (_showOverlay && _phase == _EnginePhase.running)
+              if (_phase == _EnginePhase.running)
                 Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _toggleOverlay,
+                  key: const ValueKey('game-controls-dismiss-layer'),
+                  child: IgnorePointer(
+                    ignoring: !_showOverlay,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _toggleOverlay,
+                    ),
                   ),
                 ),
 
               // Floating game controls — only while the game is up.
               if (_phase == _EnginePhase.running)
                 Positioned(
+                  key: const ValueKey('game-controls'),
                   right: 16,
                   top: MediaQuery.paddingOf(context).top + 8,
                   child: _GameControls(
@@ -2084,57 +2090,88 @@ class _GameControls extends StatefulWidget {
 }
 
 class _GameControlsState extends State<_GameControls>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const double _collapsedSize = 44;
   static const double _expandedWidth = 184;
   static const double _expandedHeight = 104;
+  static final SpringDescription _expandSpring =
+      SpringDescription.withDurationAndBounce(
+        duration: const Duration(milliseconds: 420),
+        bounce: 0.18,
+      );
+  static final SpringDescription _collapseSpring =
+      SpringDescription.withDurationAndBounce(
+        duration: const Duration(milliseconds: 300),
+        bounce: 0.04,
+      );
   static const Curve _debugReveal = Interval(
-    0.14,
-    0.60,
-    curve: UiCurves.iosSpringOut,
+    0.10,
+    0.54,
+    curve: Curves.easeOutCubic,
   );
   static const Curve _pauseReveal = Interval(
-    0.20,
-    0.66,
-    curve: UiCurves.iosSpringOut,
-  );
-  static const Curve _rotateReveal = Interval(
-    0.26,
-    0.72,
-    curve: UiCurves.iosSpringOut,
-  );
-  static const Curve _exitReveal = Interval(
-    0.32,
-    0.84,
-    curve: UiCurves.iosSpringOut,
-  );
-  static const Curve _dividerReveal = Interval(
-    0.22,
+    0.16,
     0.60,
     curve: Curves.easeOutCubic,
   );
+  static const Curve _rotateReveal = Interval(
+    0.22,
+    0.66,
+    curve: Curves.easeOutCubic,
+  );
+  static const Curve _exitReveal = Interval(
+    0.28,
+    0.78,
+    curve: Curves.easeOutCubic,
+  );
+  static const Curve _dividerReveal = Interval(
+    0.20,
+    0.58,
+    curve: Curves.easeOutCubic,
+  );
 
-  late final AnimationController _controller = AnimationController(
+  late final AnimationController _shapeController =
+      AnimationController.unbounded(
+        vsync: this,
+        value: widget.expanded ? 1 : 0,
+      );
+  late final AnimationController _contentController = AnimationController(
     vsync: this,
-    duration: UiDuration.page,
-    reverseDuration: const Duration(milliseconds: 280),
+    duration: const Duration(milliseconds: 320),
+    reverseDuration: const Duration(milliseconds: 210),
     value: widget.expanded ? 1 : 0,
   );
+
+  void _animateShape(bool expanded) {
+    _shapeController.animateWith(
+      SpringSimulation(
+        expanded ? _expandSpring : _collapseSpring,
+        _shapeController.value,
+        expanded ? 1 : 0,
+        _shapeController.velocity,
+        snapToEnd: true,
+        tolerance: const Tolerance(distance: 0.001, velocity: 0.001),
+      ),
+    );
+  }
 
   @override
   void didUpdateWidget(covariant _GameControls oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.expanded == oldWidget.expanded) return;
     if (widget.expanded) {
-      _controller.forward();
+      _animateShape(true);
+      _contentController.forward();
     } else {
-      _controller.reverse();
+      _animateShape(false);
+      _contentController.reverse();
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _shapeController.dispose();
+    _contentController.dispose();
     super.dispose();
   }
 
@@ -2147,36 +2184,39 @@ class _GameControlsState extends State<_GameControls>
 
     return RepaintBoundary(
       child: AnimatedBuilder(
-        animation: _controller,
+        animation: Listenable.merge([_shapeController, _contentController]),
         builder: (context, _) {
-          final rawProgress = reduceMotion
+          final shapeProgress = reduceMotion
               ? (widget.expanded ? 1.0 : 0.0)
-              : _controller.value;
-          final geometryProgress =
-              (_controller.status == AnimationStatus.reverse
-                      ? UiCurves.iosSmooth
-                      : UiCurves.iosStandard)
-                  .transform(rawProgress);
+              : _shapeController.value;
+          final elasticProgress = shapeProgress.clamp(-0.018, 1.018);
+          final visualProgress = shapeProgress.clamp(0.0, 1.0);
+          final contentProgress = reduceMotion
+              ? (widget.expanded ? 1.0 : 0.0)
+              : _contentController.value;
           final expandedWidth = widget.showRotate ? _expandedWidth : 140.0;
           final width =
               _collapsedSize +
-              ((expandedWidth - _collapsedSize) * geometryProgress);
+              ((expandedWidth - _collapsedSize) * elasticProgress);
           final height =
               _collapsedSize +
-              ((_expandedHeight - _collapsedSize) * geometryProgress);
+              ((_expandedHeight - _collapsedSize) * elasticProgress);
           final target = widget.expanded ? 1.0 : 0.0;
           double reveal(Curve curve) =>
-              reduceMotion ? target : curve.transform(rawProgress);
+              reduceMotion ? target : curve.transform(contentProgress);
+          final materialPulse = reduceMotion
+              ? 0.0
+              : (4 * contentProgress * (1 - contentProgress)).clamp(0.0, 1.0);
           final topFill = Color.lerp(
             mediaBackdrop,
             mediaForeground,
             0.23,
-          )!.withValues(alpha: 0.82 + (0.10 * geometryProgress));
+          )!.withValues(alpha: 0.82 + (0.10 * visualProgress));
           final bottomFill = Color.lerp(
             mediaBackdrop,
             mediaForeground,
             0.16,
-          )!.withValues(alpha: 0.90 + (0.05 * geometryProgress));
+          )!.withValues(alpha: 0.90 + (0.05 * visualProgress));
 
           return Semantics(
             container: true,
@@ -2194,17 +2234,17 @@ class _GameControlsState extends State<_GameControls>
                 ),
                 border: Border.all(
                   color: mediaForeground.withValues(
-                    alpha: 0.19 + (0.05 * geometryProgress),
+                    alpha: 0.19 + (0.05 * visualProgress),
                   ),
                   width: 0.5,
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: mediaBackdrop.withValues(
-                      alpha: 0.22 + (0.10 * geometryProgress),
+                      alpha: 0.22 + (0.10 * visualProgress),
                     ),
-                    blurRadius: 10 + (8 * geometryProgress),
-                    offset: Offset(0, 3 + (3 * geometryProgress)),
+                    blurRadius: 10 + (8 * visualProgress),
+                    offset: Offset(0, 3 + (3 * visualProgress)),
                   ),
                 ],
               ),
@@ -2218,7 +2258,28 @@ class _GameControlsState extends State<_GameControls>
                     height: 0.5,
                     child: ColoredBox(
                       color: mediaForeground.withValues(
-                        alpha: 0.14 + (0.14 * geometryProgress),
+                        alpha: 0.14 + (0.14 * visualProgress),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: 0.16 * materialPulse,
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              center: Alignment(0.82, -0.86),
+                              radius: 1.05,
+                              colors: [
+                                Color(0xB8FFFFFF),
+                                Color(0x24FFFFFF),
+                                Color(0x00FFFFFF),
+                              ],
+                              stops: [0, 0.34, 0.78],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -2233,6 +2294,7 @@ class _GameControlsState extends State<_GameControls>
                           height: _collapsedSize,
                           child: _ControlReveal(
                             progress: reveal(_debugReveal),
+                            horizontalOffset: 10,
                             child: _GlassIconAction(
                               icon: LucideIcons.bug,
                               label: widget.showDebugLabel,
@@ -2248,6 +2310,7 @@ class _GameControlsState extends State<_GameControls>
                           height: _collapsedSize,
                           child: _ControlReveal(
                             progress: reveal(_pauseReveal),
+                            horizontalOffset: 7,
                             child: _GlassIconAction(
                               icon: widget.ticking
                                   ? LucideIcons.pause
@@ -2265,6 +2328,7 @@ class _GameControlsState extends State<_GameControls>
                             height: _collapsedSize,
                             child: _ControlReveal(
                               progress: reveal(_rotateReveal),
+                              horizontalOffset: 4,
                               child: _GlassIconAction(
                                 icon: LucideIcons.rotateCw,
                                 label: widget.rotateLabel,
@@ -2303,12 +2367,12 @@ class _GameControlsState extends State<_GameControls>
                     ),
                   ),
                   Positioned(
-                    right: 4 * geometryProgress,
-                    top: 4 * geometryProgress,
+                    right: 4 * visualProgress,
+                    top: 4 * visualProgress,
                     width: _collapsedSize,
                     height: _collapsedSize,
                     child: _MorphingMenuButton(
-                      progress: rawProgress,
+                      progress: contentProgress,
                       expanded: widget.expanded,
                       onTap: widget.onToggle,
                     ),
@@ -2327,10 +2391,12 @@ class _ControlReveal extends StatelessWidget {
   const _ControlReveal({
     required this.progress,
     required this.child,
+    this.horizontalOffset = 0,
     this.verticalOffset = 7,
   });
 
   final double progress;
+  final double horizontalOffset;
   final double verticalOffset;
   final Widget child;
 
@@ -2340,7 +2406,10 @@ class _ControlReveal extends StatelessWidget {
     return Opacity(
       opacity: visibility,
       child: Transform.translate(
-        offset: Offset(0, verticalOffset * (1 - progress)),
+        offset: Offset(
+          horizontalOffset * (1 - progress),
+          verticalOffset * (1 - progress),
+        ),
         child: Transform.scale(scale: 0.88 + (0.12 * progress), child: child),
       ),
     );
@@ -2373,6 +2442,9 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
   @override
   Widget build(BuildContext context) {
     final colors = context.uiColors;
+    final progress = widget.progress.clamp(0.0, 1.0);
+    final dotsProgress = (progress / 0.46).clamp(0.0, 1.0);
+    final closeProgress = ((progress - 0.22) / 0.58).clamp(0.0, 1.0);
     return Semantics(
       button: true,
       label: widget.expanded ? 'Close game controls' : 'Open game controls',
@@ -2404,24 +2476,31 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
                 ),
               ),
               Opacity(
-                opacity: (1 - widget.progress).clamp(0.0, 1.0),
+                opacity: 1 - dotsProgress,
                 child: Transform.rotate(
-                  angle: widget.progress * 0.7,
-                  child: UiIcon(
-                    UiIcons.moreHorizontal,
-                    size: 20,
-                    color: colors.textOnBrand.withValues(alpha: 0.92),
+                  angle: progress * 0.34,
+                  child: Transform.scale(
+                    scaleX: 1 - (0.24 * dotsProgress),
+                    scaleY: 1 + (0.08 * dotsProgress),
+                    child: UiIcon(
+                      UiIcons.moreHorizontal,
+                      size: 20,
+                      color: colors.textOnBrand.withValues(alpha: 0.92),
+                    ),
                   ),
                 ),
               ),
               Opacity(
-                opacity: widget.progress.clamp(0.0, 1.0),
-                child: Transform.rotate(
-                  angle: (1 - widget.progress) * -0.7,
-                  child: UiIcon(
-                    UiIcons.close,
-                    size: 18,
-                    color: colors.textOnBrand.withValues(alpha: 0.84),
+                opacity: closeProgress,
+                child: Transform.scale(
+                  scale: 0.72 + (0.28 * closeProgress),
+                  child: Transform.rotate(
+                    angle: (1 - closeProgress) * -0.52,
+                    child: UiIcon(
+                      UiIcons.close,
+                      size: 18,
+                      color: colors.textOnBrand.withValues(alpha: 0.84),
+                    ),
                   ),
                 ),
               ),
