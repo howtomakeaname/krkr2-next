@@ -232,6 +232,18 @@ abstract class AppLocalizations {
   /// **'Search'**
   String get search;
 
+  /// No description provided for @searchGamesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search games'**
+  String get searchGamesHint;
+
+  /// No description provided for @searchNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching games'**
+  String get searchNoResults;
+
   /// No description provided for @searchComingSoon.
   ///
   /// In en, this message translates to:

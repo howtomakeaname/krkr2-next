@@ -80,6 +80,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get search => 'Search';
 
   @override
+  String get searchGamesHint => 'Search games';
+
+  @override
+  String get searchNoResults => 'No matching games';
+
+  @override
   String get searchComingSoon => 'Search is coming soon';
 
   @override

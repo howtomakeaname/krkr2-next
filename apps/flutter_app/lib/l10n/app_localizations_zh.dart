@@ -77,6 +77,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get search => '搜索';
 
   @override
+  String get searchGamesHint => '搜索游戏';
+
+  @override
+  String get searchNoResults => '没有找到匹配的游戏';
+
+  @override
   String get searchComingSoon => '搜索功能正在准备中';
 
   @override

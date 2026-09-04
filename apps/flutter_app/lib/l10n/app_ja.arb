@@ -25,6 +25,8 @@
   "tabManage": "管理",
   "tabProfile": "マイページ",
   "search": "検索",
+  "searchGamesHint": "ゲームを検索",
+  "searchNoResults": "一致するゲームがありません",
   "searchComingSoon": "検索機能は準備中です",
   "help": "ヘルプ",
   "profilePlayTimeTitle": "プレイ時間",

@@ -25,6 +25,8 @@
   "tabManage": "管理",
   "tabProfile": "我的",
   "search": "搜索",
+  "searchGamesHint": "搜索游戏",
+  "searchNoResults": "没有找到匹配的游戏",
   "searchComingSoon": "搜索功能正在准备中",
   "help": "帮助",
   "profilePlayTimeTitle": "游玩时间",

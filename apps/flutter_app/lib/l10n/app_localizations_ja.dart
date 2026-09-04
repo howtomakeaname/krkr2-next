@@ -78,6 +78,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get search => '検索';
 
   @override
+  String get searchGamesHint => 'ゲームを検索';
+
+  @override
+  String get searchNoResults => '一致するゲームがありません';
+
+  @override
   String get searchComingSoon => '検索機能は準備中です';
 
   @override
