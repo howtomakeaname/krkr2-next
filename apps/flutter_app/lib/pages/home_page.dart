@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -1302,72 +1301,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _setCoverImage(GameInfo game, {Rect? anchor}) async {
-    final l10n = AppLocalizations.of(context)!;
-    final source = await UiPopupMenu.show<String>(
-      context,
-      anchor: anchor ?? _fallbackMenuAnchor(context),
-      items: [
-        UiMenuItem(
-          label: l10n.coverFromGallery,
-          icon: LucideIcons.image,
-          value: 'gallery',
-        ),
-        UiMenuItem(
-          label: l10n.coverFromCamera,
-          icon: LucideIcons.camera,
-          value: 'camera',
-        ),
-        if (game.coverPath != null)
-          UiMenuItem(
-            label: l10n.coverRemove,
-            icon: LucideIcons.trash2,
-            isDestructive: true,
-            value: 'remove',
-          ),
-      ],
-    );
-    if (source == null || !mounted) return;
-
-    if (source == 'remove') {
-      await _gameManager.setCoverImage(game.path, null);
-      if (mounted) setState(() {});
-      return;
-    }
-
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
-    if (image == null || !mounted) return;
-
-    // Copy image to app's persistent storage
-    final docDir = await getApplicationDocumentsDirectory();
-    final coversDir = Directory('${docDir.path}/covers');
-    if (!await coversDir.exists()) {
-      await coversDir.create(recursive: true);
-    }
-    final ext = image.path.split('.').last;
-    final fileName =
-        '${game.path.hashCode}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    final destPath = '${coversDir.path}/$fileName';
-    await File(image.path).copy(destPath);
-
-    // Remove old cover file if exists
-    if (game.coverPath != null) {
-      try {
-        final oldFile = File(game.coverPath!);
-        if (await oldFile.exists()) await oldFile.delete();
-      } catch (_) {}
-    }
-
-    await _gameManager.setCoverImage(game.path, destPath);
-    if (mounted) setState(() {});
-  }
-
   Future<void> _renameGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: game.displayTitle);
@@ -1446,6 +1379,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (result.shouldLaunch) _launchGame(game);
   }
 
+  Future<void> _openGameScrape(GameInfo game) async {
+    final result = await Navigator.of(context).push<GameDetailResult>(
+      MaterialPageRoute<GameDetailResult>(
+        builder: (_) => GameDetailPage(
+          game: game,
+          gameManager: _gameManager,
+          openScrapeOnLoad: true,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (result.needsRefresh) setState(() {});
+    if (result.shouldLaunch) _launchGame(game);
+  }
+
   /// After adding a game, offer to scrape. If user chooses Yes, open detail page with scrape dialog.
   Future<void> _offerScrapeAfterAdd(String addedPath) async {
     final l10n = AppLocalizations.of(context)!;
@@ -1466,18 +1414,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
     if (shouldScrape != true || !mounted) return;
-    final result = await Navigator.of(context).push<GameDetailResult>(
-      MaterialPageRoute<GameDetailResult>(
-        builder: (_) => GameDetailPage(
-          game: game,
-          gameManager: _gameManager,
-          openScrapeOnLoad: true,
-        ),
-      ),
-    );
-    if (result == null || !mounted) return;
-    if (result.needsRefresh) setState(() {});
-    if (result.shouldLaunch) _launchGame(game);
+    await _openGameScrape(game);
   }
 
   Future<void> _openSettings() async {
@@ -1735,9 +1672,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 l10n: l10n,
                 onTap: () => _openGameDetail(game),
                 onLaunch: () => _launchGame(game),
+                onScrape: () => _openGameScrape(game),
                 onRename: () => _renameGame(game),
                 onRemove: () => _removeGame(game),
-                onSetCover: () => _setCoverImage(game),
               );
             }, childCount: games.length),
           ),
@@ -1753,18 +1690,18 @@ class _CoverCard extends StatelessWidget {
     required this.l10n,
     required this.onTap,
     required this.onLaunch,
+    required this.onScrape,
     required this.onRename,
     required this.onRemove,
-    required this.onSetCover,
   });
 
   final GameInfo game;
   final AppLocalizations l10n;
   final VoidCallback onTap;
   final VoidCallback onLaunch;
+  final VoidCallback onScrape;
   final VoidCallback onRename;
   final VoidCallback onRemove;
-  final VoidCallback onSetCover;
 
   bool get _hasCover =>
       game.coverPath != null && File(game.coverPath!).existsSync();
@@ -1780,9 +1717,9 @@ class _CoverCard extends StatelessWidget {
           onSelected: onLaunch,
         ),
         UiMenuItem(
-          label: l10n.setCover,
-          icon: LucideIcons.image,
-          onSelected: onSetCover,
+          label: l10n.scrapeMetadata,
+          icon: LucideIcons.cloudDownload,
+          onSelected: onScrape,
         ),
         UiMenuItem(
           label: l10n.rename,

@@ -450,6 +450,7 @@ class _MenuRow extends StatefulWidget {
 class _MenuRowState extends State<_MenuRow> {
   bool _pressed = false;
   bool _hovered = false;
+  bool _selecting = false;
   // 弹出动画期间指针会“撞进”第一行；进场结束前不点亮。
   bool _armed = false;
 
@@ -466,15 +467,23 @@ class _MenuRowState extends State<_MenuRow> {
     setState(() => _hovered = value);
   }
 
-  void _select() {
+  Future<void> _select() async {
+    if (_selecting) return;
+    _selecting = true;
+
     final item = widget.item;
+    final onSelected = item.onSelected;
+    final route = ModalRoute.of(context);
     final nav = Navigator.of(context);
-    if (item.value != null) {
-      nav.pop(item.value);
-    } else {
-      nav.maybePop();
-    }
-    item.onSelected?.call();
+    nav.pop(item.value);
+
+    // Context-menu actions often open another route (confirmation dialogs,
+    // metadata scraping, and so on). Wait until this overlay has completed
+    // its reverse transition before invoking the action; pushing immediately
+    // leaves the old menu underneath the new route and it can resurface after
+    // the source card is rebuilt or removed.
+    if (route != null) await route.completed;
+    onSelected?.call();
   }
 
   @override

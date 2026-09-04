@@ -35,15 +35,30 @@ void main() {
     await tester.longPress(find.text('测试游戏'));
     await tester.pumpAndSettle();
 
-    final menuLabels = <String>['启动游戏', '设置封面', '重命名', '移除'];
+    final menuLabels = <String>['启动游戏', '刮削信息', '重命名', '移除'];
     for (final label in menuLabels) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.text('设置封面'), findsNothing);
     expect(find.text('打包为 XP3'), findsNothing);
 
     final launchTop = tester.getTopLeft(find.text('启动游戏')).dy;
     for (final label in menuLabels.skip(1)) {
       expect(launchTop, lessThan(tester.getTopLeft(find.text(label)).dy));
     }
+
+    await tester.tap(find.text('移除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('移除游戏'), findsOneWidget);
+    expect(find.text('启动游戏'), findsNothing);
+    expect(find.text('刮削信息'), findsNothing);
+    expect(find.text('重命名'), findsNothing);
+
+    await tester.tap(find.text('移除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试游戏'), findsNothing);
+    expect(find.text('启动游戏'), findsNothing);
   });
 }
