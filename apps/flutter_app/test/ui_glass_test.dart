@@ -47,4 +47,44 @@ void main() {
     await tester.pump();
     expect(taps, 1);
   });
+
+  testWidgets('standalone glass optics follow a drag and spring home', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: UiTheme.dark(),
+        home: Center(
+          child: UiGlassIconButton(
+            icon: LucideIcons.plus,
+            semanticLabel: 'Add game',
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+
+    double orbTranslationX() {
+      final transform = tester.widget<Transform>(
+        find.byKey(const ValueKey<String>('ui-glass-orb')),
+      );
+      return transform.transform.getTranslation().x;
+    }
+
+    final resting = orbTranslationX();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(UiGlassIconButton)),
+    );
+    await tester.pump(const Duration(milliseconds: 90));
+    await gesture.moveBy(const Offset(17, 0));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    final pulled = orbTranslationX();
+    expect(pulled, greaterThan(resting + 0.5));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+    final settled = orbTranslationX();
+    expect(settled, closeTo(resting, 0.05));
+  });
 }

@@ -5,6 +5,10 @@ import 'package:flutter/physics.dart';
 class UiSprings {
   UiSprings._();
 
+  static const Duration pressDuration = Duration(milliseconds: 220);
+  static const Duration materializeDuration = Duration(milliseconds: 380);
+  static const Duration dismissDuration = Duration(milliseconds: 220);
+
   /// 手指按下/松开：响应快、回弹很轻，不抢内容注意力。
   static final SpringDescription press =
       SpringDescription.withDurationAndBounce(
@@ -28,13 +32,10 @@ class UiSprings {
 
   static final Curve materializeCurve = UiSpringCurve(
     materialize,
-    const Duration(milliseconds: 380),
+    materializeDuration,
   );
 
-  static final Curve dismissCurve = UiSpringCurve(
-    dismiss,
-    const Duration(milliseconds: 220),
-  );
+  static final Curve dismissCurve = UiSpringCurve(dismiss, dismissDuration);
 }
 
 /// 把同一份物理弹簧用于由路由提供 0→1 时间轴的过渡。

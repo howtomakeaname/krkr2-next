@@ -33,25 +33,25 @@ class UiGlassTheme extends ThemeExtension<UiGlassTheme> {
   final double regularBlurSigma;
 
   static const UiGlassTheme light = UiGlassTheme(
-    clearFill: Color(0x52FFFFFF),
-    regularFill: Color(0xA3FFFFFF),
-    pressedFill: Color(0x70FFFFFF),
-    border: Color(0x9EFFFFFF),
-    highlight: Color(0xD6FFFFFF),
-    shadow: Color(0x2B000000),
-    clearBlurSigma: 16,
-    regularBlurSigma: 24,
+    clearFill: Color(0x24FFFFFF),
+    regularFill: Color(0x52FFFFFF),
+    pressedFill: Color(0x5CFFFFFF),
+    border: Color(0x70FFFFFF),
+    highlight: Color(0xC7FFFFFF),
+    shadow: Color(0x24000000),
+    clearBlurSigma: 10,
+    regularBlurSigma: 17,
   );
 
   static const UiGlassTheme dark = UiGlassTheme(
-    clearFill: Color(0x661C1C1E),
-    regularFill: Color(0xB01C1C1E),
+    clearFill: Color(0x301C1C1E),
+    regularFill: Color(0x601C1C1E),
     pressedFill: Color(0x3DFFFFFF),
-    border: Color(0x42FFFFFF),
-    highlight: Color(0x66FFFFFF),
-    shadow: Color(0x73000000),
-    clearBlurSigma: 18,
-    regularBlurSigma: 28,
+    border: Color(0x2EFFFFFF),
+    highlight: Color(0x70FFFFFF),
+    shadow: Color(0x61000000),
+    clearBlurSigma: 11,
+    regularBlurSigma: 18,
   );
 
   @override

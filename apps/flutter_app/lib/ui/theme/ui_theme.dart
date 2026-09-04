@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../components/ui_motion.dart';
 import 'ui_colors.dart';
+import 'ui_glass_theme.dart';
 import 'ui_metrics.dart';
 import 'ui_typography.dart';
 
@@ -86,7 +87,11 @@ class UiTheme {
       textTheme: baseTextTheme,
       primaryTextTheme: baseTextTheme,
       visualDensity: VisualDensity.standard,
-      extensions: <ThemeExtension<dynamic>>[palette, typography],
+      extensions: <ThemeExtension<dynamic>>[
+        palette,
+        typography,
+        brightness == Brightness.light ? UiGlassTheme.light : UiGlassTheme.dark,
+      ],
       appBarTheme: AppBarTheme(
         backgroundColor: palette.background,
         foregroundColor: palette.textPrimary,
