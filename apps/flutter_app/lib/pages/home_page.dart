@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
@@ -18,6 +20,7 @@ import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
 import '../widgets/home_game_card.dart';
+import '../widgets/home_profile_tab.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'settings_page.dart';
@@ -57,6 +60,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _angleBackend = PrefsKeys.angleBackendGles;
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
   bool _restartDeferred = false;
+  int _selectedTab = 0;
 
   String? _resolveBuiltInDylibPath() {
     if (Platform.isIOS) {
@@ -1364,7 +1368,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  void _launchGame(GameInfo game) {
+  Future<void> _launchGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
     final dylibPath = _effectiveDylibPath;
     final isSystemLoadedBuiltIn =
@@ -1386,7 +1390,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     _gameManager.markPlayed(game.path);
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => GamePage(
           gamePath: game.path,
@@ -1398,6 +1402,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
     );
+    if (mounted) setState(() {});
   }
 
   Future<void> _openGameDetail(GameInfo game) async {
@@ -1502,6 +1507,106 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return sorted;
   }
 
+  void _showSearchUnavailable() {
+    UiSnackbar.show(
+      context,
+      message: AppLocalizations.of(context)!.searchComingSoon,
+    );
+  }
+
+  void _showHelp() {
+    final l10n = AppLocalizations.of(context)!;
+    UiBottomSheet.show<void>(
+      context,
+      title: l10n.help,
+      showCloseButton: true,
+      child: UiListSection(
+        padding: EdgeInsets.zero,
+        showDividers: false,
+        children: [
+          UiListTile(
+            icon: LucideIcons.folderOpen,
+            title: l10n.helpImportTitle,
+            subtitle: l10n.helpImportBody,
+          ),
+          UiListTile(
+            icon: LucideIcons.play,
+            title: l10n.helpLaunchTitle,
+            subtitle: l10n.helpLaunchBody,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAbout() {
+    final l10n = AppLocalizations.of(context)!;
+    UiBottomSheet.show<void>(
+      context,
+      title: l10n.settingsAbout,
+      showCloseButton: true,
+      child: UiListSection(
+        padding: EdgeInsets.zero,
+        children: [
+          UiListTile(
+            icon: LucideIcons.flaskConical,
+            title: l10n.version,
+            subtitle: l10n.aboutVersionDesc,
+            trailingText: '1.0.0',
+          ),
+          UiListTile(
+            icon: LucideIcons.user,
+            title: l10n.aboutAuthor,
+            trailingText: 'reAAAq',
+          ),
+          UiListTile(
+            icon: LucideIcons.mail,
+            title: l10n.aboutEmail,
+            trailingText: 'wangguanzhiabcd@126.com',
+            onTap: () {
+              Clipboard.setData(
+                const ClipboardData(text: 'wangguanzhiabcd@126.com'),
+              );
+              UiSnackbar.show(
+                context,
+                message: l10n.aboutEmailCopied,
+                type: UiSnackbarType.success,
+                duration: const Duration(seconds: 2),
+              );
+            },
+          ),
+          UiListTile(
+            icon: LucideIcons.code,
+            title: 'GitHub',
+            subtitle: 'github.com/reAAAq/KrKr2-Next',
+            showChevron: true,
+            onTap: () {
+              launchUrl(
+                Uri.parse('https://github.com/reAAAq/KrKr2-Next'),
+                mode: LaunchMode.externalApplication,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderTab({required String title}) {
+    final colors = context.uiColors;
+    final topPadding = MediaQuery.paddingOf(context).top;
+    return ColoredBox(
+      color: colors.background,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 8),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Text(title, style: context.uiType.largeTitle),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -1558,24 +1663,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           const SizedBox(width: 4),
           UiGlassToolbar(
             children: [
-              if (!Platform.isIOS)
-                Builder(
-                  builder: (btnContext) => UiGlassIconButton(
-                    icon: LucideIcons.plus,
-                    semanticLabel: l10n.addGame,
-                    contained: false,
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            _addGame(anchor: UiPopupMenu.rectOf(btnContext));
-                          },
-                  ),
-                ),
               UiGlassIconButton(
-                icon: LucideIcons.settings,
-                semanticLabel: l10n.settings,
+                icon: LucideIcons.search,
+                semanticLabel: l10n.search,
                 contained: false,
-                onPressed: _loading ? null : _openSettings,
+                onPressed: _showSearchUnavailable,
+              ),
+              Builder(
+                builder: (btnContext) => UiGlassIconButton(
+                  icon: LucideIcons.plus,
+                  semanticLabel: l10n.importGames,
+                  contained: false,
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          _addGame(anchor: UiPopupMenu.rectOf(btnContext));
+                        },
+                ),
               ),
             ],
           ),
@@ -1610,7 +1714,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             )
           else
             _buildGameGrid(games, l10n),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 112)),
         ],
       );
       if (canPullRefresh && !_startupScanInProgress) {
@@ -1632,48 +1736,72 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Column(
-        children: [
-          header,
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: UiDuration.fast,
-              switchInCurve: UiCurves.iosSmooth,
-              switchOutCurve: UiCurves.iosSmooth,
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: KeyedSubtree(
-                key: ValueKey<bool>(showLibrarySkeleton),
-                child: content,
+    final tabs = <Widget>[
+      ColoredBox(
+        color: context.uiColors.background,
+        child: Column(
+          children: [
+            header,
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: UiDuration.fast,
+                switchInCurve: UiCurves.iosSmooth,
+                switchOutCurve: UiCurves.iosSmooth,
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: KeyedSubtree(
+                  key: ValueKey<bool>(showLibrarySkeleton),
+                  child: content,
+                ),
               ),
             ),
+          ],
+        ),
+      ),
+      _buildPlaceholderTab(title: l10n.tabExplore),
+      _buildPlaceholderTab(title: l10n.tabManage),
+      HomeProfileTab(
+        games: games,
+        onOpenSettings: _openSettings,
+        onOpenHelp: _showHelp,
+        onOpenAbout: _showAbout,
+      ),
+    ];
+
+    return Scaffold(
+      backgroundColor: context.uiColors.background,
+      extendBody: true,
+      // Native tab bars switch content immediately; the continuity lives in
+      // the moving glass lens below. IndexedStack also preserves each tab's
+      // scroll position without repainting hidden pages.
+      body: IndexedStack(index: _selectedTab, children: tabs),
+      bottomNavigationBar: UiNavBar(
+        currentIndex: _selectedTab,
+        overMedia: _selectedTab == 0 && games.isNotEmpty,
+        onChanged: (index) => setState(() => _selectedTab = index),
+        items: [
+          UiNavItem(
+            icon: CupertinoIcons.house,
+            activeIcon: CupertinoIcons.house_fill,
+            label: l10n.tabHome,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.compass,
+            activeIcon: CupertinoIcons.compass_fill,
+            label: l10n.tabExplore,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.folder,
+            activeIcon: CupertinoIcons.folder_fill,
+            label: l10n.tabManage,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.person,
+            activeIcon: CupertinoIcons.person_fill,
+            label: l10n.tabProfile,
           ),
         ],
       ),
-      floatingActionButton: Platform.isIOS && !_loading
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                UiButton(
-                  label: l10n.refresh,
-                  leadingIcon: LucideIcons.refreshCw,
-                  variant: UiButtonVariant.secondary,
-                  onPressed: () async {
-                    await _scanIosGamesDir();
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const SizedBox(width: UiSpacing.md),
-                UiButton(
-                  label: l10n.howToImport,
-                  leadingIcon: LucideIcons.circleHelp,
-                  onPressed: _showIosImportGuide,
-                ),
-              ],
-            )
-          : null,
     );
   }
 
