@@ -49,19 +49,43 @@ class GameDetailPage extends StatefulWidget {
 }
 
 class _GameDetailPageState extends State<GameDetailPage> {
+  static const double _toolbarCollapseDistance = 240;
+
   bool _changed = false;
   bool _showAllKeywords = false;
   final GameMetadataScraper _scraper = GameMetadataScraper();
+  late final ScrollController _scrollController;
+  late final ValueNotifier<double> _toolbarCollapseProgress;
 
   GameInfo get game => widget.game;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_handleScroll);
+    _toolbarCollapseProgress = ValueNotifier<double>(0);
     if (widget.openScrapeOnLoad) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _openScrape();
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _toolbarCollapseProgress.dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    final progress = (_scrollController.offset / _toolbarCollapseDistance)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    if ((progress - _toolbarCollapseProgress.value).abs() > 0.001) {
+      _toolbarCollapseProgress.value = progress;
     }
   }
 
@@ -417,24 +441,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
       },
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          leading: UiButton.icon(icon: LucideIcons.arrowLeft, onPressed: _pop),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: UiButton(
-                label: l10n.launchGame,
-                leadingIcon: LucideIcons.play,
-                size: UiButtonSize.small,
-                onPressed: _launchGame,
-              ),
-            ),
-          ],
-        ),
+        appBar: _buildCollapsingAppBar(l10n),
         body: SingleChildScrollView(
+          controller: _scrollController,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -448,6 +457,82 @@ class _GameDetailPageState extends State<GameDetailPage> {
         ),
       ),
     );
+  }
+
+  PreferredSizeWidget _buildCollapsingAppBar(AppLocalizations l10n) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight),
+      child: ValueListenableBuilder<double>(
+        valueListenable: _toolbarCollapseProgress,
+        builder: (context, progress, _) {
+          final backgroundProgress = Curves.easeOutCubic.transform(progress);
+          final titleProgress = UiCurves.iosSmooth.transform(
+            _intervalProgress(progress, 0.42, 1),
+          );
+          final actionProgress = UiCurves.iosSmooth.transform(
+            _intervalProgress(progress, 0.18, 0.92),
+          );
+
+          return AppBar(
+            backgroundColor: Colors.black.withValues(alpha: backgroundProgress),
+            systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+              statusBarColor: Colors.black.withValues(
+                alpha: backgroundProgress,
+              ),
+            ),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            centerTitle: true,
+            shape: Border(
+              bottom: BorderSide(
+                color: Colors.white.withValues(
+                  alpha: 0.10 * backgroundProgress,
+                ),
+                width: 0.5,
+              ),
+            ),
+            leading: UiButton.icon(
+              icon: LucideIcons.arrowLeft,
+              onPressed: _pop,
+            ),
+            title: Opacity(
+              key: const ValueKey<String>('game-detail-toolbar-title'),
+              opacity: titleProgress,
+              child: Transform.translate(
+                offset: Offset(0, 6 * (1 - titleProgress)),
+                child: Transform.scale(
+                  scale: 0.96 + 0.04 * titleProgress,
+                  child: Text(
+                    game.displayTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.uiType.headline.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: UiSpacing.sm),
+                child: _CollapsingLaunchButton(
+                  progress: actionProgress,
+                  label: l10n.launchGame,
+                  onPressed: _launchGame,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  double _intervalProgress(double value, double begin, double end) {
+    return ((value - begin) / (end - begin)).clamp(0.0, 1.0).toDouble();
   }
 
   static const double _coverCardAspectRatio = 3 / 4;
@@ -897,6 +982,97 @@ class _GameDetailPageState extends State<GameDetailPage> {
     if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
     if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Keeps the existing [UiButton] styling while continuously collapsing the
+/// toolbar action from its labelled form into the compact icon-only form.
+class _CollapsingLaunchButton extends StatelessWidget {
+  const _CollapsingLaunchButton({
+    required this.progress,
+    required this.label,
+    required this.onPressed,
+  });
+
+  static const double _compactWidth = 32;
+
+  final double progress;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: context.uiType.button.copyWith(fontSize: 14),
+      ),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final expandedWidth = (textPainter.width + 56)
+        .clamp(76.0, 176.0)
+        .toDouble();
+    final width = ui.lerpDouble(expandedWidth, _compactWidth, progress)!;
+    final compactOpacity = _intervalProgress(progress, 0.48, 1);
+    final expandedOpacity = 1 - _intervalProgress(progress, 0.20, 0.88);
+
+    return Semantics(
+      key: const ValueKey<String>('game-detail-toolbar-launch'),
+      button: true,
+      label: label,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: width,
+          height: 32,
+          child: ClipRect(
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                Positioned(
+                  left: 0,
+                  width: expandedWidth,
+                  child: IgnorePointer(
+                    ignoring: progress >= 0.58,
+                    child: Opacity(
+                      opacity: expandedOpacity,
+                      child: UiButton(
+                        label: label,
+                        leadingIcon: LucideIcons.play,
+                        size: UiButtonSize.small,
+                        onPressed: onPressed,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  width: _compactWidth,
+                  child: IgnorePointer(
+                    ignoring: progress < 0.58,
+                    child: Opacity(
+                      opacity: compactOpacity,
+                      child: UiButton.icon(
+                        icon: LucideIcons.play,
+                        size: UiButtonSize.small,
+                        variant: UiButtonVariant.primary,
+                        onPressed: onPressed,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _intervalProgress(double value, double begin, double end) {
+    return ((value - begin) / (end - begin)).clamp(0.0, 1.0).toDouble();
   }
 }
 
