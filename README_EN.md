@@ -27,6 +27,48 @@ The screenshot below shows the current running state on macOS with the Metal bac
   <img src="doc/1.png" alt="macOS Metal Backend Screenshot" width="800">
 </p>
 
+## Interface Preview
+
+The screenshots below were captured on a physical HarmonyOS SDK 20 device. The system status bar has been removed from each image to keep the focus on the app.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home.webp" alt="Game library home screen" width="360"><br>
+      <sub>Game library</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home-context-menu.webp" alt="Home screen long-press menu" width="360"><br>
+      <sub>Long-press quick actions</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-detail.webp" alt="Game details screen" width="360"><br>
+      <sub>Game details</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/settings.webp" alt="Settings screen" width="360"><br>
+      <sub>Settings</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-loading.webp" alt="Game resource loading screen" width="360"><br>
+      <sub>Game startup and resource loading</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-controls.webp" alt="In-game quick controls" width="360"><br>
+      <sub>In-game quick controls</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="doc/screenshots/game-running.webp" alt="KiriKiri2 engine running a game" width="800"><br>
+  <sub>KiriKiri2 engine running on the device</sub>
+</p>
+
 ## Architecture
 
 <p align="center">

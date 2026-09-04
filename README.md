@@ -27,6 +27,48 @@
   <img src="doc/1.png" alt="macOS Metal 后端运行截图" width="800">
 </p>
 
+## 界面预览
+
+以下截图采集自 HarmonyOS SDK 20 真机。为保持展示聚焦，均已移除系统状态栏。
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home.webp" alt="游戏库首页" width="360"><br>
+      <sub>游戏库首页</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home-context-menu.webp" alt="首页长按快捷菜单" width="360"><br>
+      <sub>长按快捷菜单</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-detail.webp" alt="游戏详情页" width="360"><br>
+      <sub>游戏详情</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/settings.webp" alt="设置页" width="360"><br>
+      <sub>设置</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-loading.webp" alt="游戏资源加载页" width="360"><br>
+      <sub>游戏启动与资源加载</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-controls.webp" alt="游戏内快捷控制菜单" width="360"><br>
+      <sub>游戏内快捷控制</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="doc/screenshots/game-running.webp" alt="KiriKiri2 引擎运行画面" width="800"><br>
+  <sub>KiriKiri2 引擎实际运行画面</sub>
+</p>
+
 ## 架构
 
 <p align="center">
