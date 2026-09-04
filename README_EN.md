@@ -21,10 +21,48 @@
 
 **KrKr2 Next** is a modern, cross-platform runtime for the [KiriKiri2](https://en.wikipedia.org/wiki/KiriKiri) visual novel engine. It is fully compatible with original game scripts, uses modern graphics APIs for hardware-accelerated rendering, and includes numerous optimizations for both rendering performance and script execution. Built on Flutter for a unified cross-platform UI, it targets macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony.
 
-The screenshot below shows the current running state on macOS with the Metal backend:
+## Interface Preview
+
+The screenshots below were captured on a physical HarmonyOS SDK 20 device. The system status bar has been removed from each image to keep the focus on the app.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home.webp" alt="Game library home screen" width="280"><br>
+      <sub>Game library</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home-context-menu.webp" alt="Home screen long-press menu" width="280"><br>
+      <sub>Long-press quick actions</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-detail.webp" alt="Game details screen" width="280"><br>
+      <sub>Game details</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/settings.webp" alt="Settings screen" width="280"><br>
+      <sub>Settings</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-loading.webp" alt="Game resource loading screen" width="280"><br>
+      <sub>Game startup and resource loading</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-controls.webp" alt="In-game quick controls" width="280"><br>
+      <sub>In-game quick controls</sub>
+    </td>
+  </tr>
+</table>
+
+### Game Running in Landscape
 
 <p align="center">
-  <img src="doc/1.png" alt="macOS Metal Backend Screenshot" width="800">
+  <img src="doc/screenshots/game-running-landscape.webp" alt="KiriKiri2 test game running in landscape on a HarmonyOS device" width="600"><br>
+  <sub>KiriKiri2 test game running in landscape on a physical HarmonyOS device</sub>
 </p>
 
 ## Architecture

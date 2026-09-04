@@ -21,10 +21,48 @@
 
 **KrKr2 Next** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它完全兼容原版游戏脚本，使用现代图形接口进行硬件加速渲染，并在渲染性能和脚本执行效率上做了大量优化。基于 Flutter 构建统一的跨平台界面，支持 macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony 六大平台。
 
-下图为当前在 macOS 上通过 Metal 后端运行的实际效果：
+## 界面预览
+
+以下截图采集自 HarmonyOS SDK 20 真机。为保持展示聚焦，均已移除系统状态栏。
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home.webp" alt="游戏库首页" width="280"><br>
+      <sub>游戏库首页</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/home-context-menu.webp" alt="首页长按快捷菜单" width="280"><br>
+      <sub>长按快捷菜单</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-detail.webp" alt="游戏详情页" width="280"><br>
+      <sub>游戏详情</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/settings.webp" alt="设置页" width="280"><br>
+      <sub>设置</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-loading.webp" alt="游戏资源加载页" width="280"><br>
+      <sub>游戏启动与资源加载</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="doc/screenshots/game-controls.webp" alt="游戏内快捷控制菜单" width="280"><br>
+      <sub>游戏内快捷控制</sub>
+    </td>
+  </tr>
+</table>
+
+### 游戏运行（横屏）
 
 <p align="center">
-  <img src="doc/1.png" alt="macOS Metal 后端运行截图" width="800">
+  <img src="doc/screenshots/game-running-landscape.webp" alt="HarmonyOS 真机横屏运行 KiriKiri2 测试游戏" width="600"><br>
+  <sub>HarmonyOS 真机横屏运行 KiriKiri2 测试游戏</sub>
 </p>
 
 ## 架构
