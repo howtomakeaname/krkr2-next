@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
-import '../l10n/play_honor_localizations.dart';
 import '../models/game_info.dart';
 import '../models/play_insights.dart';
 import '../models/play_session.dart';
 import '../ui/ui.dart';
+import '../widgets/play_honor_card.dart';
 
 class PlayStatisticsPage extends StatelessWidget {
   const PlayStatisticsPage({
@@ -30,6 +30,7 @@ class PlayStatisticsPage extends StatelessWidget {
       sessions: playSessions,
       now: now ?? DateTime.now(),
     );
+    final honor = insights.honor;
 
     return Scaffold(
       key: const ValueKey<String>('play-statistics-page'),
@@ -49,289 +50,15 @@ class PlayStatisticsPage extends StatelessWidget {
         children: [
           _StatisticsOverview(insights: insights),
           const SizedBox(height: UiSpacing.md),
-          _HonorCard(honor: insights.honor),
+          PlayHonorCard(
+            honor: honor,
+            remainingDuration: _formatPlayTime(l10n, honor.remainingSeconds),
+          ),
           if (insights.rankedGames.isNotEmpty) ...[
             const SizedBox(height: UiSpacing.md),
             _MostPlayedSection(games: insights.rankedGames),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _HonorCard extends StatefulWidget {
-  const _HonorCard({required this.honor});
-
-  final PlayHonor honor;
-
-  @override
-  State<_HonorCard> createState() => _HonorCardState();
-}
-
-class _HonorCardState extends State<_HonorCard> {
-  late final ScrollController _titleScrollController = ScrollController(
-    initialScrollOffset: widget.honor.tier.index <= 1
-        ? 0
-        : (widget.honor.tier.index - 1) * 122,
-  );
-
-  @override
-  void dispose() {
-    _titleScrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final colors = context.uiColors;
-    final honor = widget.honor;
-    final nextTier = honor.nextTier;
-    final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
-    final requirement = l10n.playHonorRequirement(honor, remainingDuration);
-    final tiers = PlayHonorTier.values;
-
-    return UiCard(
-      key: const ValueKey<String>('statistics-honor-card'),
-      borderRadius: UiRadius.brXl,
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-            child: Text(
-              l10n.profileHonorTitle,
-              style: context.uiType.footnote.copyWith(
-                color: colors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: UiSpacing.md),
-          SingleChildScrollView(
-            key: const ValueKey<String>('statistics-honor-collection'),
-            controller: _titleScrollController,
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                for (var index = 0; index < tiers.length; index++) ...[
-                  _HonorTitleToken(
-                    key: ValueKey<String>('statistics-honor-token-$index'),
-                    index: index,
-                    title: l10n.playHonorTier(tiers[index]),
-                    reached: index <= honor.tier.index,
-                    current: index == honor.tier.index,
-                  ),
-                  if (index != tiers.length - 1) const SizedBox(width: 10),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          Divider(height: 1, thickness: 0.5, color: colors.separator),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (nextTier != null) ...[
-                  Text(
-                    l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
-                    style: context.uiType.callout.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: UiSpacing.md),
-                  _HonorProgressBar(progress: honor.progress),
-                  const SizedBox(height: UiSpacing.sm),
-                ],
-                Text(
-                  requirement,
-                  key: const ValueKey<String>('statistics-honor-requirement'),
-                  style: context.uiType.footnote.copyWith(
-                    color: colors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HonorTitleToken extends StatelessWidget {
-  const _HonorTitleToken({
-    super.key,
-    required this.index,
-    required this.title,
-    required this.reached,
-    required this.current,
-  });
-
-  final int index;
-  final String title;
-  final bool reached;
-  final bool current;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final colors = context.uiColors;
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final foreground = current
-        ? colors.textOnBrand
-        : reached
-        ? colors.brand
-        : colors.textSecondary;
-    final background = current
-        ? colors.brand
-        : reached
-        ? Color.lerp(colors.surface, colors.brandSoft, 0.72)!
-        : colors.groupedBackground;
-    final borderColor = current
-        ? colors.brand
-        : reached
-        ? Color.lerp(colors.border, colors.brand, 0.24)!
-        : colors.border;
-    final stateLabel = current
-        ? l10n.profileHonorCurrent
-        : reached
-        ? l10n.profileHonorObtained
-        : l10n.profileHonorLocked;
-
-    return Semantics(
-      container: true,
-      label: title,
-      value: stateLabel,
-      child: ExcludeSemantics(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(
-            begin: current && !reduceMotion ? 0.94 : 1,
-            end: 1,
-          ),
-          duration: UiDuration.slow,
-          curve: UiCurves.iosSpringOut,
-          builder: (context, scale, child) => Transform.scale(
-            scale: scale,
-            alignment: Alignment.center,
-            child: child,
-          ),
-          child: Container(
-            width: 112,
-            height: 98,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: UiRadius.brLg,
-              border: Border.all(color: borderColor),
-              boxShadow: current
-                  ? [
-                      BoxShadow(
-                        color: colors.brand.withValues(alpha: 0.2),
-                        blurRadius: 16,
-                        offset: const Offset(0, 7),
-                        spreadRadius: -6,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      (index + 1).toString().padLeft(2, '0'),
-                      style: context.uiType.caption.copyWith(
-                        color: current
-                            ? foreground.withValues(alpha: 0.72)
-                            : colors.textTertiary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (current)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.textOnBrand.withValues(alpha: 0.18),
-                          borderRadius: UiRadius.brPill,
-                        ),
-                        child: Text(
-                          l10n.profileHonorCurrent,
-                          style: context.uiType.caption.copyWith(
-                            color: foreground,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      )
-                    else
-                      Icon(
-                        reached ? LucideIcons.check : LucideIcons.lockKeyhole,
-                        size: 14,
-                        color: reached ? colors.brand : colors.textTertiary,
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.uiType.body.copyWith(
-                    color: foreground,
-                    fontWeight: FontWeight.w600,
-                    height: 1.15,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HonorProgressBar extends StatelessWidget {
-  const _HonorProgressBar({required this.progress});
-
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.uiColors;
-    return ClipRRect(
-      borderRadius: UiRadius.brPill,
-      child: SizedBox(
-        height: 4,
-        child: ColoredBox(
-          color: colors.separator,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0, end: progress.clamp(0, 1)),
-              duration: UiDuration.slow,
-              curve: UiCurves.iosSpringOut,
-              builder: (context, value, _) => FractionallySizedBox(
-                widthFactor: value,
-                child: ColoredBox(color: colors.brand),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

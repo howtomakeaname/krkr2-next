@@ -78,29 +78,14 @@ void main() {
     expect(find.text('游玩统计'), findsOneWidget);
     expect(find.text('常玩游戏'), findsOneWidget);
     expect(find.text('称号'), findsOneWidget);
-    expect(find.text('下一档 · 沉浸读者'), findsOneWidget);
+    expect(find.text('下个称号'), findsOneWidget);
     expect(find.text('还差 7 小时 55 分钟和 2 款游戏'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('statistics-honor-collection')),
+      find.byKey(const ValueKey<String>('statistics-honor-title')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey<String>('statistics-honor-token-1')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('statistics-honor-token-5')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<SingleChildScrollView>(
-            find.byKey(const ValueKey<String>('statistics-honor-collection')),
-          )
-          .scrollDirection,
-      Axis.horizontal,
-    );
-    expect(find.text('当前'), findsOneWidget);
+    expect(find.textContaining('沉浸读者'), findsNothing);
+    expect(find.textContaining('典藏家'), findsNothing);
     expect(
       find.byKey(const ValueKey('statistics-active-days-value')),
       findsOneWidget,
