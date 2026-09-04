@@ -63,7 +63,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gotIt => '了解';
 
   @override
-  String get tabHome => 'ホーム';
+  String get tabHome => 'ライブラリ';
 
   @override
   String get tabExplore => '見つける';

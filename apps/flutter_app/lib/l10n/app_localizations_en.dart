@@ -65,7 +65,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gotIt => 'Got it';
 
   @override
-  String get tabHome => 'Home';
+  String get tabHome => 'Library';
 
   @override
   String get tabExplore => 'Explore';

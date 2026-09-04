@@ -205,7 +205,7 @@ abstract class AppLocalizations {
   /// No description provided for @tabHome.
   ///
   /// In en, this message translates to:
-  /// **'Home'**
+  /// **'Library'**
   String get tabHome;
 
   /// No description provided for @tabExplore.

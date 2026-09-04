@@ -62,7 +62,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gotIt => '知道了';
 
   @override
-  String get tabHome => '首页';
+  String get tabHome => '库';
 
   @override
   String get tabExplore => '探索';

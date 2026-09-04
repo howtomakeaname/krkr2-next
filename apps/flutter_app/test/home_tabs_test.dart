@@ -49,6 +49,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('库'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('ui-nav-item-3')));
     await tester.pumpAndSettle();
 
