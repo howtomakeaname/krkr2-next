@@ -28,31 +28,31 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="doc/screenshots/home.webp" alt="游戏库首页" width="360"><br>
+      <img src="doc/screenshots/home.webp" alt="游戏库首页" width="280"><br>
       <sub>游戏库首页</sub>
     </td>
     <td align="center" width="50%">
-      <img src="doc/screenshots/home-context-menu.webp" alt="首页长按快捷菜单" width="360"><br>
+      <img src="doc/screenshots/home-context-menu.webp" alt="首页长按快捷菜单" width="280"><br>
       <sub>长按快捷菜单</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="doc/screenshots/game-detail.webp" alt="游戏详情页" width="360"><br>
+      <img src="doc/screenshots/game-detail.webp" alt="游戏详情页" width="280"><br>
       <sub>游戏详情</sub>
     </td>
     <td align="center" width="50%">
-      <img src="doc/screenshots/settings.webp" alt="设置页" width="360"><br>
+      <img src="doc/screenshots/settings.webp" alt="设置页" width="280"><br>
       <sub>设置</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="doc/screenshots/game-loading.webp" alt="游戏资源加载页" width="360"><br>
+      <img src="doc/screenshots/game-loading.webp" alt="游戏资源加载页" width="280"><br>
       <sub>游戏启动与资源加载</sub>
     </td>
     <td align="center" width="50%">
-      <img src="doc/screenshots/game-controls.webp" alt="游戏内快捷控制菜单" width="360"><br>
+      <img src="doc/screenshots/game-controls.webp" alt="游戏内快捷控制菜单" width="280"><br>
       <sub>游戏内快捷控制</sub>
     </td>
   </tr>
@@ -61,7 +61,7 @@
 ### 游戏运行（横屏）
 
 <p align="center">
-  <img src="doc/screenshots/game-running-landscape.webp" alt="HarmonyOS 真机横屏运行 KiriKiri2 测试游戏" width="800"><br>
+  <img src="doc/screenshots/game-running-landscape.webp" alt="HarmonyOS 真机横屏运行 KiriKiri2 测试游戏" width="600"><br>
   <sub>HarmonyOS 真机横屏运行 KiriKiri2 测试游戏</sub>
 </p>
 
