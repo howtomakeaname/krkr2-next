@@ -5,14 +5,14 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../constants/prefs_keys.dart';
 import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
@@ -21,10 +21,11 @@ import '../services/game_manager.dart';
 import '../ui/ui.dart';
 import '../widgets/home_game_card.dart';
 import '../widgets/home_profile_tab.dart';
+import 'about_page.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
+import 'help_page.dart';
 import 'settings_page.dart';
-import '../constants/prefs_keys.dart';
 
 /// Engine loading mode: built-in (bundled in .app) or custom (user-specified).
 enum EngineMode { builtIn, custom }
@@ -1558,83 +1559,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .toList(growable: false);
   }
 
-  void _showHelp() {
-    final l10n = AppLocalizations.of(context)!;
-    UiBottomSheet.show<void>(
-      context,
-      title: l10n.help,
-      showCloseButton: true,
-      child: UiListSection(
-        padding: EdgeInsets.zero,
-        showDividers: false,
-        children: [
-          UiListTile(
-            icon: LucideIcons.folderOpen,
-            title: l10n.helpImportTitle,
-            subtitle: l10n.helpImportBody,
-          ),
-          UiListTile(
-            icon: LucideIcons.play,
-            title: l10n.helpLaunchTitle,
-            subtitle: l10n.helpLaunchBody,
-          ),
-        ],
-      ),
-    );
-  }
+  void _openHelp() => UiMotion.push<void>(context, const HelpPage());
 
-  void _showAbout() {
-    final l10n = AppLocalizations.of(context)!;
-    UiBottomSheet.show<void>(
-      context,
-      title: l10n.settingsAbout,
-      showCloseButton: true,
-      child: UiListSection(
-        padding: EdgeInsets.zero,
-        children: [
-          UiListTile(
-            icon: LucideIcons.flaskConical,
-            title: l10n.version,
-            subtitle: l10n.aboutVersionDesc,
-            trailingText: '1.0.0',
-          ),
-          UiListTile(
-            icon: LucideIcons.user,
-            title: l10n.aboutAuthor,
-            trailingText: 'reAAAq',
-          ),
-          UiListTile(
-            icon: LucideIcons.mail,
-            title: l10n.aboutEmail,
-            trailingText: 'wangguanzhiabcd@126.com',
-            onTap: () {
-              Clipboard.setData(
-                const ClipboardData(text: 'wangguanzhiabcd@126.com'),
-              );
-              UiSnackbar.show(
-                context,
-                message: l10n.aboutEmailCopied,
-                type: UiSnackbarType.success,
-                duration: const Duration(seconds: 2),
-              );
-            },
-          ),
-          UiListTile(
-            icon: LucideIcons.code,
-            title: 'GitHub',
-            subtitle: 'github.com/reAAAq/KrKr2-Next',
-            showChevron: true,
-            onTap: () {
-              launchUrl(
-                Uri.parse('https://github.com/reAAAq/KrKr2-Next'),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  void _openAbout() => UiMotion.push<void>(context, const AboutPage());
 
   Widget _buildPlaceholderTab({required String title}) {
     final colors = context.uiColors;
@@ -1925,8 +1852,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       HomeProfileTab(
         games: allGames,
         onOpenSettings: _openSettings,
-        onOpenHelp: _showHelp,
-        onOpenAbout: _showAbout,
+        onOpenHelp: _openHelp,
+        onOpenAbout: _openAbout,
       ),
     ];
 

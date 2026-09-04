@@ -54,8 +54,17 @@ void main() {
 
     await tester.tap(find.text('帮助'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('help-page')), findsOneWidget);
     expect(find.text('导入游戏'), findsOneWidget);
     expect(find.text('启动与快捷操作'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('返回'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('关于'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('about-page')), findsOneWidget);
+    expect(find.text('版本'), findsOneWidget);
+    expect(find.text('wangguanzhiabcd@126.com'), findsOneWidget);
   });
 
   testWidgets('tab selection lens follows the selected destination', (
