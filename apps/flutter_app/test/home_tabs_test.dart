@@ -83,4 +83,67 @@ void main() {
 
     expect(tester.getTopLeft(lens).dx, greaterThan(homeLeft));
   });
+
+  testWidgets('search toolbar expands and filters the library', (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final games = <GameInfo>[
+      GameInfo(path: '/games/first', title: '流星世界演绎者', developer: 'Heliodor'),
+      GameInfo(path: '/games/second', title: '常轨脱离Creative'),
+    ];
+    SharedPreferences.setMockInitialValues({
+      'krkr2_game_list': GameInfo.listToJsonString(games),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: UiTheme.light(),
+        home: const HomePage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toolbar = find.byKey(const ValueKey('home-search-toolbar'));
+    expect(tester.getSize(toolbar).width, 94);
+
+    await tester.tap(find.bySemanticsLabel('搜索'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final expandingWidth = tester.getSize(toolbar).width;
+    expect(expandingWidth, greaterThan(94));
+    expect(expandingWidth, lessThan(390));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(toolbar).width, 390);
+    expect(find.byKey(const ValueKey('home-search-field')), findsOneWidget);
+    expect(find.bySemanticsLabel('导入游戏'), findsNothing);
+    expect(find.bySemanticsLabel('完成'), findsOneWidget);
+    expect(
+      tester
+          .widget<AnimatedOpacity>(find.byKey(const ValueKey('home-app-title')))
+          .opacity,
+      0,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('home-search-field')),
+      '流星',
+    );
+    await tester.pump();
+    expect(find.text('流星世界演绎者'), findsOneWidget);
+    expect(find.text('常轨脱离Creative'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('完成'));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(toolbar).width, 94);
+    expect(find.byKey(const ValueKey('home-search-field')), findsNothing);
+    expect(find.text('流星世界演绎者'), findsOneWidget);
+    expect(find.text('常轨脱离Creative'), findsNothing);
+  });
 }
