@@ -196,7 +196,9 @@ class _ContextMenuOverlay extends StatelessWidget {
         anchor: anchorOffset & anchorSize,
         items: items,
         animation: animation,
-        alignEnd: false,
+        // Context menus choose the edge nearest the screen side so a menu
+        // opened from a right-hand card grows back toward that card.
+        alignEnd: null,
         liftChild: true,
         lifted: child,
       ),
@@ -217,7 +219,9 @@ class _AnchoredMenu extends StatefulWidget {
   final Rect anchor;
   final List<UiMenuItem> items;
   final Animation<double> animation;
-  final bool alignEnd;
+  /// Whether to align the menu's right edge with the anchor's right edge.
+  /// `null` selects the nearest horizontal screen edge automatically.
+  final bool? alignEnd;
   final bool liftChild;
   final Widget? lifted;
 
@@ -263,6 +267,8 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
     final size = MediaQuery.sizeOf(context);
     final padding = MediaQuery.paddingOf(context);
     final curved = _curved;
+    final alignEnd =
+        widget.alignEnd ?? (anchor.center.dx >= size.width / 2);
 
     var estimatedHeight = 8.0;
     for (final item in items) {
@@ -279,7 +285,7 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
         : (anchor.top - 6 - estimatedHeight).clamp(minTop, double.infinity);
 
     double menuLeft;
-    if (widget.alignEnd) {
+    if (alignEnd) {
       menuLeft = anchor.right - _menuWidth;
     } else {
       menuLeft = anchor.left;
@@ -316,10 +322,10 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.78, end: 1).animate(curved),
               alignment: placeBelow
-                  ? (widget.alignEnd
+                  ? (alignEnd
                       ? Alignment.topRight
                       : Alignment.topLeft)
-                  : (widget.alignEnd
+                  : (alignEnd
                       ? Alignment.bottomRight
                       : Alignment.bottomLeft),
               child: _GlassMenuCard(items: items),
