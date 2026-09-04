@@ -12,9 +12,9 @@ void main() {
     WidgetTester tester,
   ) async {
     final game = GameInfo(
-      path: '/games/shoujo-ryouiki',
-      title: '少女＊领域',
-      developer: 'PALETTE QUALIA',
+      path: '/games/test-game',
+      title: '测试游戏',
+      developer: '测试开发者',
       description: List<String>.filled(20, '游戏简介内容').join('，'),
       keywords: List<String>.generate(12, (index) => '关键词 $index'),
     );

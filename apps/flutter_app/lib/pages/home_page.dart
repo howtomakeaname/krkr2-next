@@ -17,7 +17,6 @@ import '../models/game_engine.dart';
 import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
-import '../utils/xp3_utils.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'settings_page.dart';
@@ -1481,113 +1480,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (result.shouldLaunch) _launchGame(game);
   }
 
-  Future<void> _packUnpackGame(GameInfo game) async {
-    final l10n = AppLocalizations.of(context)!;
-    final isXp3 = game.path.toLowerCase().endsWith('.xp3');
-
-    final progress = ValueNotifier<double>(0.0);
-    final currentFile = ValueNotifier<String>('');
-
-    UiDialog.show<void>(
-      context,
-      barrierDismissible: false,
-      title: isXp3 ? l10n.unpackingProgress : l10n.packingProgress,
-      content: PopScope(
-        // 操作进行中禁止返回键/手势关闭进度弹窗。
-        canPop: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ValueListenableBuilder<double>(
-              valueListenable: progress,
-              builder: (_, value, _) => UiProgress(value: value),
-            ),
-            const SizedBox(height: UiSpacing.md),
-            ValueListenableBuilder<String>(
-              valueListenable: currentFile,
-              builder: (ctx, value, _) => Text(
-                value,
-                style: ctx.uiType.footnote.copyWith(
-                  fontFamily: 'monospace',
-                  color: ctx.uiColors.textTertiary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      if (isXp3) {
-        final destDir = p.join(
-          p.dirname(game.path),
-          p.basenameWithoutExtension(game.path),
-        );
-        await xp3Extract(
-          game.path,
-          destDir,
-          onProgress: (p, f) {
-            progress.value = p;
-            currentFile.value = f;
-          },
-        );
-        if (mounted) {
-          Navigator.of(context).pop();
-          final newGame = GameInfo(path: destDir);
-          final added = await _gameManager.addGame(newGame);
-          if (added && mounted) setState(() {});
-          if (mounted) {
-            UiSnackbar.show(
-              context,
-              message: l10n.unpackComplete,
-              type: UiSnackbarType.success,
-            );
-            if (added) _offerScrapeAfterAdd(destDir);
-          }
-        }
-      } else {
-        final xp3Path = '${game.path}.xp3';
-        await xp3Pack(
-          game.path,
-          xp3Path,
-          onProgress: (p, f) {
-            progress.value = p;
-            currentFile.value = f;
-          },
-        );
-        if (mounted) {
-          Navigator.of(context).pop();
-          final newGame = GameInfo(path: xp3Path);
-          final added = await _gameManager.addGame(newGame);
-          if (added && mounted) setState(() {});
-          if (mounted) {
-            UiSnackbar.show(
-              context,
-              message: l10n.packComplete,
-              type: UiSnackbarType.success,
-            );
-            if (added) _offerScrapeAfterAdd(xp3Path);
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop();
-        UiSnackbar.show(
-          context,
-          message: l10n.xp3OperationFailed(e.toString()),
-        );
-      }
-    } finally {
-      progress.dispose();
-      currentFile.dispose();
-    }
-  }
-
   Future<void> _openSettings() async {
     final result = await Navigator.of(context).push<SettingsResult>(
       MaterialPageRoute<SettingsResult>(
@@ -1842,10 +1734,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 game: game,
                 l10n: l10n,
                 onTap: () => _openGameDetail(game),
+                onLaunch: () => _launchGame(game),
                 onRename: () => _renameGame(game),
                 onRemove: () => _removeGame(game),
                 onSetCover: () => _setCoverImage(game),
-                onPackUnpack: () => _packUnpackGame(game),
               );
             }, childCount: games.length),
           ),
@@ -1860,21 +1752,19 @@ class _CoverCard extends StatelessWidget {
     required this.game,
     required this.l10n,
     required this.onTap,
+    required this.onLaunch,
     required this.onRename,
     required this.onRemove,
     required this.onSetCover,
-    required this.onPackUnpack,
   });
 
   final GameInfo game;
   final AppLocalizations l10n;
   final VoidCallback onTap;
+  final VoidCallback onLaunch;
   final VoidCallback onRename;
   final VoidCallback onRemove;
   final VoidCallback onSetCover;
-  final VoidCallback onPackUnpack;
-
-  bool get _isXp3 => game.path.toLowerCase().endsWith('.xp3');
 
   bool get _hasCover =>
       game.coverPath != null && File(game.coverPath!).existsSync();
@@ -1885,6 +1775,11 @@ class _CoverCard extends StatelessWidget {
       onTap: onTap,
       items: [
         UiMenuItem(
+          label: l10n.launchGame,
+          icon: LucideIcons.play,
+          onSelected: onLaunch,
+        ),
+        UiMenuItem(
           label: l10n.setCover,
           icon: LucideIcons.image,
           onSelected: onSetCover,
@@ -1893,11 +1788,6 @@ class _CoverCard extends StatelessWidget {
           label: l10n.rename,
           icon: LucideIcons.pencil,
           onSelected: onRename,
-        ),
-        UiMenuItem(
-          label: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
-          icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
-          onSelected: onPackUnpack,
         ),
         UiMenuItem(
           label: l10n.remove,

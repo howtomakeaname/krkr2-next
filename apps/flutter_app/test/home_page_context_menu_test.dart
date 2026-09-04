@@ -1,0 +1,49 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:flutter_app/l10n/app_localizations.dart';
+import 'package:flutter_app/models/game_engine.dart';
+import 'package:flutter_app/models/game_info.dart';
+import 'package:flutter_app/pages/home_page.dart';
+import 'package:flutter_app/ui/ui.dart';
+
+void main() {
+  testWidgets('game context menu starts with launch and omits XP3 packing', (
+    WidgetTester tester,
+  ) async {
+    final game = GameInfo(
+      path: '/games/test-game',
+      title: '测试游戏',
+      engine: GameEngine.krkr2,
+    );
+    SharedPreferences.setMockInitialValues({
+      'krkr2_game_list': GameInfo.listToJsonString([game]),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: UiTheme.dark(),
+        home: const HomePage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('测试游戏'));
+    await tester.pumpAndSettle();
+
+    final menuLabels = <String>['启动游戏', '设置封面', '重命名', '移除'];
+    for (final label in menuLabels) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('打包为 XP3'), findsNothing);
+
+    final launchTop = tester.getTopLeft(find.text('启动游戏')).dy;
+    for (final label in menuLabels.skip(1)) {
+      expect(launchTop, lessThan(tester.getTopLeft(find.text(label)).dy));
+    }
+  });
+}
