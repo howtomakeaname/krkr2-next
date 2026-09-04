@@ -123,6 +123,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profileHonorTitle => '称号';
 
   @override
+  String get profileHonorNextUnlock => '次の称号';
+
+  @override
   String get profileHonorNewcomer => 'はじめの一歩';
 
   @override

@@ -122,6 +122,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileHonorTitle => '称号';
 
   @override
+  String get profileHonorNextUnlock => '下个称号';
+
+  @override
   String get profileHonorNewcomer => '初来乍到';
 
   @override

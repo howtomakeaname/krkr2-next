@@ -125,6 +125,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileHonorTitle => 'Title';
 
   @override
+  String get profileHonorNextUnlock => 'Next title';
+
+  @override
   String get profileHonorNewcomer => 'New Arrival';
 
   @override

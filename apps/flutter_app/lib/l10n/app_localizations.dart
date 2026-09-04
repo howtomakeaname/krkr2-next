@@ -322,6 +322,12 @@ abstract class AppLocalizations {
   /// **'Title'**
   String get profileHonorTitle;
 
+  /// No description provided for @profileHonorNextUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Next title'**
+  String get profileHonorNextUnlock;
+
   /// No description provided for @profileHonorNewcomer.
   ///
   /// In en, this message translates to:
