@@ -423,8 +423,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
                 width: 0.5,
               ),
             ),
-            leading: UiButton.icon(
+            leading: UiBarIconButton(
               icon: LucideIcons.arrowLeft,
+              semanticLabel: l10n.back,
               onPressed: _pop,
             ),
             title: Opacity(

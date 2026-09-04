@@ -307,6 +307,11 @@ class _SettingsPageState extends State<SettingsPage> {
         appBar: AppBar(
           title: Text(l10n.settings),
           backgroundColor: colors.groupedBackground,
+          leading: UiBarIconButton(
+            icon: LucideIcons.arrowLeft,
+            semanticLabel: l10n.back,
+            onPressed: _pop,
+          ),
         ),
         body: ListView(
           padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),

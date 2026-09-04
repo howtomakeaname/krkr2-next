@@ -24,7 +24,14 @@ enum UiButtonVariant {
 }
 
 /// 按钮尺寸规格。
-enum UiButtonSize { small, medium, large }
+enum UiButtonSize {
+  small,
+  medium,
+
+  /// 页面标题栏按钮：44pt 点击区、22pt 图标。
+  navigation,
+  large,
+}
 
 /// iOS18 风格通用按钮。
 ///
@@ -47,6 +54,7 @@ class UiButton extends StatefulWidget {
     this.fullWidth = false,
     this.minWidth,
     this.enableHaptic = true,
+    this.semanticLabel,
   });
 
   /// 快捷构造：图标按钮（方形），常用于工具栏。
@@ -59,11 +67,12 @@ class UiButton extends StatefulWidget {
     this.size = UiButtonSize.medium,
     this.loading = false,
     this.enableHaptic = true,
-  })  : label = '',
-        leadingIcon = icon,
-        trailingIcon = null,
-        fullWidth = false,
-        minWidth = null;
+    this.semanticLabel,
+  }) : label = '',
+       leadingIcon = icon,
+       trailingIcon = null,
+       fullWidth = false,
+       minWidth = null;
 
   final String label;
   final VoidCallback? onPressed;
@@ -76,6 +85,7 @@ class UiButton extends StatefulWidget {
   final bool fullWidth;
   final double? minWidth;
   final bool enableHaptic;
+  final String? semanticLabel;
 
   bool get _iconOnly => label.isEmpty && leadingIcon != null;
 
@@ -91,9 +101,10 @@ class _UiButtonState extends State<UiButton>
     lowerBound: 0,
     upperBound: 1,
   );
-  late final Animation<double> _scale = Tween<double>(begin: 1, end: 0.96)
-      .chain(CurveTween(curve: UiCurves.standard))
-      .animate(_controller);
+  late final Animation<double> _scale = Tween<double>(
+    begin: 1,
+    end: 0.96,
+  ).chain(CurveTween(curve: UiCurves.standard)).animate(_controller);
 
   bool get _enabled => widget.onPressed != null && !widget.loading;
 
@@ -150,10 +161,7 @@ class _UiButtonState extends State<UiButton>
     final button = AnimatedContainer(
       duration: UiDuration.fast,
       curve: UiCurves.standard,
-      constraints: BoxConstraints(
-        minHeight: height,
-        minWidth: minWidth ?? 0,
-      ),
+      constraints: BoxConstraints(minHeight: height, minWidth: minWidth ?? 0),
       padding: widget._iconOnly ? EdgeInsets.zero : padding,
       decoration: BoxDecoration(
         color: _enabled
@@ -161,7 +169,8 @@ class _UiButtonState extends State<UiButton>
             : resolved.background.withValues(alpha: 0.5),
         border: resolved.border,
         borderRadius: BorderRadius.all(
-            widget._iconOnly ? UiRadius.md : _resolveRadius()),
+          widget._iconOnly ? UiRadius.md : _resolveRadius(),
+        ),
       ),
       // heightFactor 必须显式置 1：Center 默认会撑满有界松约束（如
       // Scaffold 的 FAB 槽位给出的全屏约束），把按钮拉成整屏大。
@@ -175,7 +184,8 @@ class _UiButtonState extends State<UiButton>
     return Semantics(
       button: true,
       enabled: _enabled,
-      label: widget.label.isEmpty ? null : widget.label,
+      label:
+          widget.semanticLabel ?? (widget.label.isEmpty ? null : widget.label),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: _handleTapDown,
@@ -222,8 +232,9 @@ class _UiButtonState extends State<UiButton>
     );
     if (widget.trailingIcon != null) {
       children.add(const SizedBox(width: UiSpacing.sm));
-      children
-          .add(Icon(widget.trailingIcon, size: iconSize, color: foreground));
+      children.add(
+        Icon(widget.trailingIcon, size: iconSize, color: foreground),
+      );
     }
     return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
@@ -263,13 +274,21 @@ class _UiButtonState extends State<UiButton>
     switch (widget.size) {
       case UiButtonSize.small:
         return const EdgeInsets.symmetric(
-            horizontal: UiSpacing.md, vertical: UiSpacing.xs);
+          horizontal: UiSpacing.md,
+          vertical: UiSpacing.xs,
+        );
       case UiButtonSize.medium:
         return const EdgeInsets.symmetric(
-            horizontal: UiSpacing.lg, vertical: UiSpacing.sm);
+          horizontal: UiSpacing.lg,
+          vertical: UiSpacing.sm,
+        );
+      case UiButtonSize.navigation:
+        return const EdgeInsets.symmetric(horizontal: UiSpacing.md);
       case UiButtonSize.large:
         return const EdgeInsets.symmetric(
-            horizontal: UiSpacing.xl, vertical: UiSpacing.md);
+          horizontal: UiSpacing.xl,
+          vertical: UiSpacing.md,
+        );
     }
   }
 
@@ -279,6 +298,8 @@ class _UiButtonState extends State<UiButton>
         return 32;
       case UiButtonSize.medium:
         return 40;
+      case UiButtonSize.navigation:
+        return UiNavigationMetrics.buttonExtent;
       case UiButtonSize.large:
         return 50;
     }
@@ -290,6 +311,8 @@ class _UiButtonState extends State<UiButton>
         return 16;
       case UiButtonSize.medium:
         return 18;
+      case UiButtonSize.navigation:
+        return UiNavigationMetrics.iconSize;
       case UiButtonSize.large:
         return 20;
     }
@@ -300,6 +323,8 @@ class _UiButtonState extends State<UiButton>
       case UiButtonSize.small:
         return 14;
       case UiButtonSize.medium:
+        return 15;
+      case UiButtonSize.navigation:
         return 15;
       case UiButtonSize.large:
         return 17;
@@ -312,9 +337,55 @@ class _UiButtonState extends State<UiButton>
         return UiRadius.sm;
       case UiButtonSize.medium:
         return UiRadius.md;
+      case UiButtonSize.navigation:
+        return UiRadius.md;
       case UiButtonSize.large:
         return UiRadius.lg;
     }
+  }
+}
+
+/// 页面标题栏专用图标按钮。
+///
+/// 使用 iOS 导航栏的 44pt 有效点击区与 22pt 图标。外层 [Align] 在
+/// [AppBar.leading] 的 56pt 槽位中只居中、不放大点击区；放进普通 [Row]
+/// 时则保持紧凑的 44pt 尺寸。
+class UiBarIconButton extends StatelessWidget {
+  const UiBarIconButton({
+    super.key,
+    required this.icon,
+    required this.semanticLabel,
+    this.onPressed,
+    this.variant = UiButtonVariant.ghost,
+    this.loading = false,
+  });
+
+  static const double extent = UiNavigationMetrics.buttonExtent;
+  static const double iconSize = UiNavigationMetrics.iconSize;
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+  final UiButtonVariant variant;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      widthFactor: 1,
+      heightFactor: 1,
+      child: SizedBox.square(
+        dimension: extent,
+        child: UiButton.icon(
+          icon: icon,
+          semanticLabel: semanticLabel,
+          size: UiButtonSize.navigation,
+          variant: variant,
+          loading: loading,
+          onPressed: onPressed,
+        ),
+      ),
+    );
   }
 }
 

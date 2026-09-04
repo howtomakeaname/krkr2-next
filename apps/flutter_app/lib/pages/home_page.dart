@@ -139,8 +139,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _perfOverlay = prefs.getBool(PrefsKeys.perfOverlay) ?? false;
     _fpsLimitEnabled = prefs.getBool(PrefsKeys.fpsLimitEnabled) ?? false;
     _targetFps = prefs.getInt(PrefsKeys.targetFps) ?? PrefsKeys.defaultFps;
-    if (!PrefsKeys.fpsOptions.contains(_targetFps))
+    if (!PrefsKeys.fpsOptions.contains(_targetFps)) {
       _targetFps = PrefsKeys.defaultFps;
+    }
     _renderer = prefs.getString(PrefsKeys.renderer) ?? PrefsKeys.rendererOpengl;
     _angleBackend =
         prefs.getString(PrefsKeys.angleBackend) ?? PrefsKeys.angleBackendGles;
@@ -1011,6 +1012,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _downloadAndAddGame(String url) async {
     final l10n = AppLocalizations.of(context)!;
     final docDir = await getApplicationDocumentsDirectory();
+    if (!mounted) return;
     final name = url
         .split('/')
         .lastWhere((s) => s.isNotEmpty, orElse: () => 'data.xp3');
@@ -1556,8 +1558,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           const SizedBox(width: 4),
           if (!Platform.isIOS)
             Builder(
-              builder: (btnContext) => UiButton.icon(
+              builder: (btnContext) => UiBarIconButton(
                 icon: LucideIcons.plus,
+                semanticLabel: l10n.addGame,
                 onPressed: _loading
                     ? null
                     : () {
@@ -1565,8 +1568,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       },
               ),
             ),
-          UiButton.icon(
+          UiBarIconButton(
             icon: LucideIcons.settings,
+            semanticLabel: l10n.settings,
             onPressed: _loading ? null : _openSettings,
           ),
         ],

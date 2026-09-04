@@ -402,6 +402,7 @@ class GameDetailCollapsingLaunchButton extends StatelessWidget {
                       opacity: compactOpacity,
                       child: UiButton.icon(
                         icon: LucideIcons.play,
+                        semanticLabel: label,
                         size: UiButtonSize.small,
                         variant: UiButtonVariant.primary,
                         onPressed: onPressed,

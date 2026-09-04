@@ -58,7 +58,7 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
         displayUrl,
         fit: BoxFit.cover,
         headers: CoverDownloader.imageRequestHeaders,
-        errorBuilder: (_, __, ___) => const SizedBox(
+        errorBuilder: (_, _, _) => const SizedBox(
           width: 48,
           height: 48,
           child: Icon(LucideIcons.imageOff),
@@ -143,10 +143,12 @@ class _ScrapeSelectPageState extends State<ScrapeSelectPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.scrapeMetadataSelectTitle),
+        automaticallyImplyLeading: false,
         leading: _applying
             ? null
-            : UiButton.icon(
-                icon: LucideIcons.chevronLeft,
+            : UiBarIconButton(
+                icon: LucideIcons.arrowLeft,
+                semanticLabel: l10n.back,
                 onPressed: () => Navigator.of(context).pop(false),
               ),
       ),
