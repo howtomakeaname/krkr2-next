@@ -46,6 +46,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # remain as function calls instead of inline SIMD instructions, causing
 # massive performance degradation (~20x slower than scalar C code).
 # This is standard practice for all Highway/SIMD projects.
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(${PROJECT_NAME} PRIVATE -O2 -g)
-endif()
+# CONFIG comparisons are case-insensitive and also work with multi-config
+# generators.  The OHOS Flutter build passes the configuration as lowercase
+# "debug"; the previous case-sensitive configure-time check therefore missed
+# it and shipped the software compositor's Highway/NEON code at -O0.
+target_compile_options(${PROJECT_NAME} PRIVATE
+    "$<$<CONFIG:Debug>:-O2>"
+    "$<$<CONFIG:Debug>:-g>"
+)
