@@ -3,6 +3,83 @@ import 'dart:math' as math;
 import 'game_info.dart';
 import 'play_session.dart';
 
+enum PlayHonorTier {
+  newcomer(minimumSeconds: 0, minimumGames: 0),
+  storyTraveler(minimumSeconds: 1 * 3600, minimumGames: 1),
+  immersedReader(minimumSeconds: 10 * 3600, minimumGames: 3),
+  veteran(minimumSeconds: 30 * 3600, minimumGames: 6),
+  collector(minimumSeconds: 100 * 3600, minimumGames: 12),
+  curator(minimumSeconds: 300 * 3600, minimumGames: 24);
+
+  const PlayHonorTier({
+    required this.minimumSeconds,
+    required this.minimumGames,
+  });
+
+  final int minimumSeconds;
+  final int minimumGames;
+}
+
+class PlayHonor {
+  const PlayHonor({
+    required this.tier,
+    required this.nextTier,
+    required this.progress,
+    required this.remainingSeconds,
+    required this.remainingGames,
+  });
+
+  final PlayHonorTier tier;
+  final PlayHonorTier? nextTier;
+  final double progress;
+  final int remainingSeconds;
+  final int remainingGames;
+
+  factory PlayHonor.from({
+    required int lifetimeSeconds,
+    required int playedGameCount,
+  }) {
+    var tier = PlayHonorTier.newcomer;
+    for (final candidate in PlayHonorTier.values) {
+      if (lifetimeSeconds >= candidate.minimumSeconds &&
+          playedGameCount >= candidate.minimumGames) {
+        tier = candidate;
+      }
+    }
+
+    final nextIndex = tier.index + 1;
+    if (nextIndex >= PlayHonorTier.values.length) {
+      return PlayHonor(
+        tier: tier,
+        nextTier: null,
+        progress: 1,
+        remainingSeconds: 0,
+        remainingGames: 0,
+      );
+    }
+
+    final nextTier = PlayHonorTier.values[nextIndex];
+    final timeSpan = nextTier.minimumSeconds - tier.minimumSeconds;
+    final gameSpan = nextTier.minimumGames - tier.minimumGames;
+    final timeProgress = timeSpan <= 0
+        ? 1.0
+        : ((lifetimeSeconds - tier.minimumSeconds) / timeSpan).clamp(0, 1);
+    final gameProgress = gameSpan <= 0
+        ? 1.0
+        : ((playedGameCount - tier.minimumGames) / gameSpan).clamp(0, 1);
+
+    return PlayHonor(
+      tier: tier,
+      nextTier: nextTier,
+      // Both requirements carry equal weight, and progress reaches 100% only
+      // when the time and library milestones have both been met.
+      progress: (timeProgress + gameProgress) / 2,
+      remainingSeconds: math.max(0, nextTier.minimumSeconds - lifetimeSeconds),
+      remainingGames: math.max(0, nextTier.minimumGames - playedGameCount),
+    );
+  }
+}
+
 class DailyPlayActivity {
   const DailyPlayActivity({
     required this.date,
@@ -36,6 +113,11 @@ class PlayInsights {
   final List<DailyPlayActivity> days;
   final bool hasRecentActivity;
   final List<GameInfo> rankedGames;
+
+  PlayHonor get honor => PlayHonor.from(
+    lifetimeSeconds: lifetimeSeconds,
+    playedGameCount: playedGameCount,
+  );
 
   int get maxDailySeconds =>
       days.fold<int>(0, (largest, day) => math.max(largest, day.seconds));

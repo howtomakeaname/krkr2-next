@@ -49,5 +49,33 @@ void main() {
       '/games/a',
       '/games/b',
     ]);
+    expect(insights.honor.tier, PlayHonorTier.storyTraveler);
+    expect(insights.honor.nextTier, PlayHonorTier.immersedReader);
+    expect(insights.honor.remainingSeconds, 7 * 3600);
+    expect(insights.honor.remainingGames, 1);
+    expect(insights.honor.progress, closeTo(0.36, 0.01));
+  });
+
+  test('honor reaches the next tier only after both milestones', () {
+    final timeOnly = PlayHonor.from(
+      lifetimeSeconds: 12 * 3600,
+      playedGameCount: 2,
+    );
+    final complete = PlayHonor.from(
+      lifetimeSeconds: 12 * 3600,
+      playedGameCount: 3,
+    );
+    final highest = PlayHonor.from(
+      lifetimeSeconds: 400 * 3600,
+      playedGameCount: 30,
+    );
+
+    expect(timeOnly.tier, PlayHonorTier.storyTraveler);
+    expect(timeOnly.remainingSeconds, 0);
+    expect(timeOnly.remainingGames, 1);
+    expect(complete.tier, PlayHonorTier.immersedReader);
+    expect(highest.tier, PlayHonorTier.curator);
+    expect(highest.nextTier, isNull);
+    expect(highest.progress, 1);
   });
 }
