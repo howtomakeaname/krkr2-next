@@ -1851,6 +1851,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _buildPlaceholderTab(title: l10n.tabManage),
       HomeProfileTab(
         games: allGames,
+        playSessions: _gameManager.playSessions,
         onOpenSettings: _openSettings,
         onOpenHelp: _openHelp,
         onOpenAbout: _openAbout,

@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_app/l10n/app_localizations.dart';
+import 'package:flutter_app/constants/prefs_keys.dart';
 import 'package:flutter_app/models/game_engine.dart';
 import 'package:flutter_app/models/game_info.dart';
+import 'package:flutter_app/models/play_session.dart';
 import 'package:flutter_app/pages/home_page.dart';
 import 'package:flutter_app/ui/ui.dart';
 
@@ -26,6 +28,14 @@ void main() {
     );
     SharedPreferences.setMockInitialValues({
       'krkr2_game_list': GameInfo.listToJsonString([game]),
+      PrefsKeys.playSessionHistory: PlaySession.listToJsonString([
+        PlaySession(
+          id: 'recent-session',
+          gamePath: game.path,
+          endedAt: DateTime.now(),
+          durationSeconds: 65 * 60,
+        ),
+      ]),
     });
 
     await tester.pumpWidget(
@@ -44,9 +54,55 @@ void main() {
 
     expect(find.byKey(const ValueKey('profile-play-card')), findsOneWidget);
     expect(find.text('游玩时间'), findsOneWidget);
-    expect(find.text('2 小时 5 分钟'), findsOneWidget);
-    expect(find.text('游戏记录'), findsOneWidget);
-    expect(find.text('最近游玩'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('profile-lifetime-total')))
+          .data,
+      '2 小时 5 分钟',
+    );
+    expect(find.text('累计游玩'), findsOneWidget);
+    expect(find.text('近 7 天'), findsOneWidget);
+    expect(find.text('常玩游戏'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('profile-active-days-value')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-games-played-value')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-average-session-value')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('profile-week-total')))
+          .data,
+      '1 小时 5 分钟',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('profile-active-days-value')))
+          .data,
+      '1',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('profile-games-played-value')),
+          )
+          .data,
+      '1',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('profile-average-session-value')),
+          )
+          .data,
+      '1 小时 5 分钟',
+    );
     expect(find.text('测试游戏'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('帮助'), findsOneWidget);
