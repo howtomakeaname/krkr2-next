@@ -2179,7 +2179,6 @@ class _GameControlsState extends State<_GameControls>
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final colors = context.uiColors;
-    final mediaBackdrop = colors.overlay.withValues(alpha: 1);
     final mediaForeground = colors.textOnBrand;
 
     return RepaintBoundary(
@@ -2207,50 +2206,24 @@ class _GameControlsState extends State<_GameControls>
           final materialPulse = reduceMotion
               ? 0.0
               : (4 * contentProgress * (1 - contentProgress)).clamp(0.0, 1.0);
-          final topFill = Color.lerp(
-            mediaBackdrop,
-            mediaForeground,
-            0.23,
-          )!.withValues(alpha: 0.82 + (0.10 * visualProgress));
-          final bottomFill = Color.lerp(
-            mediaBackdrop,
-            mediaForeground,
-            0.16,
-          )!.withValues(alpha: 0.90 + (0.05 * visualProgress));
+          final glassRadius = BorderRadius.circular(
+            22 + (4 * visualProgress),
+          );
 
           return Semantics(
             container: true,
             label: 'Game controls',
-            child: Container(
+            child: SizedBox(
               width: width,
               height: height,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [topFill, bottomFill],
-                ),
-                border: Border.all(
-                  color: mediaForeground.withValues(
-                    alpha: 0.19 + (0.05 * visualProgress),
-                  ),
-                  width: 0.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: mediaBackdrop.withValues(
-                      alpha: 0.22 + (0.10 * visualProgress),
-                    ),
-                    blurRadius: 10 + (8 * visualProgress),
-                    offset: Offset(0, 3 + (3 * visualProgress)),
-                  ),
-                ],
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
+              child: UiGlassSurface(
+                variant: UiGlassVariant.clear,
+                borderRadius: glassRadius,
+                enableBlur: true,
+                interaction: materialPulse * 0.72,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
                   Positioned(
                     left: 12,
                     right: 12,
@@ -2377,7 +2350,8 @@ class _GameControlsState extends State<_GameControls>
                       onTap: widget.onToggle,
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
@@ -2431,12 +2405,26 @@ class _MorphingMenuButton extends StatefulWidget {
   State<_MorphingMenuButton> createState() => _MorphingMenuButtonState();
 }
 
-class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
-  bool _pressed = false;
+class _MorphingMenuButtonState extends State<_MorphingMenuButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController.unbounded(
+    vsync: this,
+  );
 
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
+  void _animatePress(double target) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _press.value = target;
+      return;
+    }
+    _press.animateWith(
+      SpringSimulation(UiSprings.press, _press.value, target, _press.velocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
   }
 
   @override
@@ -2450,62 +2438,70 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
       label: widget.expanded ? 'Close game controls' : 'Open game controls',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _setPressed(true),
-        onTapCancel: () => _setPressed(false),
-        onTapUp: (_) => _setPressed(false),
+        onTapDown: (_) => _animatePress(1),
+        onTapCancel: () => _animatePress(0),
+        onTapUp: (_) => _animatePress(0),
         onTap: () {
           HapticFeedback.lightImpact();
           widget.onTap();
         },
-        child: AnimatedScale(
-          scale: _pressed ? 0.90 : 1,
-          duration: UiDuration.fast,
-          curve: UiCurves.iosSnappy,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              AnimatedOpacity(
-                opacity: _pressed ? 1 : 0,
-                duration: UiDuration.fast,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colors.textOnBrand.withValues(alpha: 0.14),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const SizedBox.expand(),
-                ),
+        child: AnimatedBuilder(
+          animation: _press,
+          builder: (context, child) {
+            final pressed = _press.value.clamp(0.0, 1.0);
+            return Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.diagonal3Values(
+                1 - (0.04 * pressed),
+                1 - (0.10 * pressed),
+                1,
               ),
-              Opacity(
-                opacity: 1 - dotsProgress,
-                child: Transform.rotate(
-                  angle: progress * 0.34,
-                  child: Transform.scale(
-                    scaleX: 1 - (0.24 * dotsProgress),
-                    scaleY: 1 + (0.08 * dotsProgress),
-                    child: UiIcon(
-                      UiIcons.moreHorizontal,
-                      size: 20,
-                      color: colors.textOnBrand.withValues(alpha: 0.92),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    opacity: pressed,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colors.textOnBrand.withValues(alpha: 0.16),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const SizedBox.expand(),
                     ),
                   ),
-                ),
-              ),
-              Opacity(
-                opacity: closeProgress,
-                child: Transform.scale(
-                  scale: 0.72 + (0.28 * closeProgress),
-                  child: Transform.rotate(
-                    angle: (1 - closeProgress) * -0.52,
-                    child: UiIcon(
-                      UiIcons.close,
-                      size: 18,
-                      color: colors.textOnBrand.withValues(alpha: 0.84),
+                  Opacity(
+                    opacity: 1 - dotsProgress,
+                    child: Transform.rotate(
+                      angle: progress * 0.34,
+                      child: Transform.scale(
+                        scaleX: 1 - (0.24 * dotsProgress),
+                        scaleY: 1 + (0.08 * dotsProgress),
+                        child: UiIcon(
+                          UiIcons.moreHorizontal,
+                          size: 20,
+                          color: colors.textOnBrand.withValues(alpha: 0.92),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  Opacity(
+                    opacity: closeProgress,
+                    child: Transform.scale(
+                      scale: 0.72 + (0.28 * closeProgress),
+                      child: Transform.rotate(
+                        angle: (1 - closeProgress) * -0.52,
+                        child: UiIcon(
+                          UiIcons.close,
+                          size: 18,
+                          color: colors.textOnBrand.withValues(alpha: 0.84),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -2530,61 +2526,46 @@ class _GlassIconAction extends StatefulWidget {
 }
 
 class _GlassIconActionState extends State<_GlassIconAction> {
-  bool _pressed = false;
-
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     return Semantics(
-      button: true,
       selected: widget.selected,
-      label: widget.label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _setPressed(true),
-        onTapCancel: () => _setPressed(false),
-        onTapUp: (_) => _setPressed(false),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          widget.onTap();
-        },
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: AnimatedScale(
-              scale: _pressed ? 0.90 : 1,
+      child: SizedBox.square(
+        dimension: 44,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            AnimatedOpacity(
+              opacity: widget.selected ? 1 : 0,
               duration: UiDuration.fast,
-              curve: UiCurves.iosSnappy,
-              child: AnimatedContainer(
-                width: 34,
-                height: 34,
+              curve: UiCurves.iosSmooth,
+              child: AnimatedScale(
+                scale: widget.selected ? 1 : 0.72,
                 duration: UiDuration.fast,
                 curve: UiCurves.iosSmooth,
-                decoration: BoxDecoration(
-                  color: _pressed
-                      ? colors.textOnBrand.withValues(alpha: 0.16)
-                      : widget.selected
-                      ? colors.brand.withValues(alpha: 0.24)
-                      : Colors.transparent,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: UiIcon(
-                  widget.icon,
-                  size: 17,
-                  color: widget.selected
-                      ? colors.brand
-                      : colors.textOnBrand.withValues(alpha: 0.90),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.brand.withValues(alpha: 0.24),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const SizedBox.square(dimension: 34),
                 ),
               ),
             ),
-          ),
+            UiGlassIconButton(
+              icon: widget.icon,
+              semanticLabel: widget.label,
+              size: 44,
+              iconSize: 17,
+              contained: false,
+              enableHaptic: true,
+              foregroundColor: widget.selected
+                  ? colors.brand
+                  : colors.textOnBrand.withValues(alpha: 0.90),
+              onPressed: widget.onTap,
+            ),
+          ],
         ),
       ),
     );
@@ -2601,12 +2582,26 @@ class _GlassExitAction extends StatefulWidget {
   State<_GlassExitAction> createState() => _GlassExitActionState();
 }
 
-class _GlassExitActionState extends State<_GlassExitAction> {
-  bool _pressed = false;
+class _GlassExitActionState extends State<_GlassExitAction>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController.unbounded(
+    vsync: this,
+  );
 
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
+  void _animatePress(double target) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _press.value = target;
+      return;
+    }
+    _press.animateWith(
+      SpringSimulation(UiSprings.press, _press.value, target, _press.velocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
   }
 
   @override
@@ -2617,27 +2612,35 @@ class _GlassExitActionState extends State<_GlassExitAction> {
       label: widget.label,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _setPressed(true),
-        onTapCancel: () => _setPressed(false),
-        onTapUp: (_) => _setPressed(false),
+        onTapDown: (_) => _animatePress(1),
+        onTapCancel: () => _animatePress(0),
+        onTapUp: (_) => _animatePress(0),
         onTap: () {
           HapticFeedback.mediumImpact();
           widget.onTap();
         },
-        child: AnimatedScale(
-          scale: _pressed ? 0.98 : 1,
-          duration: UiDuration.fast,
-          curve: UiCurves.iosSnappy,
-          child: AnimatedContainer(
-            duration: UiDuration.fast,
-            curve: UiCurves.iosSmooth,
+        child: AnimatedBuilder(
+          animation: _press,
+          builder: (context, child) {
+            final pressed = _press.value.clamp(0.0, 1.0);
+            return Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.diagonal3Values(
+                1 - (0.015 * pressed),
+                1 - (0.045 * pressed),
+                1,
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.danger.withValues(alpha: 0.14 * pressed),
+                  borderRadius: UiRadius.brLg,
+                ),
+                child: child,
+              ),
+            );
+          },
+          child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: _pressed
-                  ? colors.danger.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: UiRadius.brLg,
-            ),
             child: Row(
               children: [
                 UiIcon(LucideIcons.logOut, size: 17, color: colors.danger),
