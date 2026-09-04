@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
+import '../l10n/play_honor_localizations.dart';
 import '../models/game_info.dart';
 import '../models/play_insights.dart';
 import '../models/play_session.dart';
@@ -115,6 +116,21 @@ class _PlaySummaryPanel extends StatelessWidget {
                       style: context.uiType.footnote.copyWith(
                         color: colors.textSecondary,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(LucideIcons.award, size: 15, color: colors.brand),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        l10n.playHonorTier(insights.honor.tier),
+                        key: const ValueKey<String>('profile-honor-title'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.uiType.footnote.copyWith(
+                          color: colors.brand,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],

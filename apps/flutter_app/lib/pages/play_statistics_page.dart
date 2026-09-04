@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
+import '../l10n/play_honor_localizations.dart';
 import '../models/game_info.dart';
 import '../models/play_insights.dart';
 import '../models/play_session.dart';
@@ -47,10 +48,99 @@ class PlayStatisticsPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
           _StatisticsOverview(insights: insights),
+          const SizedBox(height: UiSpacing.md),
+          _HonorCard(honor: insights.honor),
           if (insights.rankedGames.isNotEmpty) ...[
             const SizedBox(height: UiSpacing.md),
             _MostPlayedSection(games: insights.rankedGames),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HonorCard extends StatelessWidget {
+  const _HonorCard({required this.honor});
+
+  final PlayHonor honor;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final colors = context.uiColors;
+    final nextTier = honor.nextTier;
+    final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
+    final requirement = l10n.playHonorRequirement(honor, remainingDuration);
+
+    return UiCard(
+      key: const ValueKey<String>('statistics-honor-card'),
+      borderRadius: UiRadius.brXl,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.award, size: 18, color: colors.brand),
+              const SizedBox(width: UiSpacing.sm),
+              Text(
+                l10n.profileHonorTitle,
+                style: context.uiType.footnote.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: UiSpacing.sm),
+          Text(
+            l10n.playHonorTier(honor.tier),
+            key: const ValueKey<String>('statistics-honor-title'),
+            style: context.uiType.title2.copyWith(color: colors.textPrimary),
+          ),
+          if (nextTier != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
+              style: context.uiType.caption.copyWith(
+                color: colors.textTertiary,
+              ),
+            ),
+          ],
+          const SizedBox(height: UiSpacing.lg),
+          ClipRRect(
+            borderRadius: UiRadius.brPill,
+            child: SizedBox(
+              height: 5,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(color: colors.surfaceElevated),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: honor.progress),
+                    duration: UiDuration.slow,
+                    curve: UiCurves.iosSpringOut,
+                    builder: (context, value, _) => FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: value.clamp(0, 1),
+                      child: ColoredBox(
+                        color: colors.brand.withValues(alpha: 0.72),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: UiSpacing.sm),
+          Text(
+            requirement,
+            key: const ValueKey<String>('statistics-honor-requirement'),
+            style: context.uiType.footnote.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
         ],
       ),
     );

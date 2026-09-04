@@ -62,6 +62,7 @@ void main() {
     );
     expect(find.text('累计游玩'), findsOneWidget);
     expect(find.text('近 7 天'), findsOneWidget);
+    expect(find.text('剧情旅人'), findsOneWidget);
     expect(find.text('查看详细统计'), findsOneWidget);
     expect(find.text('常玩游戏'), findsNothing);
     expect(find.text('测试游戏'), findsNothing);
@@ -72,6 +73,9 @@ void main() {
     expect(find.byKey(const ValueKey('play-statistics-page')), findsOneWidget);
     expect(find.text('游玩统计'), findsOneWidget);
     expect(find.text('常玩游戏'), findsOneWidget);
+    expect(find.text('荣誉称号'), findsOneWidget);
+    expect(find.text('下一称号：沉浸读者'), findsOneWidget);
+    expect(find.text('再游玩 7 小时 55 分钟，并体验 2 款游戏'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('statistics-active-days-value')),
       findsOneWidget,
