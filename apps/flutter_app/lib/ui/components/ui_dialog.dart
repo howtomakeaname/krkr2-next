@@ -53,12 +53,13 @@ class UiDialog {
     List<UiDialogAction> actions = const [],
     bool barrierDismissible = true,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: 'UiDialog',
-      barrierColor: context.uiColors.overlay,
-      transitionDuration: UiSprings.materializeDuration,
+      barrierColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.26),
+      transitionDuration: UiDuration.slow,
       pageBuilder: (ctx, a, b) {
         return _DialogView(
           title: title,
@@ -68,21 +69,72 @@ class UiDialog {
         );
       },
       transitionBuilder: (ctx, anim, _, child) {
-        final curved = CurvedAnimation(
-          parent: anim,
-          curve: UiSprings.materializeCurve,
-          reverseCurve: UiSprings.dismissCurve,
-        );
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1).animate(curved),
-            child: child,
-          ),
-        );
+        return _DialogTransition(animation: anim, child: child);
       },
     );
   }
+}
+
+/// Keeps the expensive backdrop sample out of the moving part of the route.
+/// The tint, edge and shadow still materialize during the transition; the real
+/// background sample is attached once the dialog has reached its resting size.
+class _DialogTransition extends AnimatedWidget {
+  const _DialogTransition({required this.animation, required this.child})
+    : super(listenable: animation);
+
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final isDismissing = animation.status == AnimationStatus.reverse;
+    final motionCurve = isDismissing
+        ? UiSprings.dismissCurve
+        : UiSprings.materializeCurve;
+    final opacityCurve = isDismissing
+        ? UiCurves.iosSmooth
+        : UiCurves.iosStandard;
+    final motion = reduceMotion
+        ? 1.0
+        : motionCurve.transform(animation.value).clamp(0.0, 1.08);
+    final opacityProgress = reduceMotion
+        ? 1.0
+        : opacityCurve.transform(animation.value).clamp(0.0, 1.0);
+    final opacity = 0.78 + (0.22 * opacityProgress);
+    final sampleBackdrop =
+        reduceMotion || animation.status == AnimationStatus.completed;
+
+    return _DialogMaterialState(
+      sampleBackdrop: sampleBackdrop,
+      child: Opacity(
+        opacity: opacity,
+        child: Transform.translate(
+          offset: Offset(0, 10 * (1 - motion)),
+          child: Transform.scale(scale: 0.975 + (0.025 * motion), child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogMaterialState extends InheritedWidget {
+  const _DialogMaterialState({
+    required this.sampleBackdrop,
+    required super.child,
+  });
+
+  final bool sampleBackdrop;
+
+  static bool sampleBackdropOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_DialogMaterialState>()
+          ?.sampleBackdrop ??
+      true;
+
+  @override
+  bool updateShouldNotify(_DialogMaterialState oldWidget) =>
+      sampleBackdrop != oldWidget.sampleBackdrop;
 }
 
 class _DialogView extends StatelessWidget {
@@ -102,6 +154,8 @@ class _DialogView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     final typography = context.uiType;
+    final sampleBackdrop = _DialogMaterialState.sampleBackdropOf(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final vertical = actions.length > 2;
 
@@ -113,55 +167,64 @@ class _DialogView extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: UiGlassSurface(
+              key: const ValueKey<String>('ui-dialog-surface'),
               variant: UiGlassVariant.regular,
               borderRadius: UiRadius.brXl,
-              enableBlur: true,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      UiSpacing.xl,
-                      UiSpacing.xl,
-                      UiSpacing.xl,
-                      UiSpacing.lg,
-                    ),
-                    child: Column(
-                      children: [
-                        if (title != null)
-                          Text(
-                            title!,
-                            textAlign: TextAlign.center,
-                            style: typography.headline.copyWith(
-                              color: colors.textPrimary,
+              tint: colors.surfaceElevated,
+              enableBlur: sampleBackdrop,
+              blurScale: 0.12,
+              showRefraction: sampleBackdrop,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface.withValues(alpha: isDark ? 0.60 : 0.58),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        UiSpacing.xl,
+                        UiSpacing.xl,
+                        UiSpacing.xl,
+                        UiSpacing.lg,
+                      ),
+                      child: Column(
+                        children: [
+                          if (title != null)
+                            Text(
+                              title!,
+                              textAlign: TextAlign.center,
+                              style: typography.headline.copyWith(
+                                color: colors.textPrimary,
+                              ),
                             ),
-                          ),
-                        if (title != null &&
-                            (message != null || content != null))
-                          const SizedBox(height: UiSpacing.sm),
-                        if (message != null)
-                          Text(
-                            message!,
-                            textAlign: TextAlign.center,
-                            style: typography.subheadline.copyWith(
-                              color: colors.textSecondary,
+                          if (title != null &&
+                              (message != null || content != null))
+                            const SizedBox(height: UiSpacing.sm),
+                          if (message != null)
+                            Text(
+                              message!,
+                              textAlign: TextAlign.center,
+                              style: typography.subheadline.copyWith(
+                                color: colors.textSecondary,
+                              ),
                             ),
-                          ),
-                        ?content,
-                      ],
+                          ?content,
+                        ],
+                      ),
                     ),
-                  ),
-                  if (actions.isNotEmpty)
-                    Divider(
-                      height: 0.6,
-                      thickness: 0.6,
-                      color: colors.separator,
-                    ),
-                  if (actions.isNotEmpty)
-                    vertical
-                        ? _buildVertical(context, colors)
-                        : _buildHorizontal(context, colors),
-                ],
+                    if (actions.isNotEmpty)
+                      Divider(
+                        height: 0.6,
+                        thickness: 0.6,
+                        color: colors.separator,
+                      ),
+                    if (actions.isNotEmpty)
+                      vertical
+                          ? _buildVertical(context, colors)
+                          : _buildHorizontal(context, colors),
+                  ],
+                ),
               ),
             ),
           ),
