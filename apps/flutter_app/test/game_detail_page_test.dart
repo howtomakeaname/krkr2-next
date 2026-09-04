@@ -38,7 +38,7 @@ void main() {
 
     expect(initialTitle.opacity, 0);
     expect(initialBar.backgroundColor?.a, 0);
-    expect(initialLaunchWidth, greaterThan(UiBarIconButton.extent));
+    expect(initialLaunchWidth, greaterThan(32));
 
     await tester.drag(
       find.byType(SingleChildScrollView).first,
@@ -52,7 +52,7 @@ void main() {
 
     expect(collapsedTitle.opacity, closeTo(1, 0.001));
     expect(collapsedBar.backgroundColor?.a, closeTo(1, 0.001));
-    expect(collapsedLaunchWidth, closeTo(UiBarIconButton.extent, 0.001));
+    expect(collapsedLaunchWidth, closeTo(32, 0.001));
 
     await tester.drag(
       find.byType(SingleChildScrollView).first,

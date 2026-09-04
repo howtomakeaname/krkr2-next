@@ -340,7 +340,7 @@ class GameDetailCollapsingLaunchButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  static const double _compactWidth = UiBarIconButton.extent;
+  static const double _compactWidth = 32;
 
   final double progress;
   final String label;
@@ -372,7 +372,7 @@ class GameDetailCollapsingLaunchButton extends StatelessWidget {
       child: ExcludeSemantics(
         child: SizedBox(
           width: width,
-          height: UiBarIconButton.extent,
+          height: 32,
           child: ClipRect(
             child: Stack(
               alignment: Alignment.centerLeft,
@@ -387,7 +387,7 @@ class GameDetailCollapsingLaunchButton extends StatelessWidget {
                       child: UiButton(
                         label: label,
                         leadingIcon: LucideIcons.play,
-                        size: UiButtonSize.navigation,
+                        size: UiButtonSize.small,
                         onPressed: onPressed,
                       ),
                     ),
@@ -400,9 +400,10 @@ class GameDetailCollapsingLaunchButton extends StatelessWidget {
                     ignoring: progress < 0.58,
                     child: Opacity(
                       opacity: compactOpacity,
-                      child: UiBarIconButton(
+                      child: UiButton.icon(
                         icon: LucideIcons.play,
                         semanticLabel: label,
+                        size: UiButtonSize.small,
                         variant: UiButtonVariant.primary,
                         onPressed: onPressed,
                       ),
