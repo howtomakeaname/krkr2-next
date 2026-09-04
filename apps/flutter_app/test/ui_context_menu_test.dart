@@ -38,25 +38,22 @@ void main() {
     await tester.longPress(find.byKey(anchorKey));
     await tester.pump();
 
-    final scaleFinder = find.ancestor(
-      of: find.text('操作'),
-      matching: find.byType(ScaleTransition),
+    final material = find.byKey(
+      const ValueKey<String>('ui-popup-menu-material'),
     );
-    expect(scaleFinder, findsOneWidget);
-    expect(
-      tester.widget<ScaleTransition>(scaleFinder).alignment,
-      Alignment.topRight,
-    );
-
-    final positionedFinder = find.ancestor(
-      of: find.text('操作'),
-      matching: find.byType(Positioned),
-    );
-    expect(positionedFinder, findsOneWidget);
-    final menuPosition = tester.widget<Positioned>(positionedFinder);
-    expect(menuPosition.left! + menuPosition.width!, anchor.right);
+    expect(material, findsOneWidget);
+    final enteringRect = tester.getRect(material);
+    final enteringLabelRect = tester.getRect(find.text('操作'));
+    expect(enteringRect.width, lessThan(250));
+    expect(enteringRect.right, anchor.right);
+    expect(enteringRect.center.dy, closeTo(anchor.bottom, 0.001));
 
     await tester.pump(const Duration(milliseconds: 320));
+    final settledRect = tester.getRect(material);
+    final settledLabelRect = tester.getRect(find.text('操作'));
+    expect(settledRect.width, closeTo(250, 0.001));
+    expect(settledRect.right, anchor.right);
+    expect(settledLabelRect, enteringLabelRect);
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
   });

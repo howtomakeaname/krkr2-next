@@ -1,5 +1,4 @@
-import 'dart:io';
-import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,9 @@ import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
 import 'ui_glass.dart';
 import 'ui_icon.dart';
+
+const double _menuVerticalPadding = 4;
+const double _menuDividerExtent = 0.5;
 
 /// 菜单项。长按 [UiContextMenu] 与点按 [UiPopupMenu] 共用。
 class UiMenuItem {
@@ -274,10 +276,12 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
     final curved = _curved;
     final alignEnd = widget.alignEnd ?? (anchor.center.dx >= size.width / 2);
 
-    var estimatedHeight = 8.0;
+    var estimatedHeight = _menuVerticalPadding * 2;
     for (final item in items) {
       estimatedHeight += item.subtitle == null ? 44.0 : 60.0;
     }
+    estimatedHeight +=
+        math.max(0, items.length - 1) * _menuDividerExtent;
 
     final minTop = padding.top + 8;
     final maxBottom = size.height - padding.bottom - 8;
@@ -317,19 +321,83 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
               ),
             ),
           ),
-        Positioned(
-          left: menuLeft,
-          top: menuTop,
-          width: _menuWidth,
-          child: FadeTransition(
-            opacity: curved,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.78, end: 1).animate(curved),
-              alignment: placeBelow
-                  ? (alignEnd ? Alignment.topRight : Alignment.topLeft)
-                  : (alignEnd ? Alignment.bottomRight : Alignment.bottomLeft),
-              child: _GlassMenuCard(items: items),
-            ),
+        Positioned.fill(
+          child: AnimatedBuilder(
+            animation: curved,
+            builder: (context, _) {
+              final geometryProgress = curved.value.clamp(0.0, 1.012);
+              final visibility = curved.value.clamp(0.0, 1.0);
+              final finalRect = Rect.fromLTWH(
+                menuLeft,
+                menuTop,
+                _menuWidth,
+                estimatedHeight,
+              );
+              // Menus grow from a compact lens at the source's actionable
+              // edge. Keeping this seed to one touch target also prevents a
+              // full-width settings row from turning into a giant slab.
+              final seedWidth = math.min(44.0, anchor.width);
+              final seedHeight = math.min(44.0, anchor.height);
+              final seedLeft = alignEnd
+                  ? anchor.right - seedWidth
+                  : anchor.left;
+              final seedTop = placeBelow
+                  ? anchor.bottom - seedHeight / 2
+                  : anchor.top - seedHeight / 2;
+              final seedRect = Rect.fromLTWH(
+                seedLeft,
+                seedTop,
+                seedWidth,
+                seedHeight,
+              );
+              final materialRect = Rect.lerp(
+                seedRect,
+                finalRect,
+                geometryProgress,
+              )!;
+              final contentOpacity = const Interval(
+                0.18,
+                0.56,
+                curve: Curves.easeOutCubic,
+              ).transform(visibility);
+              final radius = _GlassMenuMaterial.radius +
+                  (seedHeight / 2 - _GlassMenuMaterial.radius) *
+                      (1 - visibility);
+
+              return Stack(
+                children: [
+                  Positioned.fromRect(
+                    rect: materialRect,
+                    child: _GlassMenuMaterial(
+                      key: const ValueKey<String>('ui-popup-menu-material'),
+                      borderRadius: radius,
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: ClipPath(
+                      clipper: _MenuRevealClipper(
+                        rect: materialRect,
+                        radius: radius,
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned.fromRect(
+                            rect: finalRect,
+                            child: IgnorePointer(
+                              ignoring: visibility < 0.98,
+                              child: Opacity(
+                                opacity: contentOpacity,
+                                child: _GlassMenuContent(items: items),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -337,82 +405,75 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
   }
 }
 
-class _GlassMenuCard extends StatelessWidget {
-  const _GlassMenuCard({required this.items});
+class _GlassMenuMaterial extends StatelessWidget {
+  const _GlassMenuMaterial({
+    super.key,
+    required this.borderRadius,
+  });
+
+  final double borderRadius;
+  static const double radius = 22;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: UiGlassSurface(
+      variant: UiGlassVariant.regular,
+      borderRadius: BorderRadius.circular(borderRadius),
+      enableBlur: true,
+      child: const SizedBox.expand(),
+    ),
+  );
+}
+
+class _GlassMenuContent extends StatelessWidget {
+  const _GlassMenuContent({required this.items});
 
   final List<UiMenuItem> items;
-
-  static const double _radius = 22;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.uiColors;
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    Widget panel = UiGlassSurface(
-      variant: UiGlassVariant.regular,
-      borderRadius: BorderRadius.circular(_radius),
-      enableBlur: false,
-      showShadow: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i != 0)
-              Divider(height: 0.5, thickness: 0.5, color: colors.separator),
-            _MenuRow(
-              item: items[i],
-              isFirst: i == 0,
-              isLast: i == items.length - 1,
-            ),
-          ],
-        ],
-      ),
-    );
-
-    // OHOS 上 BackdropFilter 经常采不到下层画面，只会糊出一块脏灰。
-    if (Platform.operatingSystem != 'ohos') {
-      panel = BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: panel,
-      );
-    }
-
-    // OHOS 的 BoxShadow 要么糊成脏印（大 blur），要么印出一块硬灰板
-    // （小 blur）。自己铺一层比卡片略小的冷灰底板再 ImageFiltered：
-    // 露出来的只有晕，不是整块实心灰。
-    final shadowFill = colors.overlay.withValues(alpha: isLight ? 0.05 : 0.35);
-    // 浮层不在 Scaffold/Material 里。不包一层的话，文字会吃到
-    // MaterialApp 的 _errorTextStyle：双黄下划线。
     return Material(
       color: Colors.transparent,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            left: isLight ? 10 : 8,
-            right: isLight ? 10 : 8,
-            top: isLight ? 12 : 10,
-            bottom: isLight ? -2 : -4,
-            child: IgnorePointer(
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: isLight ? 18 : 20,
-                  sigmaY: isLight ? 20 : 22,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: _menuVerticalPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i != 0)
+                Divider(
+                  height: _menuDividerExtent,
+                  thickness: _menuDividerExtent,
+                  color: colors.separator,
                 ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: shadowFill,
-                    borderRadius: BorderRadius.circular(_radius - 2),
-                  ),
-                ),
+              _MenuRow(
+                item: items[i],
+                isFirst: i == 0,
+                isLast: i == items.length - 1,
               ),
-            ),
-          ),
-          ClipRRect(borderRadius: BorderRadius.circular(_radius), child: panel),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
+}
+
+class _MenuRevealClipper extends CustomClipper<Path> {
+  const _MenuRevealClipper({required this.rect, required this.radius});
+
+  final Rect rect;
+  final double radius;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+
+  @override
+  bool shouldReclip(covariant _MenuRevealClipper oldClipper) =>
+      rect != oldClipper.rect || radius != oldClipper.radius;
 }
 
 class _MenuRow extends StatefulWidget {
@@ -483,7 +544,7 @@ class _MenuRowState extends State<_MenuRow> {
     } else {
       wash = Colors.transparent;
     }
-    final radius = Radius.circular(_GlassMenuCard._radius - 1);
+    final radius = Radius.circular(_GlassMenuMaterial.radius - 1);
     final BorderRadius? corners = widget.isFirst && widget.isLast
         ? BorderRadius.all(radius)
         : widget.isFirst
