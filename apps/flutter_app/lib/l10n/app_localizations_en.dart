@@ -65,6 +65,73 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gotIt => 'Got it';
 
   @override
+  String get tabHome => 'Home';
+
+  @override
+  String get tabExplore => 'Explore';
+
+  @override
+  String get tabManage => 'Manage';
+
+  @override
+  String get tabProfile => 'Me';
+
+  @override
+  String get search => 'Search';
+
+  @override
+  String get searchComingSoon => 'Search is coming soon';
+
+  @override
+  String get help => 'Help';
+
+  @override
+  String get profilePlayTimeTitle => 'Play Time';
+
+  @override
+  String get profileGameRecords => 'Games';
+
+  @override
+  String get profileRecentGame => 'Recently Played';
+
+  @override
+  String get profileNoHistory => 'No activity yet';
+
+  @override
+  String profilePlaySummary(String duration, int count) {
+    return '$duration played · $count games';
+  }
+
+  @override
+  String playTimeMinutes(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String playTimeHours(int hours) {
+    return '$hours hr';
+  }
+
+  @override
+  String playTimeHoursMinutes(int hours, int minutes) {
+    return '$hours hr $minutes min';
+  }
+
+  @override
+  String get helpImportTitle => 'Import Games';
+
+  @override
+  String get helpImportBody =>
+      'Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app\'s public games directory, then pull to refresh.';
+
+  @override
+  String get helpLaunchTitle => 'Launch & Quick Actions';
+
+  @override
+  String get helpLaunchBody =>
+      'Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.';
+
+  @override
   String get removeGame => 'Remove Game';
 
   @override

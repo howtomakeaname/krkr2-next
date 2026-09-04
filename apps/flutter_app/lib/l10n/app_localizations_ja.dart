@@ -63,6 +63,73 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gotIt => '了解';
 
   @override
+  String get tabHome => 'ホーム';
+
+  @override
+  String get tabExplore => '見つける';
+
+  @override
+  String get tabManage => '管理';
+
+  @override
+  String get tabProfile => 'マイページ';
+
+  @override
+  String get search => '検索';
+
+  @override
+  String get searchComingSoon => '検索機能は準備中です';
+
+  @override
+  String get help => 'ヘルプ';
+
+  @override
+  String get profilePlayTimeTitle => 'プレイ時間';
+
+  @override
+  String get profileGameRecords => 'ゲーム記録';
+
+  @override
+  String get profileRecentGame => '最近プレイしたゲーム';
+
+  @override
+  String get profileNoHistory => '記録はありません';
+
+  @override
+  String profilePlaySummary(String duration, int count) {
+    return 'プレイ時間 $duration · $count本';
+  }
+
+  @override
+  String playTimeMinutes(int minutes) {
+    return '$minutes分';
+  }
+
+  @override
+  String playTimeHours(int hours) {
+    return '$hours時間';
+  }
+
+  @override
+  String playTimeHoursMinutes(int hours, int minutes) {
+    return '$hours時間$minutes分';
+  }
+
+  @override
+  String get helpImportTitle => 'ゲームをインポート';
+
+  @override
+  String get helpImportBody =>
+      'ゲームフォルダ全体、または XP3 / PFS パックをライブラリに追加します。HarmonyOS では公開ゲームフォルダに配置してから、下に引いて更新することもできます。';
+
+  @override
+  String get helpLaunchTitle => '起動とクイック操作';
+
+  @override
+  String get helpLaunchBody =>
+      'ゲームカードをタップすると詳細を表示します。長押しすると、起動、情報取得、名前変更、削除ができます。';
+
+  @override
   String get removeGame => 'ゲームを削除';
 
   @override

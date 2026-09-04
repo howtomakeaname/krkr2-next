@@ -20,6 +20,44 @@
   "gamesDirectory": "ゲームディレクトリ：Games/",
   "gotIt": "了解",
 
+  "tabHome": "ホーム",
+  "tabExplore": "見つける",
+  "tabManage": "管理",
+  "tabProfile": "マイページ",
+  "search": "検索",
+  "searchComingSoon": "検索機能は準備中です",
+  "help": "ヘルプ",
+  "profilePlayTimeTitle": "プレイ時間",
+  "profileGameRecords": "ゲーム記録",
+  "profileRecentGame": "最近プレイしたゲーム",
+  "profileNoHistory": "記録はありません",
+  "profilePlaySummary": "プレイ時間 {duration} · {count}本",
+  "@profilePlaySummary": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "playTimeMinutes": "{minutes}分",
+  "@playTimeMinutes": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "playTimeHours": "{hours}時間",
+  "@playTimeHours": {
+    "placeholders": { "hours": { "type": "int" } }
+  },
+  "playTimeHoursMinutes": "{hours}時間{minutes}分",
+  "@playTimeHoursMinutes": {
+    "placeholders": {
+      "hours": { "type": "int" },
+      "minutes": { "type": "int" }
+    }
+  },
+  "helpImportTitle": "ゲームをインポート",
+  "helpImportBody": "ゲームフォルダ全体、または XP3 / PFS パックをライブラリに追加します。HarmonyOS では公開ゲームフォルダに配置してから、下に引いて更新することもできます。",
+  "helpLaunchTitle": "起動とクイック操作",
+  "helpLaunchBody": "ゲームカードをタップすると詳細を表示します。長押しすると、起動、情報取得、名前変更、削除ができます。",
+
   "removeGame": "ゲームを削除",
   "removeGameConfirm": "リストから「{title}」を削除しますか？\nゲームファイルは削除されません。",
   "cancel": "キャンセル",

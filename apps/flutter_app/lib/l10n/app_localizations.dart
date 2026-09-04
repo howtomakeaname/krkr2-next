@@ -202,6 +202,120 @@ abstract class AppLocalizations {
   /// **'Got it'**
   String get gotIt;
 
+  /// No description provided for @tabHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get tabHome;
+
+  /// No description provided for @tabExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get tabExplore;
+
+  /// No description provided for @tabManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get tabManage;
+
+  /// No description provided for @tabProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Me'**
+  String get tabProfile;
+
+  /// No description provided for @search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get search;
+
+  /// No description provided for @searchComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Search is coming soon'**
+  String get searchComingSoon;
+
+  /// No description provided for @help.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get help;
+
+  /// No description provided for @profilePlayTimeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Time'**
+  String get profilePlayTimeTitle;
+
+  /// No description provided for @profileGameRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'Games'**
+  String get profileGameRecords;
+
+  /// No description provided for @profileRecentGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently Played'**
+  String get profileRecentGame;
+
+  /// No description provided for @profileNoHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No activity yet'**
+  String get profileNoHistory;
+
+  /// No description provided for @profilePlaySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} played · {count} games'**
+  String profilePlaySummary(String duration, int count);
+
+  /// No description provided for @playTimeMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String playTimeMinutes(int minutes);
+
+  /// No description provided for @playTimeHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr'**
+  String playTimeHours(int hours);
+
+  /// No description provided for @playTimeHoursMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr {minutes} min'**
+  String playTimeHoursMinutes(int hours, int minutes);
+
+  /// No description provided for @helpImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Games'**
+  String get helpImportTitle;
+
+  /// No description provided for @helpImportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app\'s public games directory, then pull to refresh.'**
+  String get helpImportBody;
+
+  /// No description provided for @helpLaunchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch & Quick Actions'**
+  String get helpLaunchTitle;
+
+  /// No description provided for @helpLaunchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.'**
+  String get helpLaunchBody;
+
   /// No description provided for @removeGame.
   ///
   /// In en, this message translates to:
