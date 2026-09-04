@@ -66,6 +66,9 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "profileHonorHighest": "Top title reached",
+  "profileHonorCurrent": "Current",
+  "profileHonorObtained": "Earned",
+  "profileHonorLocked": "Not earned",
   "profileGameRecords": "Games",
   "profileRecentGame": "Recently Played",
   "profileNoHistory": "No activity yet",

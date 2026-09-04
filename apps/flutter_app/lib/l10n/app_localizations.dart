@@ -388,6 +388,24 @@ abstract class AppLocalizations {
   /// **'Top title reached'**
   String get profileHonorHighest;
 
+  /// No description provided for @profileHonorCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get profileHonorCurrent;
+
+  /// No description provided for @profileHonorObtained.
+  ///
+  /// In en, this message translates to:
+  /// **'Earned'**
+  String get profileHonorObtained;
+
+  /// No description provided for @profileHonorLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Not earned'**
+  String get profileHonorLocked;
+
   /// No description provided for @profileGameRecords.
   ///
   /// In en, this message translates to:

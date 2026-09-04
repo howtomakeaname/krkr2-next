@@ -163,6 +163,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileHonorHighest => '已经到最高档';
 
   @override
+  String get profileHonorCurrent => '当前';
+
+  @override
+  String get profileHonorObtained => '已获得';
+
+  @override
+  String get profileHonorLocked => '未获得';
+
+  @override
   String get profileGameRecords => '游戏记录';
 
   @override

@@ -66,6 +66,9 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "profileHonorHighest": "最高ランクです",
+  "profileHonorCurrent": "現在",
+  "profileHonorObtained": "獲得済み",
+  "profileHonorLocked": "未獲得",
   "profileGameRecords": "ゲーム記録",
   "profileRecentGame": "最近プレイしたゲーム",
   "profileNoHistory": "記録はありません",

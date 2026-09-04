@@ -166,6 +166,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileHonorHighest => 'Top title reached';
 
   @override
+  String get profileHonorCurrent => 'Current';
+
+  @override
+  String get profileHonorObtained => 'Earned';
+
+  @override
+  String get profileHonorLocked => 'Not earned';
+
+  @override
   String get profileGameRecords => 'Games';
 
   @override

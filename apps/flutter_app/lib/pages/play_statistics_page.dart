@@ -60,59 +60,104 @@ class PlayStatisticsPage extends StatelessWidget {
   }
 }
 
-class _HonorCard extends StatelessWidget {
+class _HonorCard extends StatefulWidget {
   const _HonorCard({required this.honor});
 
   final PlayHonor honor;
 
   @override
+  State<_HonorCard> createState() => _HonorCardState();
+}
+
+class _HonorCardState extends State<_HonorCard> {
+  late final ScrollController _titleScrollController = ScrollController(
+    initialScrollOffset: widget.honor.tier.index <= 1
+        ? 0
+        : (widget.honor.tier.index - 1) * 122,
+  );
+
+  @override
+  void dispose() {
+    _titleScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colors = context.uiColors;
+    final honor = widget.honor;
     final nextTier = honor.nextTier;
     final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
     final requirement = l10n.playHonorRequirement(honor, remainingDuration);
+    final tiers = PlayHonorTier.values;
 
     return UiCard(
       key: const ValueKey<String>('statistics-honor-card'),
       borderRadius: UiRadius.brXl,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.profileHonorTitle,
-            style: context.uiType.footnote.copyWith(
-              color: colors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: UiSpacing.xs),
-          Text(
-            l10n.playHonorTier(honor.tier),
-            key: const ValueKey<String>('statistics-honor-title'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.uiType.title1.copyWith(color: colors.textPrimary),
-          ),
-          const SizedBox(height: UiSpacing.lg),
-          _HonorMilestoneTrack(honor: honor),
-          const SizedBox(height: UiSpacing.md),
-          if (nextTier != null) ...[
-            Text(
-              l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            child: Text(
+              l10n.profileHonorTitle,
               style: context.uiType.footnote.copyWith(
-                color: colors.textPrimary,
+                color: colors.textSecondary,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 2),
-          ],
-          Text(
-            requirement,
-            key: const ValueKey<String>('statistics-honor-requirement'),
-            style: context.uiType.footnote.copyWith(
-              color: colors.textSecondary,
+          ),
+          const SizedBox(height: UiSpacing.md),
+          SingleChildScrollView(
+            key: const ValueKey<String>('statistics-honor-collection'),
+            controller: _titleScrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                for (var index = 0; index < tiers.length; index++) ...[
+                  _HonorTitleToken(
+                    key: ValueKey<String>('statistics-honor-token-$index'),
+                    index: index,
+                    title: l10n.playHonorTier(tiers[index]),
+                    reached: index <= honor.tier.index,
+                    current: index == honor.tier.index,
+                  ),
+                  if (index != tiers.length - 1) const SizedBox(width: 10),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Divider(height: 1, thickness: 0.5, color: colors.separator),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (nextTier != null) ...[
+                  Text(
+                    l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
+                    style: context.uiType.callout.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: UiSpacing.md),
+                  _HonorProgressBar(progress: honor.progress),
+                  const SizedBox(height: UiSpacing.sm),
+                ],
+                Text(
+                  requirement,
+                  key: const ValueKey<String>('statistics-honor-requirement'),
+                  style: context.uiType.footnote.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -121,42 +166,138 @@ class _HonorCard extends StatelessWidget {
   }
 }
 
-class _HonorMilestoneTrack extends StatelessWidget {
-  const _HonorMilestoneTrack({required this.honor});
+class _HonorTitleToken extends StatelessWidget {
+  const _HonorTitleToken({
+    super.key,
+    required this.index,
+    required this.title,
+    required this.reached,
+    required this.current,
+  });
 
-  final PlayHonor honor;
+  final int index;
+  final String title;
+  final bool reached;
+  final bool current;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final tiers = PlayHonorTier.values;
+    final colors = context.uiColors;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final foreground = current
+        ? colors.textOnBrand
+        : reached
+        ? colors.brand
+        : colors.textSecondary;
+    final background = current
+        ? colors.brand
+        : reached
+        ? Color.lerp(colors.surface, colors.brandSoft, 0.72)!
+        : colors.groupedBackground;
+    final borderColor = current
+        ? colors.brand
+        : reached
+        ? Color.lerp(colors.border, colors.brand, 0.24)!
+        : colors.border;
+    final stateLabel = current
+        ? l10n.profileHonorCurrent
+        : reached
+        ? l10n.profileHonorObtained
+        : l10n.profileHonorLocked;
 
     return Semantics(
-      label: l10n.profileHonorTitle,
-      value: l10n.playHonorTier(honor.tier),
+      container: true,
+      label: title,
+      value: stateLabel,
       child: ExcludeSemantics(
-        child: SizedBox(
-          key: const ValueKey<String>('statistics-honor-track'),
-          height: 12,
-          child: Row(
-            children: [
-              for (var index = 0; index < tiers.length; index++) ...[
-                _HonorMilestoneDot(
-                  reached: index <= honor.tier.index,
-                  current: index == honor.tier.index,
-                ),
-                if (index != tiers.length - 1)
-                  Expanded(
-                    child: _HonorMilestoneSegment(
-                      progress: index < honor.tier.index
-                          ? 1
-                          : index == honor.tier.index
-                          ? honor.progress
-                          : 0,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(
+            begin: current && !reduceMotion ? 0.94 : 1,
+            end: 1,
+          ),
+          duration: UiDuration.slow,
+          curve: UiCurves.iosSpringOut,
+          builder: (context, scale, child) => Transform.scale(
+            scale: scale,
+            alignment: Alignment.center,
+            child: child,
+          ),
+          child: Container(
+            width: 112,
+            height: 98,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: UiRadius.brLg,
+              border: Border.all(color: borderColor),
+              boxShadow: current
+                  ? [
+                      BoxShadow(
+                        color: colors.brand.withValues(alpha: 0.2),
+                        blurRadius: 16,
+                        offset: const Offset(0, 7),
+                        spreadRadius: -6,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      (index + 1).toString().padLeft(2, '0'),
+                      style: context.uiType.caption.copyWith(
+                        color: current
+                            ? foreground.withValues(alpha: 0.72)
+                            : colors.textTertiary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                    const Spacer(),
+                    if (current)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.textOnBrand.withValues(alpha: 0.18),
+                          borderRadius: UiRadius.brPill,
+                        ),
+                        child: Text(
+                          l10n.profileHonorCurrent,
+                          style: context.uiType.caption.copyWith(
+                            color: foreground,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else
+                      Icon(
+                        reached ? LucideIcons.check : LucideIcons.lockKeyhole,
+                        size: 14,
+                        color: reached ? colors.brand : colors.textTertiary,
+                      ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.uiType.body.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w600,
+                    height: 1.15,
                   ),
+                ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -164,56 +305,33 @@ class _HonorMilestoneTrack extends StatelessWidget {
   }
 }
 
-class _HonorMilestoneDot extends StatelessWidget {
-  const _HonorMilestoneDot({required this.reached, required this.current});
-
-  final bool reached;
-  final bool current;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.uiColors;
-    return AnimatedContainer(
-      duration: UiDuration.base,
-      curve: UiCurves.iosSpringOut,
-      width: current ? 10 : 6,
-      height: current ? 10 : 6,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: reached ? colors.brand : colors.separator,
-        border: current ? Border.all(color: colors.brandSoft, width: 2) : null,
-      ),
-    );
-  }
-}
-
-class _HonorMilestoneSegment extends StatelessWidget {
-  const _HonorMilestoneSegment({required this.progress});
+class _HonorProgressBar extends StatelessWidget {
+  const _HonorProgressBar({required this.progress});
 
   final double progress;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.uiColors;
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: progress.clamp(0, 1)),
-      duration: UiDuration.slow,
-      curve: UiCurves.iosSpringOut,
-      builder: (context, value, _) => Stack(
-        alignment: Alignment.centerLeft,
-        children: [
-          Container(height: 2, color: colors.separator),
-          FractionallySizedBox(
-            widthFactor: value,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                color: colors.brand,
-                borderRadius: UiRadius.brPill,
+    return ClipRRect(
+      borderRadius: UiRadius.brPill,
+      child: SizedBox(
+        height: 4,
+        child: ColoredBox(
+          color: colors.separator,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: progress.clamp(0, 1)),
+              duration: UiDuration.slow,
+              curve: UiCurves.iosSpringOut,
+              builder: (context, value, _) => FractionallySizedBox(
+                widthFactor: value,
+                child: ColoredBox(color: colors.brand),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
