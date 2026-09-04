@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -72,78 +73,201 @@ class _HonorCard extends StatelessWidget {
     final nextTier = honor.nextTier;
     final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
     final requirement = l10n.playHonorRequirement(honor, remainingDuration);
+    final tierNumber = honor.tier.index + 1;
+    final tierCount = PlayHonorTier.values.length;
 
     return UiCard(
       key: const ValueKey<String>('statistics-honor-card'),
       borderRadius: UiRadius.brXl,
-      padding: const EdgeInsets.all(18),
+      color: Color.lerp(colors.surface, colors.brandMuted, 0.42),
+      border: Border.all(
+        color: Color.lerp(colors.border, colors.brand, 0.22)!,
+        width: 1,
+      ),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(LucideIcons.award, size: 18, color: colors.brand),
-              const SizedBox(width: UiSpacing.sm),
-              Text(
-                l10n.profileHonorTitle,
-                style: context.uiType.footnote.copyWith(
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w600,
+              _HonorProgressEmblem(
+                progress: honor.progress,
+                semanticLabel: l10n.playHonorTier(honor.tier),
+              ),
+              const SizedBox(width: UiSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l10n.profileHonorTitle,
+                            style: context.uiType.footnote.copyWith(
+                              color: colors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$tierNumber / $tierCount',
+                          key: const ValueKey<String>('statistics-honor-level'),
+                          style: context.uiType.caption.copyWith(
+                            color: colors.textTertiary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      l10n.playHonorTier(honor.tier),
+                      key: const ValueKey<String>('statistics-honor-title'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.uiType.title1.copyWith(
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    if (nextTier != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.uiType.caption.copyWith(
+                          color: colors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: UiSpacing.sm),
-          Text(
-            l10n.playHonorTier(honor.tier),
-            key: const ValueKey<String>('statistics-honor-title'),
-            style: context.uiType.title2.copyWith(color: colors.textPrimary),
-          ),
-          if (nextTier != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
-              style: context.uiType.caption.copyWith(
-                color: colors.textTertiary,
-              ),
-            ),
-          ],
           const SizedBox(height: UiSpacing.lg),
-          ClipRRect(
-            borderRadius: UiRadius.brPill,
-            child: SizedBox(
-              height: 5,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ColoredBox(color: colors.surfaceElevated),
-                  TweenAnimationBuilder<double>(
-                    tween: Tween<double>(begin: 0, end: honor.progress),
-                    duration: UiDuration.slow,
-                    curve: UiCurves.iosSpringOut,
-                    builder: (context, value, _) => FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: value.clamp(0, 1),
-                      child: ColoredBox(
-                        color: colors.brand.withValues(alpha: 0.72),
-                      ),
-                    ),
-                  ),
-                ],
+          Row(
+            children: [
+              Icon(
+                nextTier == null ? LucideIcons.check : LucideIcons.arrowUpRight,
+                size: 16,
+                color: colors.brand,
               ),
-            ),
-          ),
-          const SizedBox(height: UiSpacing.sm),
-          Text(
-            requirement,
-            key: const ValueKey<String>('statistics-honor-requirement'),
-            style: context.uiType.footnote.copyWith(
-              color: colors.textSecondary,
-            ),
+              const SizedBox(width: UiSpacing.sm),
+              Expanded(
+                child: Text(
+                  requirement,
+                  key: const ValueKey<String>('statistics-honor-requirement'),
+                  style: context.uiType.callout.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+}
+
+class _HonorProgressEmblem extends StatelessWidget {
+  const _HonorProgressEmblem({
+    required this.progress,
+    required this.semanticLabel,
+  });
+
+  final double progress;
+  final String semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+
+    return Semantics(
+      label: semanticLabel,
+      value: '${(progress * 100).round()}%',
+      child: TweenAnimationBuilder<double>(
+        key: const ValueKey<String>('statistics-honor-emblem'),
+        tween: Tween<double>(begin: 0, end: progress),
+        duration: UiDuration.slow,
+        curve: UiCurves.iosSpringOut,
+        builder: (context, value, _) => SizedBox.square(
+          dimension: 76,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size.square(76),
+                painter: _HonorRingPainter(
+                  progress: value.clamp(0, 1),
+                  trackColor: colors.separator,
+                  progressColor: colors.brand,
+                ),
+              ),
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.brandSoft,
+                ),
+                alignment: Alignment.center,
+                child: Icon(LucideIcons.award, size: 27, color: colors.brand),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HonorRingPainter extends CustomPainter {
+  const _HonorRingPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.progressColor,
+  });
+
+  final double progress;
+  final Color trackColor;
+  final Color progressColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2 - 3;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4;
+    final progressPaint = Paint()
+      ..color = progressColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, trackPaint);
+    if (progress > 0) {
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        math.pi * 2 * progress,
+        false,
+        progressPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HonorRingPainter oldDelegate) {
+    return progress != oldDelegate.progress ||
+        trackColor != oldDelegate.trackColor ||
+        progressColor != oldDelegate.progressColor;
   }
 }
 
