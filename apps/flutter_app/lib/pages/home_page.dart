@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
 import '../models/game_info.dart';
@@ -35,6 +36,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GameManager _gameManager = GameManager();
+  final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   bool _loading = true;
   String? _iosGamesDir;
   // OHOS: sandbox path of Download/<bundleName>/games (and its short label
@@ -1382,21 +1384,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openGameScrape(GameInfo game) async {
-    final result = await Navigator.of(context).push<GameDetailResult>(
-      MaterialPageRoute<GameDetailResult>(
-        builder: (_) => GameDetailPage(
-          game: game,
-          gameManager: _gameManager,
-          openScrapeOnLoad: true,
-        ),
-      ),
+    final applied = await _scrapeFlow.start(
+      context,
+      game: game,
+      gameManager: _gameManager,
     );
-    if (result == null || !mounted) return;
-    if (result.needsRefresh) setState(() {});
-    if (result.shouldLaunch) _launchGame(game);
+    if (applied && mounted) setState(() {});
   }
 
-  /// After adding a game, offer to scrape. If user chooses Yes, open detail page with scrape dialog.
+  /// After adding a game, offer to start the shared metadata scrape flow.
   Future<void> _offerScrapeAfterAdd(String addedPath) async {
     final l10n = AppLocalizations.of(context)!;
     final idx = _gameManager.games.indexWhere((g) => g.path == addedPath);

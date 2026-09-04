@@ -8,15 +8,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_info.dart';
-import '../models/game_metadata_candidate.dart';
 import '../services/game_manager.dart';
-import '../services/game_metadata_scraper.dart';
 import '../ui/ui.dart';
 import '../utils/xp3_utils.dart';
 import '../widgets/game_detail_content.dart';
-import 'scrape_select_page.dart';
 
 class GameDetailResult {
   final bool needsRefresh;
@@ -35,14 +33,10 @@ class GameDetailPage extends StatefulWidget {
     super.key,
     required this.game,
     required this.gameManager,
-    this.openScrapeOnLoad = false,
   });
 
   final GameInfo game;
   final GameManager gameManager;
-
-  /// When true, open the scrape dialog automatically after the first frame (e.g. after adding a game).
-  final bool openScrapeOnLoad;
 
   @override
   State<GameDetailPage> createState() => _GameDetailPageState();
@@ -52,7 +46,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   static const double _toolbarCollapseDistance = 240;
 
   bool _changed = false;
-  final GameMetadataScraper _scraper = GameMetadataScraper();
+  final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   late final ScrollController _scrollController;
   late final ValueNotifier<double> _toolbarCollapseProgress;
 
@@ -63,11 +57,6 @@ class _GameDetailPageState extends State<GameDetailPage> {
     super.initState();
     _scrollController = ScrollController()..addListener(_handleScroll);
     _toolbarCollapseProgress = ValueNotifier<double>(0);
-    if (widget.openScrapeOnLoad) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openScrape();
-      });
-    }
   }
 
   @override
@@ -211,93 +200,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
   }
 
   Future<void> _openScrape() async {
-    final l10n = AppLocalizations.of(context)!;
-    final metadataLanguage = Localizations.localeOf(context).toLanguageTag();
-
-    final controller = TextEditingController(text: game.displayTitle);
-    final keyword = await UiDialog.show<String>(
+    final applied = await _scrapeFlow.start(
       context,
-      title: l10n.scrapeMetadataDialogTitle,
-      content: Builder(
-        builder: (ctx) => UiInput(
-          controller: controller,
-          autofocus: true,
-          placeholder: l10n.scrapeMetadataSearchHint,
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-      ),
-      actions: [
-        UiDialogAction(label: l10n.cancel),
-        UiDialogAction(
-          label: l10n.scrapeMetadataSearch,
-          isDefault: true,
-          onPressed: () => Navigator.pop(context, controller.text),
-        ),
-      ],
+      game: game,
+      gameManager: gm,
     );
-    // 等对话框退场动画结束再释放，避免输入框在动画中访问已释放的 controller。
-    Future<void>.delayed(const Duration(milliseconds: 500), controller.dispose);
-    if (keyword == null || !mounted) return;
-    final trimmed = keyword.trim();
-    if (trimmed.isEmpty) {
-      UiSnackbar.show(
-        context,
-        message: l10n.scrapeMetadataEnterName,
-        type: UiSnackbarType.warning,
-      );
-      return;
-    }
-
-    UiDialog.show<void>(
-      context,
-      barrierDismissible: false,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const UiLoader(),
-          const SizedBox(height: UiSpacing.md),
-          Text(
-            l10n.scrapeMetadataSearch,
-            style: context.uiType.subheadline.copyWith(
-              color: context.uiColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    List<GameMetadataCandidate> candidates;
-    try {
-      candidates = await _scraper.search(
-        trimmed,
-        preferredLanguage: metadataLanguage,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.of(context).pop(); // close loading dialog
-      if (!mounted) return;
-      UiSnackbar.show(
-        context,
-        message: l10n.scrapeMetadataSourceError,
-        type: UiSnackbarType.error,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).pop(); // close loading dialog
-    if (!mounted) return;
-    final applied = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (ctx) => ScrapeSelectPage(
-          candidates: candidates,
-          game: game,
-          gameManager: gm,
-          scraper: _scraper,
-        ),
-      ),
-    );
-    if (applied == true && mounted) {
+    if (applied && mounted) {
       _changed = true;
       setState(() {});
     }

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_app/l10n/app_localizations.dart';
 import 'package:flutter_app/models/game_engine.dart';
 import 'package:flutter_app/models/game_info.dart';
+import 'package:flutter_app/pages/game_detail_page.dart';
 import 'package:flutter_app/pages/home_page.dart';
 import 'package:flutter_app/ui/ui.dart';
 
@@ -60,5 +61,42 @@ void main() {
 
     expect(find.text('测试游戏'), findsNothing);
     expect(find.text('启动游戏'), findsNothing);
+  });
+
+  testWidgets('home scrape opens keyword dialog without entering detail page', (
+    WidgetTester tester,
+  ) async {
+    final game = GameInfo(
+      path: '/games/test-game',
+      title: '测试游戏',
+      engine: GameEngine.krkr2,
+    );
+    SharedPreferences.setMockInitialValues({
+      'krkr2_game_list': GameInfo.listToJsonString([game]),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: UiTheme.dark(),
+        home: const HomePage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('测试游戏'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刮削信息'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('刮削信息'), findsOneWidget);
+    expect(find.byType(GameDetailPage), findsNothing);
+    expect(find.byType(HomePage), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
   });
 }
