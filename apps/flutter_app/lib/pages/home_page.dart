@@ -16,6 +16,7 @@ import '../models/game_engine.dart';
 import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
+import '../widgets/home_game_card.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'settings_page.dart';
@@ -165,8 +166,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _initOhosGamesDir() async {
     if (_ohosGamesDir != null) return;
     try {
-      final info = await _platformChannel
-          .invokeMapMethod<String, dynamic>('ensurePublicGamesDir');
+      final info = await _platformChannel.invokeMapMethod<String, dynamic>(
+        'ensurePublicGamesDir',
+      );
       final path = info?['path'] as String?;
       if (path == null || path.isEmpty) return;
       _ohosGamesDir = path;
@@ -1480,7 +1482,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final games = _sortedGames;
-    final isDesktop = !Platform.isAndroid &&
+    final isDesktop =
+        !Platform.isAndroid &&
         !Platform.isIOS &&
         Platform.operatingSystem != 'ohos';
     final topPadding = MediaQuery.of(context).padding.top;
@@ -1538,38 +1541,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 },
               ),
             ),
-          UiButton.icon(
-            icon: LucideIcons.settings,
-            onPressed: _openSettings,
-          ),
+          UiButton.icon(icon: LucideIcons.settings, onPressed: _openSettings),
         ],
       ),
     );
 
     Widget content = CustomScrollView(
-              slivers: [
-                if (_restartDeferred)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    sliver: SliverToBoxAdapter(
-                      child: UiBanner(
-                        tone: UiBannerTone.warning,
-                        message: l10n.restartPendingBanner,
-                        actionLabel: l10n.restartNow,
-                        onAction: restartKrkr2App,
-                      ),
-                    ),
-                  ),
-                if (games.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _buildEmptyState(l10n),
-                  )
-                else
-                  _buildGameGrid(games, l10n),
-                const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-              ],
-            );
+      slivers: [
+        if (_restartDeferred)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            sliver: SliverToBoxAdapter(
+              child: UiBanner(
+                tone: UiBannerTone.warning,
+                message: l10n.restartPendingBanner,
+                actionLabel: l10n.restartNow,
+                onAction: restartKrkr2App,
+              ),
+            ),
+          ),
+        if (games.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(l10n),
+          )
+        else
+          _buildGameGrid(games, l10n),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+      ],
+    );
     if (canPullRefresh) {
       content = UiPullRefresh(
         pullingText: l10n.pullToRefresh,
@@ -1667,7 +1667,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
               final game = games[index];
-              return _CoverCard(
+              return HomeGameCard(
                 game: game,
                 l10n: l10n,
                 onTap: () => _openGameDetail(game),
@@ -1681,173 +1681,5 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
       },
     );
-  }
-}
-
-class _CoverCard extends StatelessWidget {
-  const _CoverCard({
-    required this.game,
-    required this.l10n,
-    required this.onTap,
-    required this.onLaunch,
-    required this.onScrape,
-    required this.onRename,
-    required this.onRemove,
-  });
-
-  final GameInfo game;
-  final AppLocalizations l10n;
-  final VoidCallback onTap;
-  final VoidCallback onLaunch;
-  final VoidCallback onScrape;
-  final VoidCallback onRename;
-  final VoidCallback onRemove;
-
-  bool get _hasCover =>
-      game.coverPath != null && File(game.coverPath!).existsSync();
-
-  @override
-  Widget build(BuildContext context) {
-    return UiContextMenu(
-      onTap: onTap,
-      items: [
-        UiMenuItem(
-          label: l10n.launchGame,
-          icon: LucideIcons.play,
-          onSelected: onLaunch,
-        ),
-        UiMenuItem(
-          label: l10n.scrapeMetadata,
-          icon: LucideIcons.cloudDownload,
-          onSelected: onScrape,
-        ),
-        UiMenuItem(
-          label: l10n.rename,
-          icon: LucideIcons.pencil,
-          onSelected: onRename,
-        ),
-        UiMenuItem(
-          label: l10n.remove,
-          icon: LucideIcons.trash2,
-          isDestructive: true,
-          onSelected: onRemove,
-        ),
-      ],
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: UiRadius.brLg),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildBackground(context),
-            _buildGradientOverlay(),
-            _buildTitleOverlay(game),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackground(BuildContext context) {
-    if (_hasCover) {
-      return UiGameCover(
-        image: FileImage(File(game.coverPath!)),
-        placeholder: _buildPlaceholder(context),
-        semanticLabel: game.displayTitle,
-      );
-    }
-    return _buildPlaceholder(context);
-  }
-
-  Widget _buildPlaceholder(BuildContext context) {
-    // 中性表面色做底，主题色只用在图标上，避免整块饱和色
-    final colors = context.uiColors;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.surfaceElevated, colors.separator],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          LucideIcons.gamepad2,
-          size: 48,
-          color: colors.brand.withValues(alpha: 0.6),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGradientOverlay() {
-    return const Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 80,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black54],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTitleOverlay(GameInfo game) {
-    final lastPlayed = game.lastPlayed;
-    final totalSeconds = game.playDurationSeconds ?? 0;
-    final hasDuration = totalSeconds >= 60;
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: 10,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            game.displayTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (lastPlayed != null || hasDuration) ...[
-            const SizedBox(height: 2),
-            Text(
-              [
-                if (lastPlayed != null) _formatDate(lastPlayed),
-                if (hasDuration)
-                  l10n.playDuration(GameInfo.formatPlayDuration(totalSeconds)),
-              ].join(' · '),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return l10n.justNow;
-    if (diff.inHours < 1) return l10n.minutesAgo(diff.inMinutes);
-    if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
-    if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
