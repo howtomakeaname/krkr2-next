@@ -17,6 +17,17 @@ class UiSpacing {
   static const double huge = 48;
 }
 
+/// 页面级标题栏的统一按钮度量。
+class UiNavigationMetrics {
+  UiNavigationMetrics._();
+
+  /// 对齐 iOS 导航栏的最小有效点击区域。
+  static const double buttonExtent = 44;
+
+  /// 以设置页标题栏图标的视觉尺寸为基准。
+  static const double iconSize = 22;
+}
+
 class UiRadius {
   UiRadius._();
 

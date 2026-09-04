@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../components/ui_motion.dart';
 import 'ui_colors.dart';
+import 'ui_metrics.dart';
 import 'ui_typography.dart';
 
 /// 全局主题工厂。负责将 [UiColors] / [UiTypography] 等扩展注入到
@@ -70,10 +71,7 @@ class UiTheme {
       labelLarge: typography.button,
       labelMedium: typography.callout,
       labelSmall: typography.footnote,
-    ).apply(
-      bodyColor: palette.textPrimary,
-      displayColor: palette.textPrimary,
-    );
+    ).apply(bodyColor: palette.textPrimary, displayColor: palette.textPrimary);
 
     return ThemeData(
       useMaterial3: true,
@@ -95,9 +93,13 @@ class UiTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        titleTextStyle:
-            typography.headline.copyWith(color: palette.textPrimary),
-        iconTheme: IconThemeData(color: palette.brand, size: 22),
+        titleTextStyle: typography.headline.copyWith(
+          color: palette.textPrimary,
+        ),
+        iconTheme: IconThemeData(
+          color: palette.brand,
+          size: UiNavigationMetrics.iconSize,
+        ),
       ),
       iconTheme: IconThemeData(color: palette.textPrimary, size: 22),
       dividerTheme: DividerThemeData(

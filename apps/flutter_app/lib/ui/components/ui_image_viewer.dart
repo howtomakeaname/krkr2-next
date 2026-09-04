@@ -251,9 +251,13 @@ class _RoundIconButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(icon, color: colors.textOnBrand, size: 22),
+          width: UiNavigationMetrics.buttonExtent,
+          height: UiNavigationMetrics.buttonExtent,
+          child: Icon(
+            icon,
+            color: colors.textOnBrand,
+            size: UiNavigationMetrics.iconSize,
+          ),
         ),
       ),
     );
