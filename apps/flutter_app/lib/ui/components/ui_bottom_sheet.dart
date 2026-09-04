@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/ui_metrics.dart';
 import '../theme/ui_theme.dart';
-import 'ui_button.dart';
+import 'ui_glass.dart';
 import 'ui_icon.dart';
 
 /// iOS18 风格底部抽屉。
@@ -64,19 +64,10 @@ class _SheetView extends StatelessWidget {
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.surfaceElevated,
-          borderRadius: const BorderRadius.vertical(top: UiRadius.xxl),
-          boxShadow: [
-            BoxShadow(
-              color: colors.overlay.withValues(alpha: 0.16),
-              blurRadius: 32,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
+      child: UiGlassSurface(
+        variant: UiGlassVariant.regular,
+        borderRadius: const BorderRadius.vertical(top: UiRadius.xxl),
+        enableBlur: true,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -111,10 +102,12 @@ class _SheetView extends StatelessWidget {
                       ),
                     ),
                     if (showCloseButton)
-                      UiButton.icon(
+                      UiGlassIconButton(
                         icon: UiIcons.close,
-                        variant: UiButtonVariant.ghost,
-                        size: UiButtonSize.small,
+                        semanticLabel: 'Close',
+                        size: 36,
+                        iconSize: 18,
+                        contained: false,
                         onPressed: () => Navigator.of(context).maybePop(),
                       ),
                   ],

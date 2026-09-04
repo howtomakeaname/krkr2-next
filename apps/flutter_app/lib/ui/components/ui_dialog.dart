@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/ui_metrics.dart';
+import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
+import 'ui_glass.dart';
 
 /// iOS18 风格操作按钮定义。
 class UiDialogAction {
@@ -54,7 +58,7 @@ class UiDialog {
       barrierDismissible: barrierDismissible,
       barrierLabel: 'UiDialog',
       barrierColor: context.uiColors.overlay,
-      transitionDuration: UiDuration.base,
+      transitionDuration: UiSprings.materializeDuration,
       pageBuilder: (ctx, a, b) {
         return _DialogView(
           title: title,
@@ -66,7 +70,8 @@ class UiDialog {
       transitionBuilder: (ctx, anim, _, child) {
         final curved = CurvedAnimation(
           parent: anim,
-          curve: UiCurves.emphasized,
+          curve: UiSprings.materializeCurve,
+          reverseCurve: UiSprings.dismissCurve,
         );
         return FadeTransition(
           opacity: curved,
@@ -107,12 +112,10 @@ class _DialogView extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 360),
           child: Material(
             color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.surfaceElevated,
-                borderRadius: UiRadius.brXl,
-              ),
-              clipBehavior: Clip.antiAlias,
+            child: UiGlassSurface(
+              variant: UiGlassVariant.regular,
+              borderRadius: UiRadius.brXl,
+              enableBlur: true,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -198,33 +201,88 @@ class _DialogView extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
+class _ActionButton extends StatefulWidget {
   const _ActionButton({required this.action, required this.colors});
 
   final UiDialogAction action;
   final dynamic colors;
 
   @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController.unbounded(
+    vsync: this,
+  );
+
+  void _animateTo(double target) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _press.value = target;
+      return;
+    }
+    _press.animateWith(
+      SpringSimulation(UiSprings.press, _press.value, target, _press.velocity),
+    );
+  }
+
+  void _select() {
+    HapticFeedback.lightImpact();
+    widget.action.onPressed?.call();
+    // onPressed 里自行 Navigator.pop(context, value) 关闭过弹窗时，
+    // 路由已不是栈顶，跳过自动关闭，避免双重 pop 弹出下层页面。
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    Navigator.of(context).pop(widget.action.returnValue);
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final typography = context.uiType;
+    final action = widget.action;
+    final colors = widget.colors;
     final tint = action.isDestructive ? colors.danger : colors.brand;
-    return InkWell(
-      onTap: () {
-        action.onPressed?.call();
-        // onPressed 里自行 Navigator.pop(context, value) 关闭过弹窗时，
-        // 路由已不是栈顶，跳过自动关闭，避免双重 pop 弹出下层页面。
-        final route = ModalRoute.of(context);
-        if (route != null && !route.isCurrent) return;
-        Navigator.of(context).pop(action.returnValue);
-      },
-      child: Container(
-        height: 48,
-        alignment: Alignment.center,
-        child: Text(
-          action.label,
-          style: typography.body.copyWith(
-            color: tint,
-            fontWeight: action.isDefault ? FontWeight.w600 : FontWeight.w500,
+    return Semantics(
+      button: true,
+      label: action.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _animateTo(1),
+        onTapCancel: () => _animateTo(0),
+        onTapUp: (_) => _animateTo(0),
+        onTap: _select,
+        child: AnimatedBuilder(
+          animation: _press,
+          builder: (context, child) {
+            final progress = _press.value.clamp(0.0, 1.0);
+            return ColoredBox(
+              color: colors.textPrimary.withValues(alpha: 0.08 * progress),
+              child: Transform.scale(
+                scale: 1 - (0.025 * progress),
+                child: child,
+              ),
+            );
+          },
+          child: SizedBox(
+            height: 48,
+            child: Center(
+              child: Text(
+                action.label,
+                style: typography.body.copyWith(
+                  color: tint,
+                  fontWeight: action.isDefault
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                ),
+              ),
+            ),
           ),
         ),
       ),
