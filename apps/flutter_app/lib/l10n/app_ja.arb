@@ -46,26 +46,26 @@
   "profileHonorVeteran": "ベテランプレイヤー",
   "profileHonorCollector": "ゲームコレクター",
   "profileHonorCurator": "物語の蒐集家",
-  "profileHonorNext": "次の称号：{title}",
+  "profileHonorNext": "次 · {title}",
   "@profileHonorNext": {
     "placeholders": { "title": { "type": "String" } }
   },
-  "profileHonorRemainingBoth": "あと{duration}プレイし、{count}本のゲームを体験",
+  "profileHonorRemainingBoth": "あと{duration}と{count}本",
   "@profileHonorRemainingBoth": {
     "placeholders": {
       "duration": { "type": "String" },
       "count": { "type": "int" }
     }
   },
-  "profileHonorRemainingTime": "あと{duration}プレイ",
+  "profileHonorRemainingTime": "あと{duration}",
   "@profileHonorRemainingTime": {
     "placeholders": { "duration": { "type": "String" } }
   },
-  "profileHonorRemainingGames": "あと{count}本のゲームを体験",
+  "profileHonorRemainingGames": "あと{count}本",
   "@profileHonorRemainingGames": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "profileHonorHighest": "最高の称号に到達しました",
+  "profileHonorHighest": "最高ランクです",
   "profileGameRecords": "ゲーム記録",
   "profileRecentGame": "最近プレイしたゲーム",
   "profileNoHistory": "記録はありません",

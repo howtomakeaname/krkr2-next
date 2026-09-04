@@ -39,33 +39,33 @@
   "profileTopGames": "常玩游戏",
   "profileStatistics": "游玩统计",
   "profileViewStatistics": "查看详细统计",
-  "profileHonorTitle": "荣誉称号",
+  "profileHonorTitle": "称号",
   "profileHonorNewcomer": "初来乍到",
   "profileHonorStoryTraveler": "剧情旅人",
   "profileHonorImmersedReader": "沉浸读者",
   "profileHonorVeteran": "资深玩家",
   "profileHonorCollector": "游戏藏家",
   "profileHonorCurator": "典藏家",
-  "profileHonorNext": "下一称号：{title}",
+  "profileHonorNext": "下一档 · {title}",
   "@profileHonorNext": {
     "placeholders": { "title": { "type": "String" } }
   },
-  "profileHonorRemainingBoth": "再游玩 {duration}，并体验 {count} 款游戏",
+  "profileHonorRemainingBoth": "还差 {duration}和 {count} 款游戏",
   "@profileHonorRemainingBoth": {
     "placeholders": {
       "duration": { "type": "String" },
       "count": { "type": "int" }
     }
   },
-  "profileHonorRemainingTime": "再游玩 {duration}",
+  "profileHonorRemainingTime": "还差 {duration}",
   "@profileHonorRemainingTime": {
     "placeholders": { "duration": { "type": "String" } }
   },
-  "profileHonorRemainingGames": "再体验 {count} 款游戏",
+  "profileHonorRemainingGames": "还差 {count} 款游戏",
   "@profileHonorRemainingGames": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "profileHonorHighest": "已达到最高称号",
+  "profileHonorHighest": "已经到最高档",
   "profileGameRecords": "游戏记录",
   "profileRecentGame": "最近游玩",
   "profileNoHistory": "暂无记录",

@@ -142,26 +142,26 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String profileHonorNext(String title) {
-    return '次の称号：$title';
+    return '次 · $title';
   }
 
   @override
   String profileHonorRemainingBoth(String duration, int count) {
-    return 'あと$durationプレイし、$count本のゲームを体験';
+    return 'あと$durationと$count本';
   }
 
   @override
   String profileHonorRemainingTime(String duration) {
-    return 'あと$durationプレイ';
+    return 'あと$duration';
   }
 
   @override
   String profileHonorRemainingGames(int count) {
-    return 'あと$count本のゲームを体験';
+    return 'あと$count本';
   }
 
   @override
-  String get profileHonorHighest => '最高の称号に到達しました';
+  String get profileHonorHighest => '最高ランクです';
 
   @override
   String get profileGameRecords => 'ゲーム記録';

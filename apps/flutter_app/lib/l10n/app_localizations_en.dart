@@ -122,7 +122,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileViewStatistics => 'View Detailed Statistics';
 
   @override
-  String get profileHonorTitle => 'Honor Title';
+  String get profileHonorTitle => 'Title';
 
   @override
   String get profileHonorNewcomer => 'New Arrival';
@@ -144,26 +144,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String profileHonorNext(String title) {
-    return 'Next: $title';
+    return 'Next · $title';
   }
 
   @override
   String profileHonorRemainingBoth(String duration, int count) {
-    return 'Play $duration more and explore $count more games';
+    return '$duration and $count more games to go';
   }
 
   @override
   String profileHonorRemainingTime(String duration) {
-    return 'Play $duration more';
+    return '$duration to go';
   }
 
   @override
   String profileHonorRemainingGames(int count) {
-    return 'Explore $count more games';
+    return '$count more games to go';
   }
 
   @override
-  String get profileHonorHighest => 'Highest title reached';
+  String get profileHonorHighest => 'Top title reached';
 
   @override
   String get profileGameRecords => 'Games';

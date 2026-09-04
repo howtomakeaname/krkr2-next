@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -73,99 +72,48 @@ class _HonorCard extends StatelessWidget {
     final nextTier = honor.nextTier;
     final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
     final requirement = l10n.playHonorRequirement(honor, remainingDuration);
-    final tierNumber = honor.tier.index + 1;
-    final tierCount = PlayHonorTier.values.length;
 
     return UiCard(
       key: const ValueKey<String>('statistics-honor-card'),
       borderRadius: UiRadius.brXl,
-      color: Color.lerp(colors.surface, colors.brandMuted, 0.42),
-      border: Border.all(
-        color: Color.lerp(colors.border, colors.brand, 0.22)!,
-        width: 1,
-      ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _HonorProgressEmblem(
-                progress: honor.progress,
-                semanticLabel: l10n.playHonorTier(honor.tier),
-              ),
-              const SizedBox(width: UiSpacing.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            l10n.profileHonorTitle,
-                            style: context.uiType.footnote.copyWith(
-                              color: colors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '$tierNumber / $tierCount',
-                          key: const ValueKey<String>('statistics-honor-level'),
-                          style: context.uiType.caption.copyWith(
-                            color: colors.textTertiary,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      l10n.playHonorTier(honor.tier),
-                      key: const ValueKey<String>('statistics-honor-title'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.uiType.title1.copyWith(
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    if (nextTier != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.uiType.caption.copyWith(
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            l10n.profileHonorTitle,
+            style: context.uiType.footnote.copyWith(
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: UiSpacing.xs),
+          Text(
+            l10n.playHonorTier(honor.tier),
+            key: const ValueKey<String>('statistics-honor-title'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.uiType.title1.copyWith(color: colors.textPrimary),
           ),
           const SizedBox(height: UiSpacing.lg),
-          Row(
-            children: [
-              Icon(
-                nextTier == null ? LucideIcons.check : LucideIcons.arrowUpRight,
-                size: 16,
-                color: colors.brand,
+          _HonorMilestoneTrack(honor: honor),
+          const SizedBox(height: UiSpacing.md),
+          if (nextTier != null) ...[
+            Text(
+              l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
+              style: context.uiType.footnote.copyWith(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: UiSpacing.sm),
-              Expanded(
-                child: Text(
-                  requirement,
-                  key: const ValueKey<String>('statistics-honor-requirement'),
-                  style: context.uiType.callout.copyWith(
-                    color: colors.textSecondary,
-                  ),
-                ),
-              ),
-            ],
+            ),
+            const SizedBox(height: 2),
+          ],
+          Text(
+            requirement,
+            key: const ValueKey<String>('statistics-honor-requirement'),
+            style: context.uiType.footnote.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -173,50 +121,41 @@ class _HonorCard extends StatelessWidget {
   }
 }
 
-class _HonorProgressEmblem extends StatelessWidget {
-  const _HonorProgressEmblem({
-    required this.progress,
-    required this.semanticLabel,
-  });
+class _HonorMilestoneTrack extends StatelessWidget {
+  const _HonorMilestoneTrack({required this.honor});
 
-  final double progress;
-  final String semanticLabel;
+  final PlayHonor honor;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.uiColors;
+    final l10n = AppLocalizations.of(context)!;
+    final tiers = PlayHonorTier.values;
 
     return Semantics(
-      label: semanticLabel,
-      value: '${(progress * 100).round()}%',
-      child: TweenAnimationBuilder<double>(
-        key: const ValueKey<String>('statistics-honor-emblem'),
-        tween: Tween<double>(begin: 0, end: progress),
-        duration: UiDuration.slow,
-        curve: UiCurves.iosSpringOut,
-        builder: (context, value, _) => SizedBox.square(
-          dimension: 76,
-          child: Stack(
-            alignment: Alignment.center,
+      label: l10n.profileHonorTitle,
+      value: l10n.playHonorTier(honor.tier),
+      child: ExcludeSemantics(
+        child: SizedBox(
+          key: const ValueKey<String>('statistics-honor-track'),
+          height: 12,
+          child: Row(
             children: [
-              CustomPaint(
-                size: const Size.square(76),
-                painter: _HonorRingPainter(
-                  progress: value.clamp(0, 1),
-                  trackColor: colors.separator,
-                  progressColor: colors.brand,
+              for (var index = 0; index < tiers.length; index++) ...[
+                _HonorMilestoneDot(
+                  reached: index <= honor.tier.index,
+                  current: index == honor.tier.index,
                 ),
-              ),
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colors.brandSoft,
-                ),
-                alignment: Alignment.center,
-                child: Icon(LucideIcons.award, size: 27, color: colors.brand),
-              ),
+                if (index != tiers.length - 1)
+                  Expanded(
+                    child: _HonorMilestoneSegment(
+                      progress: index < honor.tier.index
+                          ? 1
+                          : index == honor.tier.index
+                          ? honor.progress
+                          : 0,
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -225,49 +164,58 @@ class _HonorProgressEmblem extends StatelessWidget {
   }
 }
 
-class _HonorRingPainter extends CustomPainter {
-  const _HonorRingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.progressColor,
-  });
+class _HonorMilestoneDot extends StatelessWidget {
+  const _HonorMilestoneDot({required this.reached, required this.current});
+
+  final bool reached;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+    return AnimatedContainer(
+      duration: UiDuration.base,
+      curve: UiCurves.iosSpringOut,
+      width: current ? 10 : 6,
+      height: current ? 10 : 6,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: reached ? colors.brand : colors.separator,
+        border: current ? Border.all(color: colors.brandSoft, width: 2) : null,
+      ),
+    );
+  }
+}
+
+class _HonorMilestoneSegment extends StatelessWidget {
+  const _HonorMilestoneSegment({required this.progress});
 
   final double progress;
-  final Color trackColor;
-  final Color progressColor;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.shortestSide / 2 - 3;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
-    final progressPaint = Paint()
-      ..color = progressColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, trackPaint);
-    if (progress > 0) {
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        math.pi * 2 * progress,
-        false,
-        progressPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _HonorRingPainter oldDelegate) {
-    return progress != oldDelegate.progress ||
-        trackColor != oldDelegate.trackColor ||
-        progressColor != oldDelegate.progressColor;
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: progress.clamp(0, 1)),
+      duration: UiDuration.slow,
+      curve: UiCurves.iosSpringOut,
+      builder: (context, value, _) => Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          Container(height: 2, color: colors.separator),
+          FractionallySizedBox(
+            widthFactor: value,
+            child: Container(
+              height: 2,
+              decoration: BoxDecoration(
+                color: colors.brand,
+                borderRadius: UiRadius.brPill,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

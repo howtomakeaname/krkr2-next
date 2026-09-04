@@ -319,7 +319,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileHonorTitle.
   ///
   /// In en, this message translates to:
-  /// **'Honor Title'**
+  /// **'Title'**
   String get profileHonorTitle;
 
   /// No description provided for @profileHonorNewcomer.
@@ -361,31 +361,31 @@ abstract class AppLocalizations {
   /// No description provided for @profileHonorNext.
   ///
   /// In en, this message translates to:
-  /// **'Next: {title}'**
+  /// **'Next · {title}'**
   String profileHonorNext(String title);
 
   /// No description provided for @profileHonorRemainingBoth.
   ///
   /// In en, this message translates to:
-  /// **'Play {duration} more and explore {count} more games'**
+  /// **'{duration} and {count} more games to go'**
   String profileHonorRemainingBoth(String duration, int count);
 
   /// No description provided for @profileHonorRemainingTime.
   ///
   /// In en, this message translates to:
-  /// **'Play {duration} more'**
+  /// **'{duration} to go'**
   String profileHonorRemainingTime(String duration);
 
   /// No description provided for @profileHonorRemainingGames.
   ///
   /// In en, this message translates to:
-  /// **'Explore {count} more games'**
+  /// **'{count} more games to go'**
   String profileHonorRemainingGames(int count);
 
   /// No description provided for @profileHonorHighest.
   ///
   /// In en, this message translates to:
-  /// **'Highest title reached'**
+  /// **'Top title reached'**
   String get profileHonorHighest;
 
   /// No description provided for @profileGameRecords.
