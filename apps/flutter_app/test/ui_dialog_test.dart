@@ -47,5 +47,25 @@ void main() {
     expect(surface.enableBlur, isTrue);
     expect(surface.showRefraction, isTrue);
     expect(find.byType(BackdropFilter), findsWidgets);
+
+    final route = ModalRoute.of(tester.element(find.text('Remove game')))!;
+    expect(route.reverseTransitionDuration, UiSprings.dismissDuration);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    surface = tester.widget<UiGlassSurface>(surfaceFinder);
+    expect(surface.enableBlur, isFalse);
+    expect(surface.showRefraction, isFalse);
+    expect(find.byType(BackdropFilter), findsNothing);
+    final closingOpacity = tester.widget<Opacity>(
+      find.byKey(const ValueKey<String>('ui-dialog-motion-opacity')),
+    );
+    expect(closingOpacity.opacity, lessThan(1));
+    expect(closingOpacity.opacity, greaterThan(0));
+
+    await tester.pumpAndSettle();
+    expect(surfaceFinder, findsNothing);
   });
 }

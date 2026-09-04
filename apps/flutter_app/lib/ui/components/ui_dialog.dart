@@ -54,25 +54,39 @@ class UiDialog {
     bool barrierDismissible = true,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: 'UiDialog',
-      barrierColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.26),
-      transitionDuration: UiDuration.slow,
-      pageBuilder: (ctx, a, b) {
-        return _DialogView(
-          title: title,
-          message: message,
-          content: content,
-          actions: actions,
-        );
-      },
-      transitionBuilder: (ctx, anim, _, child) {
-        return _DialogTransition(animation: anim, child: child);
-      },
+    return Navigator.of(context, rootNavigator: true).push<T>(
+      _UiDialogRoute<T>(
+        pageBuilder: (ctx, a, b) {
+          return _DialogView(
+            title: title,
+            message: message,
+            content: content,
+            actions: actions,
+          );
+        },
+        barrierDismissible: barrierDismissible,
+        barrierLabel: 'UiDialog',
+        barrierColor: Colors.black.withValues(alpha: isDark ? 0.42 : 0.26),
+      ),
     );
   }
+}
+
+class _UiDialogRoute<T> extends RawDialogRoute<T> {
+  _UiDialogRoute({
+    required super.pageBuilder,
+    required super.barrierDismissible,
+    required super.barrierLabel,
+    required super.barrierColor,
+  }) : super(
+         transitionDuration: UiDuration.slow,
+         transitionBuilder: (ctx, anim, _, child) {
+           return _DialogTransition(animation: anim, child: child);
+         },
+       );
+
+  @override
+  Duration get reverseTransitionDuration => UiSprings.dismissDuration;
 }
 
 /// Keeps the expensive backdrop sample out of the moving part of the route.
@@ -101,13 +115,16 @@ class _DialogTransition extends AnimatedWidget {
     final opacityProgress = reduceMotion
         ? 1.0
         : opacityCurve.transform(animation.value).clamp(0.0, 1.0);
-    final opacity = 0.78 + (0.22 * opacityProgress);
+    final opacity = isDismissing
+        ? opacityProgress
+        : 0.78 + (0.22 * opacityProgress);
     final sampleBackdrop =
         reduceMotion || animation.status == AnimationStatus.completed;
 
     return _DialogMaterialState(
       sampleBackdrop: sampleBackdrop,
       child: Opacity(
+        key: const ValueKey<String>('ui-dialog-motion-opacity'),
         opacity: opacity,
         child: Transform.translate(
           offset: Offset(0, 10 * (1 - motion)),
@@ -292,6 +309,10 @@ class _ActionButtonState extends State<_ActionButton>
 
   void _select() {
     HapticFeedback.lightImpact();
+    // onTapUp has already started the release spring. Keep the selected action
+    // visually pressed while the route exits instead of animating it against
+    // the dialog's dismiss direction.
+    _press.stop();
     widget.action.onPressed?.call();
     // onPressed 里自行 Navigator.pop(context, value) 关闭过弹窗时，
     // 路由已不是栈顶，跳过自动关闭，避免双重 pop 弹出下层页面。
