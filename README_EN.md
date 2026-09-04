@@ -21,12 +21,6 @@
 
 **KrKr2 Next** is a modern, cross-platform runtime for the [KiriKiri2](https://en.wikipedia.org/wiki/KiriKiri) visual novel engine. It is fully compatible with original game scripts, uses modern graphics APIs for hardware-accelerated rendering, and includes numerous optimizations for both rendering performance and script execution. Built on Flutter for a unified cross-platform UI, it targets macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony.
 
-The screenshot below shows the current running state on macOS with the Metal backend:
-
-<p align="center">
-  <img src="doc/1.png" alt="macOS Metal Backend Screenshot" width="800">
-</p>
-
 ## Interface Preview
 
 The screenshots below were captured on a physical HarmonyOS SDK 20 device. The system status bar has been removed from each image to keep the focus on the app.
@@ -64,9 +58,11 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
   </tr>
 </table>
 
+### Game Running in Landscape
+
 <p align="center">
-  <img src="doc/screenshots/game-running.webp" alt="KiriKiri2 engine running a game" width="800"><br>
-  <sub>KiriKiri2 engine running on the device</sub>
+  <img src="doc/screenshots/game-running-landscape.webp" alt="KiriKiri2 test game running in landscape on a HarmonyOS device" width="800"><br>
+  <sub>KiriKiri2 test game running in landscape on a physical HarmonyOS device</sub>
 </p>
 
 ## Architecture

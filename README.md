@@ -21,12 +21,6 @@
 
 **KrKr2 Next** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它完全兼容原版游戏脚本，使用现代图形接口进行硬件加速渲染，并在渲染性能和脚本执行效率上做了大量优化。基于 Flutter 构建统一的跨平台界面，支持 macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony 六大平台。
 
-下图为当前在 macOS 上通过 Metal 后端运行的实际效果：
-
-<p align="center">
-  <img src="doc/1.png" alt="macOS Metal 后端运行截图" width="800">
-</p>
-
 ## 界面预览
 
 以下截图采集自 HarmonyOS SDK 20 真机。为保持展示聚焦，均已移除系统状态栏。
@@ -64,9 +58,11 @@
   </tr>
 </table>
 
+### 游戏运行（横屏）
+
 <p align="center">
-  <img src="doc/screenshots/game-running.webp" alt="KiriKiri2 引擎运行画面" width="800"><br>
-  <sub>KiriKiri2 引擎实际运行画面</sub>
+  <img src="doc/screenshots/game-running-landscape.webp" alt="HarmonyOS 真机横屏运行 KiriKiri2 测试游戏" width="800"><br>
+  <sub>HarmonyOS 真机横屏运行 KiriKiri2 测试游戏</sub>
 </p>
 
 ## 架构
