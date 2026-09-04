@@ -7,9 +7,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme_mode.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../constants/prefs_keys.dart';
+import '../services/app_theme_platform.dart';
 import '../ui/ui.dart';
 import 'home_page.dart';
 
@@ -94,7 +96,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _angleBackend = PrefsKeys.angleBackendGles;
   late String _gameOrientation;
   String _localeCode = 'system';
-  String _themeModeCode = 'dark';
+  String _themeModeCode = AppThemeMode.defaultCode;
   bool _restartDeferred = false;
 
   @override
@@ -126,22 +128,24 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _themeModeCode = prefs.getString(PrefsKeys.themeMode) ?? 'dark';
+        _themeModeCode = AppThemeMode.normalize(
+          prefs.getString(PrefsKeys.themeMode),
+        );
       });
     }
   }
 
   SettingsResult _result() => SettingsResult(
-        engineMode: _engineMode,
-        customDylibPath: _customDylibPath,
-        perfOverlay: _perfOverlay,
-        fpsLimitEnabled: _fpsLimitEnabled,
-        targetFps: _targetFps,
-        renderer: _renderer,
-        angleBackend: _angleBackend,
-        gameOrientation: _gameOrientation,
-        restartPending: _restartDeferred,
-      );
+    engineMode: _engineMode,
+    customDylibPath: _customDylibPath,
+    perfOverlay: _perfOverlay,
+    fpsLimitEnabled: _fpsLimitEnabled,
+    targetFps: _targetFps,
+    renderer: _renderer,
+    angleBackend: _angleBackend,
+    gameOrientation: _gameOrientation,
+    restartPending: _restartDeferred,
+  );
 
   void _pop() {
     Navigator.pop(context, _result());
@@ -241,8 +245,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  String _themeLabel(String code, AppLocalizations l10n) =>
-      code == 'light' ? l10n.themeLight : l10n.themeDark;
+  String _themeLabel(String code, AppLocalizations l10n) {
+    return switch (AppThemeMode.normalize(code)) {
+      AppThemeMode.system => l10n.themeSystem,
+      AppThemeMode.light => l10n.themeLight,
+      _ => l10n.themeDark,
+    };
+  }
 
   String _localeLabel(String code, AppLocalizations l10n) {
     final map = {
@@ -269,14 +278,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _changeThemeMode(String code) async {
+    final normalized = AppThemeMode.normalize(code);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(PrefsKeys.themeMode, code);
+    await prefs.setString(PrefsKeys.themeMode, normalized);
     if (!mounted) return;
-    setState(() => _themeModeCode = code);
+    setState(() => _themeModeCode = normalized);
+
+    await AppThemePlatform.apply(normalized);
+    if (!mounted) return;
 
     // Apply theme change in real-time
-    final mode = code == 'light' ? ThemeMode.light : ThemeMode.dark;
-    Krkr2App.setThemeMode(context, mode);
+    Krkr2App.setThemeMode(context, AppThemeMode.fromCode(normalized));
   }
 
   @override
@@ -474,9 +486,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       );
-                      if (v == null ||
-                          v == _gameOrientation ||
-                          !mounted) {
+                      if (v == null || v == _gameOrientation || !mounted) {
                         return;
                       }
                       await _commitLive(() => _gameOrientation = v);
@@ -529,14 +539,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       current: _themeModeCode,
                       options: [
                         UiDropdownItem(
-                          value: 'dark',
-                          label: l10n.themeDark,
-                          icon: LucideIcons.moon,
+                          value: AppThemeMode.system,
+                          label: l10n.themeSystem,
+                          icon: LucideIcons.monitorCog,
                         ),
                         UiDropdownItem(
-                          value: 'light',
+                          value: AppThemeMode.light,
                           label: l10n.themeLight,
                           icon: LucideIcons.sun,
+                        ),
+                        UiDropdownItem(
+                          value: AppThemeMode.dark,
+                          label: l10n.themeDark,
+                          icon: LucideIcons.moon,
                         ),
                       ],
                     );

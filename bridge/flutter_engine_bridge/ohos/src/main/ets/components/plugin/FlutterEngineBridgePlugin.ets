@@ -20,10 +20,14 @@ import fileUri from '@ohos.file.fileuri';
 import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
 import UIAbility from '@ohos.app.ability.UIAbility';
+import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
+import data_preferences from '@ohos.data.preferences';
 import display from '@ohos.display';
 import { displaySync } from '@kit.ArkGraphics2D';
 
 const TAG = 'FlutterEngineBridgePlugin';
+const THEME_PREFERENCES_NAME = 'Krkr2ThemePreferences';
+const THEME_MODE_KEY = 'themeMode';
 
 /**
  * OpenHarmony side of the krkr2 engine bridge ("flutter_engine_bridge"
@@ -105,6 +109,34 @@ export default class FlutterEngineBridgePlugin
       case 'requestManageExternalStorage':
         result.success(true);
         break;
+
+      case 'setApplicationColorMode': {
+        const ability = this.ability;
+        if (ability == null) {
+          result.error('no_ability', 'No ability available', null);
+          break;
+        }
+        const mode = call.argument('mode') as string;
+        const colorMode = mode === 'light'
+          ? ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
+          : mode === 'system'
+            ? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
+            : ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+        try {
+          ability.context.getApplicationContext().setColorMode(colorMode);
+          const preferences: data_preferences.Preferences = data_preferences.getPreferencesSync(
+            ability.context,
+            { name: THEME_PREFERENCES_NAME },
+          );
+          preferences.putSync(THEME_MODE_KEY, mode);
+          preferences.flushSync();
+          result.success(null);
+        } catch (error) {
+          Log.e(TAG, `setApplicationColorMode failed: ${JSON.stringify(error)}`);
+          result.error('color_mode_failed', 'Unable to update the application color mode', error);
+        }
+        break;
+      }
 
       // --- Zero-copy OHNativeWindow textures ---
 

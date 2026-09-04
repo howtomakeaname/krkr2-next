@@ -264,6 +264,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeMode => '主题';
 
   @override
+  String get themeSystem => '跟随系统';
+
+  @override
   String get themeDark => '深色';
 
   @override
