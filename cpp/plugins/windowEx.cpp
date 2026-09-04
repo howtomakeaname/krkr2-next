@@ -711,9 +711,13 @@ struct WindowEx {
 
     // ネイティブインスタンスの生成・破棄にあわせてレシーバを登録・解除する
     WindowEx(iTJSDispatch2 *obj) :
-        self(obj), menuex(0), sysMenuModified(0), sysMenuModMap(0),
-        disableResize(false), disableMove(false), enableNCMEvent(false),
-        enableWinMsgHook(false) {
+        self(obj), menuex(nullptr), sysMenuModified(nullptr),
+        sysMenuModMap(nullptr), cachedHWND(nullptr), sysMenu(nullptr),
+        externalIcon(nullptr), hasResizing(false), hasMoving(false),
+        hasMove(false), hasNcMsMove(false), disableResize(false),
+        disableMove(false), enableNCMEvent(false), enableWinMsgHook(false),
+        ovbmp(nullptr) {
+        memset(bitHooks, 0, sizeof(bitHooks));
         regist(true);
         setMessageHookAll(false);
     }

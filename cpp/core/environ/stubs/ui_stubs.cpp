@@ -476,7 +476,13 @@ public:
     }
 
     void InvalidateClose() override {
+        if(closing_) return;
         closing_ = true;
+        owner_ = nullptr;
+        // Desktop window backends destroy their form here.  The hosted
+        // Flutter backend must do the same; otherwise its CPU frame buffers
+        // and GL blit resources survive every project replacement.
+        delete this;
     }
 
     bool GetWindowActive() override { return active_; }

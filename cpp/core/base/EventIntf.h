@@ -298,6 +298,10 @@ TJS_EXP_FUNC_DEF(void, TVPRemoveCompactEventHook,
 
 extern void TVPDeliverCompactEvent(tjs_int level);
 // must be called by each platforms's implementation
+
+// Drop script-owned queued events and closures before replacing a hosted TJS
+// VM. Process-wide native hooks remain registered.
+extern void TVPResetEventsForHost();
 //---------------------------------------------------------------------------
 
 /*

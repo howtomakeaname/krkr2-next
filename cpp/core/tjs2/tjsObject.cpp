@@ -18,6 +18,9 @@
 #include "tjsDebug.h"
 
 #include <atomic>
+#include <mutex>
+#include <unordered_set>
+#include <vector>
 
 static std::atomic<int64_t> sTJSCustomObjectCount{0};
 static std::atomic<int64_t> sObjByHash[8] = {};
@@ -32,6 +35,73 @@ extern "C" void TJS_GetObjByHashBits(int64_t out[8]) {
 }
 
 namespace TJS {
+
+    namespace {
+        // Process-lifetime storage avoids cross-translation-unit static
+        // destruction ordering problems.
+        std::mutex &TJSCustomObjectRegistryMutex() {
+            static auto *mutex = new std::mutex();
+            return *mutex;
+        }
+
+        std::unordered_set<tTJSCustomObject *> &TJSProjectObjectRegistry() {
+            static auto *objects =
+                new std::unordered_set<tTJSCustomObject *>();
+            return *objects;
+        }
+
+        bool &TJSProjectObjectTracking() {
+            static auto *tracking = new bool(false);
+            return *tracking;
+        }
+    }
+
+    void TJSBeginProjectObjectTrackingForHost() {
+        std::lock_guard<std::mutex> lock(TJSCustomObjectRegistryMutex());
+        TJSProjectObjectRegistry().clear();
+        TJSProjectObjectTracking() = true;
+    }
+
+    void TJSClearProjectObjectsForHost() {
+        // Stop tracking before cleanup so helper objects created by native
+        // destructors cannot leak into the next project's ownership set. Pin
+        // the snapshot because breaking one edge can otherwise destroy a
+        // different object while it is still in this pass.
+        std::vector<tTJSCustomObject *> objects;
+        {
+            std::lock_guard<std::mutex> lock(TJSCustomObjectRegistryMutex());
+            TJSProjectObjectTracking() = false;
+            objects.reserve(TJSProjectObjectRegistry().size());
+            for(auto *object : TJSProjectObjectRegistry()) {
+                object->AddRef();
+                objects.push_back(object);
+            }
+            TJSProjectObjectRegistry().clear();
+        }
+
+        // Remove script members, including user-defined finalize, from every
+        // object before invalidating native instances and container storage.
+        // The host-specific path suppresses the normal script `finalize` call
+        // and bypasses subclass Invalidate() dispatch. Both are important for
+        // extendable objects: their fallback dispatch reaches the superclass,
+        // which would let KAGWindow invalidate the process-wide Window class.
+        for(auto *object : objects) {
+            try {
+                object->Clear();
+            } catch(...) {
+            }
+        }
+
+        for(auto *object : objects) {
+            try {
+                object->InvalidateForHostProject();
+            } catch(...) {
+            }
+        }
+
+        for(auto *object : objects)
+            object->Release();
+    }
 
     //---------------------------------------------------------------------------
     // utility functions
@@ -341,6 +411,11 @@ namespace TJS {
     //---------------------------------------------------------------------------
     tTJSCustomObject::tTJSCustomObject(tjs_int hashbits) {
         sTJSCustomObjectCount.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(TJSCustomObjectRegistryMutex());
+            if(TJSProjectObjectTracking())
+                TJSProjectObjectRegistry().insert(this);
+        }
         if(TJSObjectHashMapEnabled())
             TJSAddObjectHashRecord(this);
         Count = 0;
@@ -378,6 +453,10 @@ namespace TJS {
 
     //---------------------------------------------------------------------------
     tTJSCustomObject::~tTJSCustomObject() {
+        {
+            std::lock_guard<std::mutex> lock(TJSCustomObjectRegistryMutex());
+            TJSProjectObjectRegistry().erase(this);
+        }
         sTJSCustomObjectCount.fetch_sub(1, std::memory_order_relaxed);
         {
             int bits = 0;
@@ -412,6 +491,16 @@ namespace TJS {
             throw;
         }
         IsInvalidating = false;
+    }
+
+    void tTJSCustomObject::InvalidateForHostProject() {
+        // This object belongs to a project that is being discarded, so its
+        // user-defined finalizer must not run against an arbitrary teardown
+        // order. Finalize() remains virtual to release Array items and native
+        // instances, but _Finalize() is invoked directly here rather than via
+        // tTJSExtendableObject::Invalidate(), which propagates to SuperClass.
+        CallFinalize = false;
+        _Finalize();
     }
 
     //---------------------------------------------------------------------------

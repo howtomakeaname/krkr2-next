@@ -140,7 +140,11 @@ namespace TJS {
            membername != nullptr) {
             hr = SuperClass->Invalidate(flag, membername, hint, objthis);
         }
-        if(membername == nullptr) {
+        // An extendable object may legitimately have no superclass (or have
+        // released it during an earlier invalidation pass). Host-driven
+        // project teardown is intentionally idempotent, so never dispatch
+        // through a null superclass on a repeated cleanup.
+        if(membername == nullptr && SuperClass != nullptr) {
             SuperClass->Invalidate(flag, membername, hint, objthis);
         }
         return hr;

@@ -76,6 +76,13 @@ class _GameDetailPageState extends State<GameDetailPage> {
     );
   }
 
+  void _launchGame() {
+    gm.markPlayed(game.path);
+    Navigator.of(
+      context,
+    ).pop(const GameDetailResult(needsRefresh: true, shouldLaunch: true));
+  }
+
   Rect _fallbackMenuAnchor(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
@@ -294,12 +301,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
           children: [
             ValueListenableBuilder<double>(
               valueListenable: progress,
-              builder: (_, value, __) => UiProgress(value: value),
+              builder: (_, value, _) => UiProgress(value: value),
             ),
             const SizedBox(height: UiSpacing.md),
             ValueListenableBuilder<String>(
               valueListenable: currentFile,
-              builder: (ctx, value, __) => Text(
+              builder: (ctx, value, _) => Text(
                 value,
                 style: ctx.uiType.footnote.copyWith(
                   fontFamily: 'monospace',
@@ -332,6 +339,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
           Navigator.of(context).pop();
           final newGame = GameInfo(path: destDir);
           await gm.addGame(newGame);
+          if (!mounted) return;
           _changed = true;
           UiSnackbar.show(
             context,
@@ -353,6 +361,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
           Navigator.of(context).pop();
           final newGame = GameInfo(path: xp3Path);
           await gm.addGame(newGame);
+          if (!mounted) return;
           _changed = true;
           UiSnackbar.show(
             context,
@@ -414,12 +423,13 @@ class _GameDetailPageState extends State<GameDetailPage> {
           scrolledUnderElevation: 0,
           leading: UiButton.icon(icon: LucideIcons.arrowLeft, onPressed: _pop),
           actions: [
-            Builder(
-              builder: (btnContext) => UiButton.icon(
-                icon: LucideIcons.image,
-                onPressed: () {
-                  _setCover(anchor: UiPopupMenu.rectOf(btnContext));
-                },
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: UiButton(
+                label: l10n.launchGame,
+                leadingIcon: LucideIcons.play,
+                size: UiButtonSize.small,
+                onPressed: _launchGame,
               ),
             ),
           ],
@@ -448,7 +458,6 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
   /// 顶部一块：高度由内容决定（卡片+标题+开发者），背景毛玻璃随该区域动态填充
   Widget _buildTopHeroSection() {
-    final colors = context.uiColors;
     final typography = context.uiType;
     return Stack(
       clipBehavior: Clip.none,
@@ -471,7 +480,14 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   game.displayTitle,
                   style: typography.title2.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colors.textPrimary,
+                    color: Colors.white,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xB3000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 3,
@@ -484,7 +500,15 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   child: Text(
                     game.developer!,
                     style: typography.body.copyWith(
-                      color: colors.textSecondary,
+                      color: Colors.white.withValues(alpha: 0.82),
+                      fontWeight: FontWeight.w500,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0x99000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -499,25 +523,44 @@ class _GameDetailPageState extends State<GameDetailPage> {
     );
   }
 
-  /// 仅顶部一块的放大封面 + 毛玻璃
+  /// 仅顶部一块的放大封面 + 强毛玻璃 + 深色渐变遮罩。
+  ///
+  /// OHOS 上 BackdropFilter 偶尔采不到已经合成的下层图片，因此直接对
+  /// 封面做 ImageFiltered，保证不同渲染后端下标题区域都有稳定的模糊度。
   Widget _buildBlurredBlock() {
     return _hasCover
         ? Stack(
             fit: StackFit.expand,
             children: [
               Positioned.fill(
-                child: Image.file(
-                  File(game.coverPath!),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildPlaceholderBackground(),
+                child: ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+                    child: Transform.scale(
+                      scale: 1.16,
+                      child: Image.file(
+                        File(game.coverPath!),
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildPlaceholderBackground(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               Positioned.fill(
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.35),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.48),
+                        Colors.black.withValues(alpha: 0.58),
+                        Colors.black.withValues(alpha: 0.78),
+                      ],
+                      stops: const [0, 0.58, 1],
                     ),
                   ),
                 ),
@@ -528,13 +571,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
   }
 
   Widget _buildPlaceholderBackground() {
-    final colors = context.uiColors;
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [colors.surfaceElevated, colors.separator],
+          colors: [Color(0xFF253047), Color(0xFF090B10)],
         ),
       ),
     );
@@ -782,12 +824,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
         leadingIcon: LucideIcons.play,
         size: UiButtonSize.large,
         fullWidth: true,
-        onPressed: () {
-          gm.markPlayed(game.path);
-          Navigator.of(
-            context,
-          ).pop(const GameDetailResult(needsRefresh: true, shouldLaunch: true));
-        },
+        onPressed: _launchGame,
       ),
     );
   }

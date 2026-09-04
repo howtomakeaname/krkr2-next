@@ -17,6 +17,8 @@
 #include "tjsError.h"
 #include "PluginImpl.h"
 #include "SystemIntf.h"
+#include "WindowIntf.h"
+#include "MenuItemImpl.h"
 
 #include "Exception.h"
 // #include "Resource.h"
@@ -327,6 +329,9 @@ bool tTVPApplication::StartApplication(ttstr path) {
         spdlog::debug("StartApplication: normalizing storage path...");
         spdlog::default_logger()->flush();
         TVPProjectDir = TVPNormalizeStorageName(path);
+        // TVPGetAppPath must be stable while this project's scripts run, but
+        // it must not retain the previous project's directory in host mode.
+        TVPResetAppPathForHost();
 
         spdlog::debug("StartApplication: TVPInitScriptEngine...");
         spdlog::default_logger()->flush();
@@ -828,10 +833,37 @@ void tTVPApplication::OnDeactivate() {
 }
 
 void tTVPApplication::OnExit() {
-    TVPUninitScriptEngine();
+    // Host mode can replace a project without ending the Flutter process.
+    // Stop the loader thread before releasing the script VM so no task keeps
+    // referencing objects owned by the project being unmounted.
+    delete image_load_thread_;
+    image_load_thread_ = nullptr;
+
+    // Drop pending callbacks first. Layers must be invalidated before their
+    // Window: Layer::Part() can notify the Window through a raw tree-owner
+    // pointer, so reversing this order leaves a dangling callback target.
+    TVPResetEventsForHost();
+    TVPResetLayersForHost();
+    TVPResetWindowsForHost();
+    TVPResetMenuItemsForHost();
+    TVPResetLoggingHandlersForHost();
+
+    // Plug-in class objects and cached dispatches belong to this VM.  Keeping
+    // their "loaded" markers after replacing the VM makes Plugins.link()
+    // succeed without registering anything in the next project's globals.
+    TVPResetPluginsForHost();
+    TVPResetScriptEngineForHost();
 
     delete TVPSystemControl;
     TVPSystemControl = nullptr;
+    TVPSystemControlAlive = false;
+
+    FilterUserMessage(
+        [](std::vector<std::tuple<void *, int, tMsg>> &queue) {
+            queue.clear();
+        });
+    _project_startup = false;
+    _last_shown_exception = ttstr();
 
     CloseConsole();
 }

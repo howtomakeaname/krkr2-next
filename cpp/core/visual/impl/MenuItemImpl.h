@@ -98,5 +98,6 @@ class WindowMenuProperty : public tTJSDispatch {
 };
 
 void CreateShortCutKeyCodeTable();
+void TVPResetMenuItemsForHost();
 //---------------------------------------------------------------------------
 #endif

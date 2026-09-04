@@ -68,17 +68,14 @@ TJS_END_NATIVE_MEMBERS
 }
 
 //---------------------------------------------------------------------------
+static iTJSDispatch2 *TVPControllerClass = nullptr;
+
 static iTJSDispatch2 *TVPGetControllerClass() {
-    struct tClassHolder {
-        iTJSDispatch2 *Object;
+    if(!TVPControllerClass)
+        TVPControllerClass = new tTJSNC_Controller();
 
-        tClassHolder() { Object = new tTJSNC_Controller(); }
-
-        ~tClassHolder() { Object->Release(); }
-    } static Holder;
-
-    Holder.Object->AddRef();
-    return Holder.Object;
+    TVPControllerClass->AddRef();
+    return TVPControllerClass;
 }
 //---------------------------------------------------------------------------
 
@@ -131,17 +128,25 @@ TJS_END_NATIVE_MEMBERS
 }
 
 //---------------------------------------------------------------------------
+static iTJSDispatch2 *TVPConsoleClass = nullptr;
+
 static iTJSDispatch2 *TVPGetConsoleClass() {
-    struct tClassHolder {
-        iTJSDispatch2 *Object;
+    if(!TVPConsoleClass)
+        TVPConsoleClass = new tTJSNC_Console();
 
-        tClassHolder() { Object = new tTJSNC_Console(); }
+    TVPConsoleClass->AddRef();
+    return TVPConsoleClass;
+}
 
-        ~tClassHolder() { Object->Release(); }
-    } static Holder;
-
-    Holder.Object->AddRef();
-    return Holder.Object;
+void TVPResetDebugClassCacheForHost() {
+    if(TVPControllerClass) {
+        TVPControllerClass->Release();
+        TVPControllerClass = nullptr;
+    }
+    if(TVPConsoleClass) {
+        TVPConsoleClass->Release();
+        TVPConsoleClass = nullptr;
+    }
 }
 //---------------------------------------------------------------------------
 

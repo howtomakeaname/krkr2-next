@@ -565,4 +565,12 @@ static void PostRegistCallback() {
     // TVPSetXP3ArchiveExtractionFilter(TVPXP3ArchiveExtractionFilter);
 }
 
+static void PostUnregistCallback() {
+    // Extraction filters and their per-thread TJS decoders are scoped to the
+    // mounted project.  Reusing one after switching archives can decode the
+    // new game's XP3 with the previous game's filter script.
+    TVPSetXP3FilterScript(ttstr());
+}
+
 NCB_POST_REGIST_CALLBACK(PostRegistCallback);
+NCB_POST_UNREGIST_CALLBACK(PostUnregistCallback);

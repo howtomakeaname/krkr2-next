@@ -144,6 +144,8 @@ extern tTJSNativeClass *TVPCreateNativeClass_MenuItem();
 
 //---------------------------------------------------------------------------
 extern iTJSDispatch2 *TVPCreateMenuItemObject(iTJSDispatch2 *window);
+// Release the lazily-created factory before replacing a hosted project.
+extern void TVPResetMenuItemClassForHost();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

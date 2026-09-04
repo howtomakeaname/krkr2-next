@@ -47,6 +47,7 @@ bool TVPLoadInternalPlugin(const ttstr &_name);
 bool TVPRegisterGlobalObject(const tjs_char *name, iTJSDispatch2 *dsp);
 
 static iTJSDispatch2 *s_ProxyStorageMap = nullptr;
+static iTVPStorageMedia *s_ProxyStorageMedia = nullptr;
 
 class tTJSNI_GamepadStub : public tTJSNativeInstance {
 public:
@@ -267,6 +268,7 @@ static void TVPRegisterProxyFsStub() {
 
     auto *media = new tTVPProxyStorageMedia();
     TVPRegisterStorageMedia(media);
+    s_ProxyStorageMedia = media;
     media->Release();
     spdlog::info("Registered proxy storage media stub for missing proxyfs.dll");
 }
@@ -438,6 +440,30 @@ void tvpLoadPlugins() {
         TVPAddImportantLog(ttstr(TJS_W("(info) Loading ")) +
                            ttstr(i.Name.c_str()));
         TVPLoadPlugin((i.Path + "/" + i.Name).c_str());
+    }
+}
+
+void TVPResetPluginsForHost() {
+    // NCB registrations contain VM-owned class objects and cached dispatches.
+    // They must be unregistered before the VM is released; retaining only the
+    // process-wide registrar catalog lets the next project register into its
+    // fresh global object normally.
+    if(!TVPRegisteredPlugins.empty()) {
+        ncbAutoRegister::AllUnregist();
+        TVPRegisteredPlugins.clear();
+    }
+    TVPAutoLoadPluginCount = 0;
+
+    if(s_ProxyStorageMedia) {
+        try {
+            TVPUnregisterStorageMedia(s_ProxyStorageMedia);
+        } catch(...) {
+        }
+        s_ProxyStorageMedia = nullptr;
+    }
+    if(s_ProxyStorageMap) {
+        s_ProxyStorageMap->Release();
+        s_ProxyStorageMap = nullptr;
     }
 }
 

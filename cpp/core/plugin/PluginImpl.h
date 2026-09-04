@@ -183,4 +183,8 @@ extern bool TVPPluginUnloadedAtSystemExit;
 
 void tvpLoadPlugins();
 
+// Release registrations that belong to the current TJS VM while keeping the
+// statically linked plug-in catalog available for the next hosted project.
+void TVPResetPluginsForHost();
+
 #endif

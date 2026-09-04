@@ -1280,6 +1280,16 @@ void TVPClearStorageCaches() {
     TVPClearXP3SegmentCache();
     TVPClearAutoPathSearchCache();
 }
+
+void TVPResetStorageForHost() {
+    TVPClearArchiveCache();
+    TVPClearXP3SegmentCache();
+    tTJSCriticalSectionHolder cs_holder(TVPCreateStreamCS);
+    TVPAutoPathList.clear();
+    TVPAutoPathCache.Clear();
+    TVPAutoPathTable.Clear();
+    AutoPathTableInit = false;
+}
 //---------------------------------------------------------------------------
 
 void TVPSetAutoPathCacheMaxCount(tjs_uint max_count) {

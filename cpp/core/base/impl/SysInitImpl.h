@@ -23,6 +23,10 @@ extern bool TVPProjectDirSelected;
 
 extern void TVPEnsureDataPathDirectory();
 
+// Re-arm command-line and save-path discovery before a new project is mounted
+// in an embedding host. Process-wide registrations stay intact.
+extern void TVPResetProgramArgumentsAndDataPathForHost();
+
 extern bool TVPExecuteUserConfig();
 
 extern bool TVPTerminated;

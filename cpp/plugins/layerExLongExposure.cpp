@@ -170,6 +170,8 @@ struct LongExposure {
         width = height = 0;
     }
 
+    static void ResetClassCache() { LayerClass = nullptr; }
+
 private:
     iTJSDispatch2 *self;
     DWORD *buffer;
@@ -227,6 +229,11 @@ private:
 };
 
 iTJSDispatch2* LongExposure::LayerClass = 0;
+
+static void ResetLongExposureClassCache() {
+    LongExposure::ResetClassCache();
+}
+NCB_POST_UNREGIST_CALLBACK(ResetLongExposureClassCache);
 
 NCB_GET_INSTANCE_HOOK(LongExposure)
 {
