@@ -6,18 +6,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
 import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
-import '../utils/xp3_utils.dart';
+import '../widgets/home_game_card.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'settings_page.dart';
@@ -36,6 +36,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GameManager _gameManager = GameManager();
+  final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   bool _loading = true;
   String? _iosGamesDir;
   // OHOS: sandbox path of Download/<bundleName>/games (and its short label
@@ -167,8 +168,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _initOhosGamesDir() async {
     if (_ohosGamesDir != null) return;
     try {
-      final info = await _platformChannel
-          .invokeMapMethod<String, dynamic>('ensurePublicGamesDir');
+      final info = await _platformChannel.invokeMapMethod<String, dynamic>(
+        'ensurePublicGamesDir',
+      );
       final path = info?['path'] as String?;
       if (path == null || path.isEmpty) return;
       _ohosGamesDir = path;
@@ -1303,72 +1305,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _setCoverImage(GameInfo game, {Rect? anchor}) async {
-    final l10n = AppLocalizations.of(context)!;
-    final source = await UiPopupMenu.show<String>(
-      context,
-      anchor: anchor ?? _fallbackMenuAnchor(context),
-      items: [
-        UiMenuItem(
-          label: l10n.coverFromGallery,
-          icon: LucideIcons.image,
-          value: 'gallery',
-        ),
-        UiMenuItem(
-          label: l10n.coverFromCamera,
-          icon: LucideIcons.camera,
-          value: 'camera',
-        ),
-        if (game.coverPath != null)
-          UiMenuItem(
-            label: l10n.coverRemove,
-            icon: LucideIcons.trash2,
-            isDestructive: true,
-            value: 'remove',
-          ),
-      ],
-    );
-    if (source == null || !mounted) return;
-
-    if (source == 'remove') {
-      await _gameManager.setCoverImage(game.path, null);
-      if (mounted) setState(() {});
-      return;
-    }
-
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
-    if (image == null || !mounted) return;
-
-    // Copy image to app's persistent storage
-    final docDir = await getApplicationDocumentsDirectory();
-    final coversDir = Directory('${docDir.path}/covers');
-    if (!await coversDir.exists()) {
-      await coversDir.create(recursive: true);
-    }
-    final ext = image.path.split('.').last;
-    final fileName =
-        '${game.path.hashCode}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    final destPath = '${coversDir.path}/$fileName';
-    await File(image.path).copy(destPath);
-
-    // Remove old cover file if exists
-    if (game.coverPath != null) {
-      try {
-        final oldFile = File(game.coverPath!);
-        if (await oldFile.exists()) await oldFile.delete();
-      } catch (_) {}
-    }
-
-    await _gameManager.setCoverImage(game.path, destPath);
-    if (mounted) setState(() {});
-  }
-
   Future<void> _renameGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: game.displayTitle);
@@ -1447,7 +1383,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (result.shouldLaunch) _launchGame(game);
   }
 
-  /// After adding a game, offer to scrape. If user chooses Yes, open detail page with scrape dialog.
+  Future<void> _openGameScrape(GameInfo game) async {
+    final applied = await _scrapeFlow.start(
+      context,
+      game: game,
+      gameManager: _gameManager,
+    );
+    if (applied && mounted) setState(() {});
+  }
+
+  /// After adding a game, offer to start the shared metadata scrape flow.
   Future<void> _offerScrapeAfterAdd(String addedPath) async {
     final l10n = AppLocalizations.of(context)!;
     final idx = _gameManager.games.indexWhere((g) => g.path == addedPath);
@@ -1467,125 +1412,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
     if (shouldScrape != true || !mounted) return;
-    final result = await Navigator.of(context).push<GameDetailResult>(
-      MaterialPageRoute<GameDetailResult>(
-        builder: (_) => GameDetailPage(
-          game: game,
-          gameManager: _gameManager,
-          openScrapeOnLoad: true,
-        ),
-      ),
-    );
-    if (result == null || !mounted) return;
-    if (result.needsRefresh) setState(() {});
-    if (result.shouldLaunch) _launchGame(game);
-  }
-
-  Future<void> _packUnpackGame(GameInfo game) async {
-    final l10n = AppLocalizations.of(context)!;
-    final isXp3 = game.path.toLowerCase().endsWith('.xp3');
-
-    final progress = ValueNotifier<double>(0.0);
-    final currentFile = ValueNotifier<String>('');
-
-    UiDialog.show<void>(
-      context,
-      barrierDismissible: false,
-      title: isXp3 ? l10n.unpackingProgress : l10n.packingProgress,
-      content: PopScope(
-        // 操作进行中禁止返回键/手势关闭进度弹窗。
-        canPop: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ValueListenableBuilder<double>(
-              valueListenable: progress,
-              builder: (_, value, _) => UiProgress(value: value),
-            ),
-            const SizedBox(height: UiSpacing.md),
-            ValueListenableBuilder<String>(
-              valueListenable: currentFile,
-              builder: (ctx, value, _) => Text(
-                value,
-                style: ctx.uiType.footnote.copyWith(
-                  fontFamily: 'monospace',
-                  color: ctx.uiColors.textTertiary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      if (isXp3) {
-        final destDir = p.join(
-          p.dirname(game.path),
-          p.basenameWithoutExtension(game.path),
-        );
-        await xp3Extract(
-          game.path,
-          destDir,
-          onProgress: (p, f) {
-            progress.value = p;
-            currentFile.value = f;
-          },
-        );
-        if (mounted) {
-          Navigator.of(context).pop();
-          final newGame = GameInfo(path: destDir);
-          final added = await _gameManager.addGame(newGame);
-          if (added && mounted) setState(() {});
-          if (mounted) {
-            UiSnackbar.show(
-              context,
-              message: l10n.unpackComplete,
-              type: UiSnackbarType.success,
-            );
-            if (added) _offerScrapeAfterAdd(destDir);
-          }
-        }
-      } else {
-        final xp3Path = '${game.path}.xp3';
-        await xp3Pack(
-          game.path,
-          xp3Path,
-          onProgress: (p, f) {
-            progress.value = p;
-            currentFile.value = f;
-          },
-        );
-        if (mounted) {
-          Navigator.of(context).pop();
-          final newGame = GameInfo(path: xp3Path);
-          final added = await _gameManager.addGame(newGame);
-          if (added && mounted) setState(() {});
-          if (mounted) {
-            UiSnackbar.show(
-              context,
-              message: l10n.packComplete,
-              type: UiSnackbarType.success,
-            );
-            if (added) _offerScrapeAfterAdd(xp3Path);
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop();
-        UiSnackbar.show(
-          context,
-          message: l10n.xp3OperationFailed(e.toString()),
-        );
-      }
-    } finally {
-      progress.dispose();
-      currentFile.dispose();
-    }
+    await _openGameScrape(game);
   }
 
   Future<void> _openSettings() async {
@@ -1651,7 +1478,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final games = _sortedGames;
-    final isDesktop = !Platform.isAndroid &&
+    final isDesktop =
+        !Platform.isAndroid &&
         !Platform.isIOS &&
         Platform.operatingSystem != 'ohos';
     final topPadding = MediaQuery.of(context).padding.top;
@@ -1709,38 +1537,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 },
               ),
             ),
-          UiButton.icon(
-            icon: LucideIcons.settings,
-            onPressed: _openSettings,
-          ),
+          UiButton.icon(icon: LucideIcons.settings, onPressed: _openSettings),
         ],
       ),
     );
 
     Widget content = CustomScrollView(
-              slivers: [
-                if (_restartDeferred)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    sliver: SliverToBoxAdapter(
-                      child: UiBanner(
-                        tone: UiBannerTone.warning,
-                        message: l10n.restartPendingBanner,
-                        actionLabel: l10n.restartNow,
-                        onAction: restartKrkr2App,
-                      ),
-                    ),
-                  ),
-                if (games.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _buildEmptyState(l10n),
-                  )
-                else
-                  _buildGameGrid(games, l10n),
-                const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-              ],
-            );
+      slivers: [
+        if (_restartDeferred)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            sliver: SliverToBoxAdapter(
+              child: UiBanner(
+                tone: UiBannerTone.warning,
+                message: l10n.restartPendingBanner,
+                actionLabel: l10n.restartNow,
+                onAction: restartKrkr2App,
+              ),
+            ),
+          ),
+        if (games.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(l10n),
+          )
+        else
+          _buildGameGrid(games, l10n),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+      ],
+    );
     if (canPullRefresh) {
       content = UiPullRefresh(
         pullingText: l10n.pullToRefresh,
@@ -1838,189 +1663,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
               final game = games[index];
-              return _CoverCard(
+              return HomeGameCard(
                 game: game,
                 l10n: l10n,
                 onTap: () => _openGameDetail(game),
+                onLaunch: () => _launchGame(game),
+                onScrape: () => _openGameScrape(game),
                 onRename: () => _renameGame(game),
                 onRemove: () => _removeGame(game),
-                onSetCover: () => _setCoverImage(game),
-                onPackUnpack: () => _packUnpackGame(game),
               );
             }, childCount: games.length),
           ),
         );
       },
     );
-  }
-}
-
-class _CoverCard extends StatelessWidget {
-  const _CoverCard({
-    required this.game,
-    required this.l10n,
-    required this.onTap,
-    required this.onRename,
-    required this.onRemove,
-    required this.onSetCover,
-    required this.onPackUnpack,
-  });
-
-  final GameInfo game;
-  final AppLocalizations l10n;
-  final VoidCallback onTap;
-  final VoidCallback onRename;
-  final VoidCallback onRemove;
-  final VoidCallback onSetCover;
-  final VoidCallback onPackUnpack;
-
-  bool get _isXp3 => game.path.toLowerCase().endsWith('.xp3');
-
-  bool get _hasCover =>
-      game.coverPath != null && File(game.coverPath!).existsSync();
-
-  @override
-  Widget build(BuildContext context) {
-    return UiContextMenu(
-      onTap: onTap,
-      items: [
-        UiMenuItem(
-          label: l10n.setCover,
-          icon: LucideIcons.image,
-          onSelected: onSetCover,
-        ),
-        UiMenuItem(
-          label: l10n.rename,
-          icon: LucideIcons.pencil,
-          onSelected: onRename,
-        ),
-        UiMenuItem(
-          label: _isXp3 ? l10n.unpackXp3 : l10n.packXp3,
-          icon: _isXp3 ? LucideIcons.packageOpen : LucideIcons.archive,
-          onSelected: onPackUnpack,
-        ),
-        UiMenuItem(
-          label: l10n.remove,
-          icon: LucideIcons.trash2,
-          isDestructive: true,
-          onSelected: onRemove,
-        ),
-      ],
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: UiRadius.brLg),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildBackground(context),
-            _buildGradientOverlay(),
-            _buildTitleOverlay(game),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBackground(BuildContext context) {
-    if (_hasCover) {
-      return UiGameCover(
-        image: FileImage(File(game.coverPath!)),
-        placeholder: _buildPlaceholder(context),
-        semanticLabel: game.displayTitle,
-      );
-    }
-    return _buildPlaceholder(context);
-  }
-
-  Widget _buildPlaceholder(BuildContext context) {
-    // 中性表面色做底，主题色只用在图标上，避免整块饱和色
-    final colors = context.uiColors;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.surfaceElevated, colors.separator],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          LucideIcons.gamepad2,
-          size: 48,
-          color: colors.brand.withValues(alpha: 0.6),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGradientOverlay() {
-    return const Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 80,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black54],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTitleOverlay(GameInfo game) {
-    final lastPlayed = game.lastPlayed;
-    final totalSeconds = game.playDurationSeconds ?? 0;
-    final hasDuration = totalSeconds >= 60;
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: 10,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            game.displayTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (lastPlayed != null || hasDuration) ...[
-            const SizedBox(height: 2),
-            Text(
-              [
-                if (lastPlayed != null) _formatDate(lastPlayed),
-                if (hasDuration)
-                  l10n.playDuration(GameInfo.formatPlayDuration(totalSeconds)),
-              ].join(' · '),
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return l10n.justNow;
-    if (diff.inHours < 1) return l10n.minutesAgo(diff.inMinutes);
-    if (diff.inDays < 1) return l10n.hoursAgo(diff.inHours);
-    if (diff.inDays < 7) return l10n.daysAgo(diff.inDays);
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
