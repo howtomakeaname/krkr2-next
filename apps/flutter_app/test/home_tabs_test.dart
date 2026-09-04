@@ -56,41 +56,44 @@ void main() {
     expect(find.text('游玩时间'), findsOneWidget);
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('profile-lifetime-total')))
+          .widget<Text>(find.byKey(const ValueKey('profile-summary-lifetime')))
           .data,
       '2 小时 5 分钟',
     );
     expect(find.text('累计游玩'), findsOneWidget);
     expect(find.text('近 7 天'), findsOneWidget);
+    expect(find.text('查看详细统计'), findsOneWidget);
+    expect(find.text('常玩游戏'), findsNothing);
+    expect(find.text('测试游戏'), findsNothing);
+
+    await tester.tap(find.text('查看详细统计'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('play-statistics-page')), findsOneWidget);
+    expect(find.text('游玩统计'), findsOneWidget);
     expect(find.text('常玩游戏'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('profile-active-days-value')),
+      find.byKey(const ValueKey('statistics-active-days-value')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('profile-games-played-value')),
+      find.byKey(const ValueKey('statistics-games-played-value')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('profile-average-session-value')),
+      find.byKey(const ValueKey('statistics-average-session-value')),
       findsOneWidget,
     );
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('profile-week-total')))
+          .widget<Text>(find.byKey(const ValueKey('statistics-week-total')))
           .data,
       '1 小时 5 分钟',
     );
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('profile-active-days-value')))
-          .data,
-      '1',
-    );
-    expect(
-      tester
           .widget<Text>(
-            find.byKey(const ValueKey('profile-games-played-value')),
+            find.byKey(const ValueKey('statistics-active-days-value')),
           )
           .data,
       '1',
@@ -98,12 +101,27 @@ void main() {
     expect(
       tester
           .widget<Text>(
-            find.byKey(const ValueKey('profile-average-session-value')),
+            find.byKey(const ValueKey('statistics-games-played-value')),
+          )
+          .data,
+      '1',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('statistics-average-session-value')),
           )
           .data,
       '1 小时 5 分钟',
     );
     expect(find.text('测试游戏'), findsOneWidget);
+    final landscapeCover = tester.getSize(
+      find.byKey(const ValueKey('statistics-game-cover-1')),
+    );
+    expect(landscapeCover.width / landscapeCover.height, closeTo(16 / 9, 0.01));
+
+    await tester.tap(find.bySemanticsLabel('返回'));
+    await tester.pumpAndSettle();
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('帮助'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);

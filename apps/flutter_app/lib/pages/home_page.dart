@@ -25,6 +25,7 @@ import 'about_page.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'help_page.dart';
+import 'play_statistics_page.dart';
 import 'settings_page.dart';
 
 /// Engine loading mode: built-in (bundled in .app) or custom (user-specified).
@@ -1563,6 +1564,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _openAbout() => UiMotion.push<void>(context, const AboutPage());
 
+  void _openStatistics() => UiMotion.push<void>(
+    context,
+    PlayStatisticsPage(
+      games: _sortedGames,
+      playSessions: _gameManager.playSessions,
+    ),
+  );
+
   Widget _buildPlaceholderTab({required String title}) {
     final colors = context.uiColors;
     final topPadding = MediaQuery.paddingOf(context).top;
@@ -1852,6 +1861,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       HomeProfileTab(
         games: allGames,
         playSessions: _gameManager.playSessions,
+        onOpenStatistics: _openStatistics,
         onOpenSettings: _openSettings,
         onOpenHelp: _openHelp,
         onOpenAbout: _openAbout,
