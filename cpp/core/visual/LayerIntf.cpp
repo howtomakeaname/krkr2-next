@@ -311,6 +311,35 @@ void TVPTempBitmapHolderRelease() { tTVPTempBitmapHolder::Release(); }
 //---------------------------------------------------------------------------
 tTVPGraphicSplitOperationType TVPGraphicSplitOperationType = gsotNone;
 bool TVPDefaultHoldAlpha = false;
+
+// Native layers form a parent/child graph that is not owned solely by the TJS
+// member table. Keep an explicit host-project list so the graph can be torn
+// down while its Window and DrawDevice are still valid.
+static std::vector<tTJSNI_BaseLayer *> TVPHostLayerVector;
+
+static void TVPUnregisterHostLayer(tTJSNI_BaseLayer *layer) {
+    auto it = std::find(TVPHostLayerVector.begin(), TVPHostLayerVector.end(),
+                        layer);
+    if(it != TVPHostLayerVector.end())
+        TVPHostLayerVector.erase(it);
+}
+
+void TVPResetLayersForHost() {
+    // Layers are normally constructed parent-first, so walking from the back
+    // releases children before their parents. The Window remains alive for
+    // Part()/Update() notifications throughout this pass.
+    while(!TVPHostLayerVector.empty()) {
+        tTJSNI_BaseLayer *layer = TVPHostLayerVector.back();
+        try {
+            layer->Invalidate();
+        } catch(...) {
+        }
+
+        // A partially constructed or already invalid layer must not stall the
+        // host reset loop.
+        TVPUnregisterHostLayer(layer);
+    }
+}
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -322,6 +351,7 @@ bool TVPDefaultHoldAlpha = false;
 //---------------------------------------------------------------------------
 tTJSNI_BaseLayer::tTJSNI_BaseLayer() {
     TVPLayerInstanceCount.fetch_add(1, std::memory_order_relaxed);
+    TVPHostLayerVector.push_back(this);
     // creates bitmap holder
     tTVPTempBitmapHolder::AddRef();
 
@@ -431,6 +461,7 @@ tTJSNI_BaseLayer::tTJSNI_BaseLayer() {
 
 //---------------------------------------------------------------------------
 tTJSNI_BaseLayer::~tTJSNI_BaseLayer() {
+    TVPUnregisterHostLayer(this);
     TVPLayerInstanceCount.fetch_sub(1, std::memory_order_relaxed);
     tTVPTempBitmapHolder::Release();
 }
@@ -503,7 +534,10 @@ tjs_error tTJSNI_BaseLayer::Construct(tjs_int numparams, tTJSVariant **param,
 
 //---------------------------------------------------------------------------
 void tTJSNI_BaseLayer::Invalidate() {
+    if(Shutdown)
+        return;
     Shutdown = true;
+    TVPUnregisterHostLayer(this);
 
     // stop transition
     StopTransition();

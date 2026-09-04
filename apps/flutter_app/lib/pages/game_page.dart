@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -53,19 +54,21 @@ class GamePage extends StatefulWidget {
 
 /// Process-level engine runtime session.
 ///
-/// The kirikiri2 / Artemis runtimes cannot be restarted in-process:
-/// `engine_destroy` + `engine_open_game` returns -3 ("runtime restart
-/// is not supported yet"). Leaving this page therefore parks the
-/// runtime (pause) instead of destroying it; re-entering the same game
-/// resumes the parked session. Switching to a different game requires
-/// restarting the app.
+/// Leaving the page parks the current runtime so re-entering the same game is
+/// instant. Switching games destroys the parked project session and mounts the
+/// new one on the retained process-wide renderer without restarting Flutter.
 _EngineRuntimeSession? _activeEngineRuntime;
 
 class _EngineRuntimeSession {
-  _EngineRuntimeSession({required this.bridge, required this.gamePath});
+  _EngineRuntimeSession({
+    required this.bridge,
+    required this.gamePath,
+    required this.canResume,
+  });
 
   final EngineBridge bridge;
   final String gamePath;
+  final bool canResume;
 }
 
 class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
@@ -84,6 +87,12 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   /// Another game already owns the in-process runtime.
   bool _engineConflict = false;
+
+  /// Prevent duplicate runtime replacement requests.
+  bool _switchInFlight = false;
+
+  /// Prevent back-button and engine-termination callbacks from racing.
+  bool _exitInFlight = false;
 
   /// [enginePause] has already been issued for this visit; dispose
   /// must not destroy or pause again.
@@ -172,7 +181,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
     final session = _activeEngineRuntime;
     final normalizedPath = _normalizeGamePath(widget.gamePath);
-    if (session != null && session.gamePath == normalizedPath) {
+    if (session != null &&
+        session.canResume &&
+        session.gamePath == normalizedPath) {
       _bridge = session.bridge;
       _reuseRuntime = true;
     } else if (session != null) {
@@ -456,6 +467,10 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   Future<void> _autoStart() async {
     if (_engineConflict) {
+      if (Platform.operatingSystem == 'ohos') {
+        await _replaceParkedRuntime();
+        return;
+      }
       _fail(
         AppLocalizations.of(context)?.engineRestartRequired ??
             'The engine is already running another game. '
@@ -606,6 +621,46 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
     _log('engine_open_game_async => queued');
     _startStartupPolling();
+  }
+
+  /// Close the parked project and start a clean engine handle in this Flutter
+  /// process. Native code retains only process-wide renderer/plugin state and
+  /// explicitly resets project-owned VM, windows, timers, audio and mounts.
+  Future<void> _replaceParkedRuntime() async {
+    if (_switchInFlight) return;
+    _switchInFlight = true;
+    final parked = _activeEngineRuntime;
+    _log('Closing the parked runtime before switching games');
+    try {
+      if (parked != null) {
+        final result = await parked.bridge.engineDestroy();
+        if (result != _engineResultOk) {
+          throw StateError(
+            'engine_destroy failed: result=$result, '
+            'error=${parked.bridge.engineGetLastError()}',
+          );
+        }
+        if (identical(_activeEngineRuntime, parked)) {
+          _activeEngineRuntime = null;
+        }
+      }
+      if (!mounted) return;
+      _bridge = widget.engineBridgeBuilder(
+        ffiLibraryPath: widget.ffiLibraryPath,
+      );
+      _engineConflict = false;
+      _reuseRuntime = false;
+      _ownsBridge = true;
+      _runtimeParked = false;
+      _log('Previous project unmounted; starting a clean engine instance');
+      await _autoStart();
+    } catch (e, st) {
+      if (mounted) {
+        _fail('Unable to close the previous game cleanly.\n$e\n$st');
+      }
+    } finally {
+      _switchInFlight = false;
+    }
   }
 
   Future<bool> _ensureAndroidAllFilesAccess() async {
@@ -787,7 +842,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         final error = _bridge.engineGetLastError();
         _log('Tick ended: result=$result, error=$error');
         if (error.contains('termination') || error.contains('terminated')) {
-          _exitGame();
+          _exitGame(runtimeTerminated: true);
           return;
         }
         setState(() {
@@ -1233,6 +1288,22 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     setState(() => _showOverlay = !_showOverlay);
   }
 
+  /// Consume the system back gesture while a game is running. The first back
+  /// action reveals the in-game controls (including the explicit exit action)
+  /// and a second one dismisses them, so an accidental gesture cannot leave
+  /// the game. Loading and error screens retain their normal cancel behavior.
+  void _handleSystemBack() {
+    if (_phase == _EnginePhase.running) {
+      setState(() => _showOverlay = !_showOverlay);
+      return;
+    }
+    unawaited(
+      _exitGame(
+        runtimeTerminated: _phase == _EnginePhase.error && !_engineConflict,
+      ),
+    );
+  }
+
   void _selectGameMenuAction(_GameMenuAction action) {
     setState(() => _showOverlay = false);
     switch (action) {
@@ -1288,29 +1359,100 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _parkRuntime() async {
+  Future<void> _parkRuntime({bool canResume = true}) async {
     if (_runtimeParked) return;
     _runtimeParked = true;
     _stopTickLoop(notify: false);
     // A conflict page does not own the in-process runtime — leave the
     // parked session (other game) untouched.
     if (_engineConflict) return;
-    try {
-      await _bridge.enginePause();
-    } catch (_) {}
+    var parkedCleanly = canResume;
+    if (canResume) {
+      try {
+        final result = await _bridge.enginePause();
+        parkedCleanly = result == _engineResultOk;
+        if (!parkedCleanly) {
+          _log(
+            'engine_pause failed while parking: result=$result, '
+            'error=${_bridge.engineGetLastError()}',
+          );
+        }
+      } catch (e) {
+        parkedCleanly = false;
+        _log('engine_pause threw while parking: $e');
+      }
+    }
     _activeEngineRuntime = _EngineRuntimeSession(
       bridge: _bridge,
       gamePath: _normalizeGamePath(widget.gamePath),
+      canResume: parkedCleanly,
     );
   }
 
-  Future<void> _exitGame() async {
+  Future<void> _exitGame({bool runtimeTerminated = false}) async {
+    if (_exitInFlight) return;
+    _exitInFlight = true;
     _stopTickLoop(notify: false);
     _restoreOrientation();
-    await _parkRuntime();
+    if (widget.gameManager != null) {
+      await _finalizePlaySession();
+    }
+    await _surfaceKey.currentState?.releaseRenderTargets();
+    if (runtimeTerminated) {
+      _runtimeParked = true;
+      final session = _activeEngineRuntime;
+      if (session != null && identical(session.bridge, _bridge)) {
+        _activeEngineRuntime = null;
+      }
+      final result = await _bridge.engineDestroy();
+      if (result != _engineResultOk) {
+        _log(
+          'engine_destroy failed after termination: result=$result, '
+          'error=${_bridge.engineGetLastError()}',
+        );
+      }
+    } else {
+      await _parkRuntime();
+    }
     if (mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _retryStart() async {
+    setState(() {
+      _phase = _EnginePhase.initializing;
+      _errorMessage = null;
+      _tickCount = 0;
+    });
+    final session = _activeEngineRuntime;
+    if (_engineConflict) {
+      await _autoStart();
+      return;
+    }
+    if (_reuseRuntime ||
+        (session != null &&
+            session.gamePath == _normalizeGamePath(widget.gamePath) &&
+            session.canResume)) {
+      _reuseRuntime = true;
+      _ownsBridge = false;
+      _runtimeParked = false;
+      await _autoStart();
+      return;
+    }
+    final result = await _bridge.engineDestroy();
+    if (result != _engineResultOk) {
+      _fail(
+        'engine_destroy failed: result=$result, '
+        'error=${_bridge.engineGetLastError()}',
+      );
+      return;
+    }
+    if (!mounted) return;
+    _bridge = widget.engineBridgeBuilder(ffiLibraryPath: widget.ffiLibraryPath);
+    _ownsBridge = true;
+    _runtimeParked = false;
+    await _autoStart();
   }
 
   @override
@@ -1322,7 +1464,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        unawaited(_exitGame());
+        _handleSystemBack();
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -1497,12 +1639,30 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       children: [
         const ColoredBox(color: Color(0xFF0C0C0F)),
         if (cover != null)
-          Image.file(
-            cover,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ClipRect(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 46, sigmaY: 46),
+              child: Transform.scale(
+                scale: 1.18,
+                child: Image.file(
+                  cover,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
           ),
-        const ColoredBox(color: Color(0xB3000000)),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xC2000000), Color(0xA8000000), Color(0xD6000000)],
+              stops: [0, 0.5, 1],
+            ),
+          ),
+        ),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
@@ -1555,8 +1715,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                           Text(
                             l10n.gameEngine(_engine.label),
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.45),
+                              color: Colors.white.withValues(alpha: 0.72),
                               fontSize: 13,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: UiSpacing.xl),
@@ -1687,40 +1848,14 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                   label: l10n.back,
                   leadingIcon: LucideIcons.chevronLeft,
                   variant: UiButtonVariant.outline,
-                  onPressed: _exitGame,
+                  onPressed: () =>
+                      unawaited(_exitGame(runtimeTerminated: !_engineConflict)),
                 ),
                 const SizedBox(width: UiSpacing.lg),
                 UiButton(
                   label: l10n.retry,
                   leadingIcon: LucideIcons.refreshCw,
-                  onPressed: () {
-                    setState(() {
-                      _phase = _EnginePhase.initializing;
-                      _errorMessage = null;
-                      _tickCount = 0;
-                    });
-                    final session = _activeEngineRuntime;
-                    if (_engineConflict) {
-                      unawaited(_autoStart());
-                      return;
-                    }
-                    if (_reuseRuntime ||
-                        (session != null &&
-                            session.gamePath ==
-                                _normalizeGamePath(widget.gamePath))) {
-                      _reuseRuntime = true;
-                      _ownsBridge = false;
-                      _runtimeParked = false;
-                      unawaited(_autoStart());
-                      return;
-                    }
-                    unawaited(_bridge.engineDestroy());
-                    _bridge = widget.engineBridgeBuilder(
-                      ffiLibraryPath: widget.ffiLibraryPath,
-                    );
-                    _ownsBridge = true;
-                    unawaited(_autoStart());
-                  },
+                  onPressed: () => unawaited(_retryStart()),
                 ),
               ],
             ),

@@ -25,6 +25,10 @@ extern void TVPInitScriptEngine();
 
 extern void TVPUninitScriptEngine();
 
+// Embedded hosts replace projects without ending the process. Re-arm the
+// one-shot VM lifecycle guards after releasing the current script engine.
+extern void TVPResetScriptEngineForHost();
+
 extern void TVPRestartScriptEngine();
 
 extern tTJS *TVPGetScriptEngine();

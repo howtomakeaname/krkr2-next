@@ -49,10 +49,12 @@ static constexpr unsigned int kEngineApiHilogDomain = 0x0206;
 #include "environ/EngineLoop.h"
 #include "environ/MainScene.h"
 #include "base/StorageIntf.h"
+#include "base/ScriptMgnIntf.h"
 #include "base/SysInitIntf.h"
 #include "base/impl/SysInitImpl.h"
 #include "visual/GraphicsLoaderIntf.h"
 #include "visual/ogl/ogl_common.h"
+#include "visual/ogl/krkr_gl.h"
 #include "visual/ogl/krkr_egl_context.h"
 #include "visual/ogl/angle_backend.h"
 #include "visual/impl/WindowImpl.h"
@@ -82,6 +84,10 @@ struct engine_handle_s {
   int state = 0;
   std::thread::id owner_thread;
   bool runtime_owner = false;
+  // True once this handle has begun initializing the process-wide KiriKiri2
+  // runtime. It also covers partial startup failures that still need a full
+  // project reset before another game is mounted.
+  bool krkr_runtime_touched = false;
   uint64_t tick_count = 0;
 
   // Software-path perf counters, logged periodically by engine_tick
@@ -1118,6 +1124,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
 
   engine_handle_s* impl = nullptr;
   bool owned_runtime = false;
+  bool shutdown_krkr_runtime = false;
   std::thread startup_worker;
 
   {
@@ -1134,6 +1141,8 @@ engine_result_t engine_destroy(engine_handle_t handle) {
     }
 
     owned_runtime = (g_runtime_active && g_runtime_owner == handle);
+    shutdown_krkr_runtime = impl->krkr_runtime_touched &&
+                            (!g_runtime_active || owned_runtime);
     if (owned_runtime) {
       g_runtime_active = false;
       g_runtime_owner = nullptr;
@@ -1162,19 +1171,65 @@ engine_result_t engine_destroy(engine_handle_t handle) {
   DestroyArtemisRuntime(impl);
 #endif
 
-  if (owned_runtime) {
+  if (shutdown_krkr_runtime) {
+    // This runs on the owner thread and outside any TJS callback. Keep the
+    // process-wide renderer/EGL and static plug-in registrations alive, but
+    // release every project-owned object before mounting another game.
+    // TVPSystemUninit is deliberately not called here: it consumes the
+    // one-shot at-exit registry and cannot be followed by a second project.
+    AndroidInfoLog("engine_destroy: resetting KiriKiri project runtime");
+    auto& egl = krkr::GetEngineEGLContext();
+    if (egl.IsValid()) {
+      try {
+        egl.MakeCurrent();
+      } catch (...) {
+      }
+    }
     try {
       Application->OnDeactivate();
     } catch (...) {
     }
-    Application->FilterUserMessage(
-        [](std::vector<std::tuple<void*, int, tTVPApplication::tMsg>>& queue) {
-          queue.clear();
-        });
 
-    // Avoid triggering platform exit() path in the host process.
+    try {
+      Application->OnExit();
+    } catch (...) {
+    }
+    try {
+      TVPResetScriptEngineForHost();
+    } catch (...) {
+    }
+    try {
+      TVPClearGraphicCache();
+      TVPResetStorageForHost();
+      TVPResetAutoMountPathsForHost();
+    } catch (...) {
+    }
+
+    TVPMainScene::DestroyInstance();
+    EngineLoop::DestroyInstance();
+
+    delete Application;
+    Application = new tTVPApplication();
+
+    TVPResetProgramArgumentsAndDataPathForHost();
+    TVPProjectDir = ttstr();
+    TVPNativeProjectDir = ttstr();
+    TVPProjectDirSelected = false;
+
+    // Re-arm the per-project lifecycle. The next startup worker takes the
+    // retained EGL context after this thread releases it.
+    g_runtime_started_once = false;
+    TVPSystemUninitCalled = false;
     TVPTerminated = false;
     TVPTerminateCode = 0;
+    TVPTerminateOnWindowClose = false;
+    TVPTerminateOnNoWindowStartup = false;
+    TVPHostSuppressProcessExit = true;
+    krkr::gl::InvalidateStateCache();
+    if (egl.IsValid()) {
+      egl.ReleaseCurrent();
+    }
+    AndroidInfoLog("engine_destroy: KiriKiri project runtime reset complete");
   }
 
   delete impl;
@@ -1278,6 +1333,7 @@ engine_result_t engine_open_game(engine_handle_t handle,
   g_runtime_startup_active = true;
   SetStartupLogCapture(true);
   g_runtime_startup_owner = handle;
+  impl->krkr_runtime_touched = true;
   ResetStartupState(impl);
   SetStartupState(impl, ENGINE_STARTUP_STATE_RUNNING);
   PushStartupLog(impl, "engine_open_game: starting");
@@ -1413,6 +1469,7 @@ engine_result_t engine_open_game_async(engine_handle_t handle,
     g_runtime_startup_active = true;
   SetStartupLogCapture(true);
     g_runtime_startup_owner = handle;
+    impl->krkr_runtime_touched = true;
 
     try {
       impl->startup.worker =
@@ -1458,7 +1515,9 @@ engine_result_t engine_get_startup_state(engine_handle_t handle,
   }
 
   *out_state = GetStartupState(impl);
-  ClearHandleErrorLocked(impl);
+  if (*out_state != ENGINE_STARTUP_STATE_FAILED) {
+    ClearHandleErrorLocked(impl);
+  }
   SetThreadError(nullptr);
   return ENGINE_RESULT_OK;
 }
@@ -1511,7 +1570,9 @@ engine_result_t engine_drain_startup_logs(engine_handle_t handle,
     out_buffer[buffer_size - 1] = '\0';
   }
   *out_bytes_written = written;
-  ClearHandleErrorLocked(impl);
+  if (GetStartupState(impl) != ENGINE_STARTUP_STATE_FAILED) {
+    ClearHandleErrorLocked(impl);
+  }
   SetThreadError(nullptr);
   return ENGINE_RESULT_OK;
 }

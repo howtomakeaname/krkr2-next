@@ -34,6 +34,13 @@ iTJSDispatch2 *TVPGetMenuDispatch(tTVInteger hWnd) {
     return nullptr;
 }
 static void DelMenuDispatch(tTVInteger hWnd) { MENU_LIST.erase(hWnd); }
+void TVPResetMenuItemsForHost() {
+    for(auto &entry : MENU_LIST) {
+        if(entry.second)
+            entry.second->Release();
+    }
+    MENU_LIST.clear();
+}
 static bool _IsWindow(tTVInteger hWnd) {
     tjs_int count = TVPGetWindowCount();
     for(tjs_int i = 0; i < count; ++i) {

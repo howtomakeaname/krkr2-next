@@ -87,6 +87,7 @@ namespace TJS {
     extern iTJSDispatch2 *TJSCreateRegExpClass();
 
     extern void TJSReleaseRegex();
+    extern void TJSResetRegexForHost();
     //---------------------------------------------------------------------------
 
 } // namespace TJS

@@ -587,9 +587,23 @@ bool TVPRemoveFolder(const ttstr &name) {
 //---------------------------------------------------------------------------
 // TVPGetAppPath
 //---------------------------------------------------------------------------
+static ttstr TVPAppPath;
+static bool TVPAppPathInitialized = false;
+
 ttstr TVPGetAppPath() {
-    static ttstr apppath(TVPExtractStoragePath(TVPProjectDir));
-    return apppath;
+    // Scripts can temporarily change TVPProjectDir to an in-archive path.
+    // Keep the application path stable for the lifetime of one project, but
+    // allow the Flutter host to reset it when replacing that project.
+    if(!TVPAppPathInitialized) {
+        TVPAppPath = TVPExtractStoragePath(TVPProjectDir);
+        TVPAppPathInitialized = true;
+    }
+    return TVPAppPath;
+}
+
+void TVPResetAppPathForHost() {
+    TVPAppPath = ttstr();
+    TVPAppPathInitialized = false;
 }
 //---------------------------------------------------------------------------
 
@@ -1629,4 +1643,8 @@ void TVPBoostAutoMountPaths() {
     AutoPathTableInit = false;
     spdlog::info("TVPBoostAutoMountPaths: re-ordered {} patch paths to end of auto path list",
                  TVPAutoPathList.size());
+}
+
+void TVPResetAutoMountPathsForHost() {
+    TVPAutoMountedPaths.clear();
 }

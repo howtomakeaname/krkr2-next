@@ -358,5 +358,7 @@ bool TCWFDecoder::ReadBlock(int numchans, int chan) {
 
 static TCWFWaveDecoderCreator creator;
 static void _init() { TVPRegisterWaveDecoderCreator(&creator); }
+static void _uninit() { TVPUnregisterWaveDecoderCreator(&creator); }
 
 NCB_PRE_REGIST_CALLBACK(_init);
+NCB_PRE_UNREGIST_CALLBACK(_uninit);

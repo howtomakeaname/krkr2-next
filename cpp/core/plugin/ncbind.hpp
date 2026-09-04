@@ -12,8 +12,10 @@
 #include "CharacterSet.h"
 
 #include "ncb_invoke.hpp"
+#include <algorithm>
 #include <map>
 #include <list>
+#include <set>
 
 inline std::set<ttstr> TVPRegisteredPlugins;
 
@@ -2115,12 +2117,19 @@ struct ncbAutoRegister {
 		for (ThisClassT const* p = _top[line]; p; p = p->_next) {
 			ttstr name = p->modulename;
 			name.ToLowerCase();
-			_internal_plugins[name].lists[line].push_back(p);//p->Regist();
+			auto &entries = _internal_plugins[name].lists[line];
+			// Hosted mode calls discovery for every project.  The catalog is
+			// process-wide, so do not append the same static registrar again.
+			if (std::find(entries.begin(), entries.end(), p) == entries.end())
+				entries.push_back(p);//p->Regist();
 		}
 	}
 	static void AllUnregist(LineT line) {
-		for (ThisClassT const* p = _top[line]; p; p = p->_next)
-			p->Unregist();
+		for (ThisClassT const* p = _top[line]; p; p = p->_next) {
+			// One plug-in with an incomplete unlink path must not leave every
+			// later module bound to a VM that is about to be destroyed.
+			try { p->Unregist(); } catch (...) {}
+		}
 	}
 
 	static void AllRegist()   { for (int line = 0; line < LINE_COUNT; line++) AllRegist(  static_cast<LineT>(line)); }

@@ -373,6 +373,11 @@ namespace TJS {
 
         ~tTJSCustomObject() override;
 
+        // Host project replacement must release this object's native/container
+        // state without running script finalizers or dispatching a subclass
+        // Invalidate() implementation into process-wide superclass objects.
+        void InvalidateForHostProject();
+
     private:
         void BeforeDestruction() override;
 
@@ -505,6 +510,13 @@ namespace TJS {
     // TJSCreateCustomObject
     //---------------------------------------------------------------------------
     TJS_EXP_FUNC_DEF(iTJSDispatch2 *, TJSCreateCustomObject, ());
+
+    // Objects created after the core VM/classes have been initialized belong
+    // to the currently hosted project.  Track only those objects so replacing
+    // a game cannot corrupt process-lifetime parser/class caches.
+    void TJSBeginProjectObjectTrackingForHost();
+    void TJSClearProjectObjectsForHost();
+
     //---------------------------------------------------------------------------
 
 } // namespace TJS

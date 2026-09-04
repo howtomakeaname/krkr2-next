@@ -975,6 +975,17 @@ void TVPRemoveCompactEventHook(tTVPCompactEventCallbackIntf *cb) {
     }
 }
 
+void TVPResetEventsForHost() {
+    TVPDestroyEventQueue();
+    TVPWinUpdateEventQueue.clear();
+    TVPDestroyContinuousHandlerVector();
+    TVPExclusiveEventPosted = false;
+    TVPEventDisabled = false;
+    TVPEventInterrupting = false;
+    TVPProcessContinuousHandlerEventFlag = false;
+    TVPContinuousEventProcessing = false;
+}
+
 //---------------------------------------------------------------------------
 extern void TVPDoSaveSystemVariables();
 

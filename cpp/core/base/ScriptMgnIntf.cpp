@@ -12,6 +12,7 @@
 #include "tjsCommHead.h"
 
 #include "tjs.h"
+#include "tjsObject.h"
 #include "tjsDebug.h"
 #include "tjsArray.h"
 #include "ScriptMgnIntf.h"
@@ -46,6 +47,7 @@
 #include "ImageFunction.h"
 #include "BitmapIntf.h"
 #include "tjsScriptBlock.h"
+#include "tjsRegExp.h"
 #include "ApplicationSpecialPath.h"
 #include "SystemImpl.h"
 #include "BitmapLayerTreeOwner.h"
@@ -392,6 +394,7 @@ class tTVPTJSGCCallback : public tTVPCompactEventCallbackIntf {
         }
     }
 } static TVPTJSGCCallback;
+static bool TVPTJSGCCallbackRegistered = false;
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
@@ -557,7 +560,15 @@ void TVPInitScriptEngine() {
     TVPCauseAtInstallExtensionClass(global);
 
     // Garbage Collection Hook
-    TVPAddCompactEventHook(&TVPTJSGCCallback);
+    if(!TVPTJSGCCallbackRegistered) {
+        TVPAddCompactEventHook(&TVPTJSGCCallback);
+        TVPTJSGCCallbackRegistered = true;
+    }
+
+    // Core VM objects and lazily initialized parser caches must survive host
+    // project replacement. Only objects created by the startup/game scripts
+    // from this point onward are scoped to the current project.
+    TJS::TJSBeginProjectObjectTrackingForHost();
 }
 //---------------------------------------------------------------------------
 
@@ -572,12 +583,33 @@ void TVPUninitScriptEngine() {
     TVPScriptEngineUninit = true;
 
     // TVPScriptEngine->Shutdown();
-    TVPScriptEngine->Release();
+    if(TVPScriptEngine)
+        TVPScriptEngine->Release();
     /*
         Objects, theirs lives are contolled by reference counter, may
        not be all freed here in some occations.
     */
     TVPScriptEngine = nullptr;
+}
+
+void TVPResetScriptEngineForHost() {
+    // A hosted project is replaced while the process stays alive.  Merely
+    // releasing tTJS is not enough here: the global object contains closures
+    // that refer back to it, so Cleanup() can leave the whole old object graph
+    // alive.  Shutdown() clears the global first and breaks those cycles before
+    // the engine itself is released.
+    if(TVPScriptEngine) {
+        TJS::TJSResetRegexForHost();
+        TJS::TJSClearProjectObjectsForHost();
+        TVPResetDebugClassCacheForHost();
+        TVPResetMenuItemClassForHost();
+        TVPScriptEngine->Shutdown();
+        TVPScriptEngine->DoGarbageCollection(true);
+        TVPScriptEngine->Release();
+        TVPScriptEngine = nullptr;
+    }
+    TVPScriptEngineInit = false;
+    TVPScriptEngineUninit = false;
 }
 //---------------------------------------------------------------------------
 

@@ -26,6 +26,7 @@
 extern bool TVPFreeUnusedLayerCache;
 extern tjs_int TVPGetLayerCount();
 extern tjs_uint64 TVPGetLayerTotalBitmapBytes();
+void TVPResetLayersForHost();
 
 //---------------------------------------------------------------------------
 // initial bitmap holder ( since tTVPBaseBitmap cannot create empty

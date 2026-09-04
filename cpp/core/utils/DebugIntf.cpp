@@ -88,6 +88,7 @@ void TVPSetOnLog(void (*func)(const ttstr &line)) { TVPOnLog = func; }
 
 //---------------------------------------------------------------------------
 static std::vector<tTJSVariantClosure> TVPLoggingHandlerVector;
+static bool TVPInDeliverLoggingEvent = false;
 
 static void TVPCleanupLoggingHandlerVector() {
     // eliminate empty
@@ -113,12 +114,14 @@ static void TVPDestroyLoggingHandlerVector() {
     TVPLoggingHandlerVector.clear();
 }
 
+void TVPResetLoggingHandlersForHost() {
+    TVPDestroyLoggingHandlerVector();
+    TVPInDeliverLoggingEvent = false;
+}
+
 static tTVPAtExit
     TVPDestroyLoggingHandlerAtExit(TVP_ATEXIT_PRI_PREPARE,
                                    TVPDestroyLoggingHandlerVector);
-//---------------------------------------------------------------------------
-static bool TVPInDeliverLoggingEvent = false;
-
 static void _TVPDeliverLoggingEvent(const ttstr &line) // internal
 {
     if(!TVPInDeliverLoggingEvent) {

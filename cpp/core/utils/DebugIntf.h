@@ -46,6 +46,16 @@ extern void TVPSetLogLocation(const ttstr &loc);
 extern ttstr TVPNativeLogLocation;
 
 extern void TVPStartLogToFile(bool clear);
+
+// Release script closures installed through Debug.addLoggingHandler without
+// destroying the process-wide log storage used by the Flutter host.
+extern void TVPResetLoggingHandlersForHost();
+
+// Debug.controller and Debug.console are created lazily, but the objects are
+// owned by the current script project. Drop their process-wide cache after the
+// project object pass has invalidated them so the next project gets fresh
+// native class objects.
+extern void TVPResetDebugClassCacheForHost();
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

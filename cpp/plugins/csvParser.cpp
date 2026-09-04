@@ -446,6 +446,18 @@ void InitPlugin_CSVParser() {
         global->Release();
     }
 }
+
+static void UninitPlugin_CSVParser() {
+    iTJSDispatch2 *global = TVPGetScriptDispatch();
+    if(global) {
+        delMember(global, TJS_W("CSVParser"));
+        global->Release();
+    }
+    if(ArrayClearMethod) {
+        ArrayClearMethod->Release();
+        ArrayClearMethod = nullptr;
+    }
+}
 //---------------------------------------------------------------------------
 // extern "C" __declspec(dllexport) HRESULT _stdcall V2Unlink()
 // {
@@ -464,3 +476,4 @@ void InitPlugin_CSVParser() {
 // }
 
 NCB_PRE_REGIST_CALLBACK(InitPlugin_CSVParser);
+NCB_PRE_UNREGIST_CALLBACK(UninitPlugin_CSVParser);

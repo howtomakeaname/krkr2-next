@@ -69,6 +69,29 @@ tTJSNI_Window *TVPGetWindowListAt(tjs_int idx) { return TVPWindowVector[idx]; }
 //---------------------------------------------------------------------------
 tjs_int TVPGetWindowCount() { return (tjs_int)TVPWindowVector.size(); }
 //---------------------------------------------------------------------------
+void TVPResetWindowsForHost() {
+    // Layers have already been invalidated by TVPResetLayersForHost(). Tear
+    // down the native Window directly so no game-defined finalize method runs
+    // in an arbitrary order. The TJS owner is invalidated later after all of
+    // its member edges have been cleared.
+    while(!TVPWindowVector.empty()) {
+        tTJSNI_Window *window = TVPWindowVector.back();
+        if(window) {
+            try {
+                window->Invalidate();
+            } catch(...) {
+            }
+        }
+
+        // A malformed or already-invalid object must not stall project reset.
+        auto it = std::find(TVPWindowVector.begin(), TVPWindowVector.end(),
+                            window);
+        if(it != TVPWindowVector.end())
+            TVPWindowVector.erase(it);
+    }
+    TVPMainWindow = nullptr;
+}
+//---------------------------------------------------------------------------
 void TVPClearAllWindowInputEvents() {
     std::vector<tTJSNI_Window *>::iterator i;
     for(i = TVPWindowVector.begin(); i != TVPWindowVector.end(); i++) {
@@ -128,6 +151,7 @@ tTVPUniqueTagForInputEvent tTVPOnDisplayRotateInputEvent ::Tag;
 // tTJSNI_BaseWindow
 //---------------------------------------------------------------------------
 tTJSNI_BaseWindow::tTJSNI_BaseWindow() {
+    Owner = nullptr;
     WaitVSync = false;
     ObjectVectorLocked = false;
     DrawBuffer = nullptr;
@@ -174,6 +198,10 @@ tjs_error tTJSNI_BaseWindow::Construct(tjs_int numparams, tTJSVariant **param,
 }
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWindow::Invalidate() {
+    // The native Window is torn down directly during host project reset and
+    // its TJS owner is invalidated later. Make the native half idempotent.
+    if(!Owner)
+        return;
     // remove from list
     TVPUnregisterWindowToList(static_cast<tTJSNI_Window *>(this));
 
@@ -215,11 +243,13 @@ void tTJSNI_BaseWindow::Invalidate() {
         // but here we cannot care for them.
         try {
             i->Invalidate(0, nullptr, nullptr, nullptr);
-            i->Release();
         } catch(eTJSError &e) {
             TVPAddLog(e.GetMessage()); // just in case, log the error
+        } catch(...) {
         }
+        i->Release();
     }
+    ObjectVector.clear();
 
     // remove all events (again)
     TVPCancelSourceEvents(Owner);
@@ -309,6 +339,19 @@ void tTJSNI_BaseWindow::SetDrawDeviceObject(const tTJSVariant &val) {
         DrawDevice = tmpDrawDevice;
         DrawDevice->SetWindowInterface(const_cast<tTJSNI_BaseWindow *>(this));
         ResetDrawDevice();
+    } else {
+        // Window invalidation assigns void here. The old implementation did
+        // nothing for a non-object value, leaving the DrawDevice, its manager
+        // references and a stale Window pointer alive across game switches.
+        if(DrawDeviceObject.Type() == tvtObject) {
+            try {
+                DrawDeviceObject.AsObjectClosureNoAddRef().Invalidate(
+                    0, nullptr, nullptr, DrawDeviceObject.AsObjectNoAddRef());
+            } catch(...) {
+            }
+        }
+        DrawDeviceObject.Clear();
+        DrawDevice = nullptr;
     }
 }
 //---------------------------------------------------------------------------

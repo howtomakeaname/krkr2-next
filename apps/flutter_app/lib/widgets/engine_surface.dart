@@ -99,6 +99,8 @@ class EngineSurfaceState extends State<EngineSurface> {
   double _lastRequestedDpr = 1.0;
   EngineInputEventData? _pendingPointerMoveEvent;
   bool _pointerMoveFlushScheduled = false;
+  bool _renderTargetsReleased = false;
+  Future<void>? _renderTargetReleaseFuture;
 
   @override
   void initState() {
@@ -128,7 +130,7 @@ class EngineSurfaceState extends State<EngineSurface> {
     // _vsyncScheduled will simply be ignored once disposed.
     _vsyncScheduled = false;
     _frameImage?.dispose();
-    unawaited(_disposeAllTextures());
+    unawaited(releaseRenderTargets());
     _focusNode.dispose();
     super.dispose();
   }
@@ -137,6 +139,19 @@ class EngineSurfaceState extends State<EngineSurface> {
     await _disposeTexture();
     await _disposeIOSurfaceTexture();
     await _disposeSurfaceTexture();
+  }
+
+  /// Detach and unregister native render targets before the route is popped.
+  ///
+  /// `State.dispose` cannot await asynchronous platform/FFI cleanup. Exposing
+  /// this step lets [GamePage] serialize detach -> pause -> pop, avoiding an
+  /// old OHNativeWindow detach racing with the next resumed game surface.
+  Future<void> releaseRenderTargets() {
+    final ongoing = _renderTargetReleaseFuture;
+    if (ongoing != null) return ongoing;
+    _renderTargetsReleased = true;
+    _vsyncScheduled = false;
+    return _renderTargetReleaseFuture = _disposeAllTextures();
   }
 
   void _reconcilePolling() {
@@ -178,7 +193,7 @@ class EngineSurfaceState extends State<EngineSurface> {
       _pollFrame(externalRendered: rendered);
 
   Future<void> _ensureSurfaceSize(Size size, double devicePixelRatio) async {
-    if (!widget.active) {
+    if (!widget.active || _renderTargetsReleased) {
       return;
     }
     _devicePixelRatio = devicePixelRatio <= 0 ? 1.0 : devicePixelRatio;

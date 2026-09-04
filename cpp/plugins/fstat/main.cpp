@@ -1019,8 +1019,12 @@ static void PostRegistCallback() {
 }
 
 #define RELEASE(name)                                                          \
-    name->Release();                                                           \
-    name = NULL
+    do {                                                                        \
+        if(name) {                                                              \
+            name->Release();                                                    \
+            name = nullptr;                                                     \
+        }                                                                       \
+    } while(false)
 
 /**
  * 開放処理前
@@ -1028,6 +1032,7 @@ static void PostRegistCallback() {
 static void PreUnregistCallback() {
     RELEASE(dateClass);
     RELEASE(dateSetTime);
+    RELEASE(dateGetTime);
 }
 
 NCB_POST_REGIST_CALLBACK(PostRegistCallback);

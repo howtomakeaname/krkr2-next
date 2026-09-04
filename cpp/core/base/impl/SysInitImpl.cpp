@@ -517,6 +517,21 @@ static void PushConfigFileOptions(const std::vector<std::string> *options) {
 // Options set via engine_set_option before TVPProgramArguments is initialized
 static std::vector<std::pair<ttstr, ttstr>> TVPEarlySetOptions;
 
+void TVPResetProgramArgumentsAndDataPathForHost() {
+    TVPProgramArguments.clear();
+    TVPEarlySetOptions.clear();
+    TVPProgramArgumentsInit = false;
+    TVPDataPathDirectoryEnsured = false;
+    TVPNativeDataPath = ttstr();
+    TVPDataPath = ttstr();
+
+    // Consumers cache command-line-derived values against this generation.
+    // Never expose zero because existing code treats it as uninitialized.
+    TVPCommandLineArgumentGeneration++;
+    if(TVPCommandLineArgumentGeneration == 0)
+        TVPCommandLineArgumentGeneration = 1;
+}
+
 static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
     if(!TVPProgramArgumentsInit) {
         TVPProgramArgumentsInit = true;

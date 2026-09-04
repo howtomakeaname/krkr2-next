@@ -313,6 +313,9 @@ class tTJSNI_Window;
 extern tTJSNI_Window *TVPGetWindowListAt(tjs_int idx);
 extern tjs_int TVPGetWindowCount();
 extern tTJSNI_Window *TVPMainWindow; //  = nullptr; // main window
+// In hosted mode the process survives project replacement, so native Window
+// instances must be invalidated explicitly instead of relying on process exit.
+extern void TVPResetWindowsForHost();
 
 //---------------------------------------------------------------------------
 

@@ -556,21 +556,28 @@ TJS_END_NATIVE_MEMBERS
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
+static iTJSDispatch2 *TVPMenuItemFactoryClass = nullptr;
+
 iTJSDispatch2 *TVPCreateMenuItemObject(iTJSDispatch2 *window) {
-    struct tHolder {
-        iTJSDispatch2 *Obj;
-        tHolder() { Obj = new tTJSNC_MenuItem(); }
-        ~tHolder() { Obj->Release(); }
-    } static menuitemclass;
+    if(!TVPMenuItemFactoryClass)
+        TVPMenuItemFactoryClass = new tTJSNC_MenuItem();
 
     iTJSDispatch2 *out;
     tTJSVariant param(window);
     tTJSVariant *pparam[2] = { &param, &param };
-    if(TJS_FAILED(menuitemclass.Obj->CreateNew(0, nullptr, nullptr, &out, 2,
-                                               pparam, menuitemclass.Obj)))
+    if(TJS_FAILED(TVPMenuItemFactoryClass->CreateNew(
+           0, nullptr, nullptr, &out, 2, pparam,
+           TVPMenuItemFactoryClass)))
         TVPThrowExceptionMessage(TVPInternalError,
                                  TJS_W("TVPCreateMenuItemObject"));
 
     return out;
+}
+
+void TVPResetMenuItemClassForHost() {
+    if(TVPMenuItemFactoryClass) {
+        TVPMenuItemFactoryClass->Release();
+        TVPMenuItemFactoryClass = nullptr;
+    }
 }
 //---------------------------------------------------------------------------

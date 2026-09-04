@@ -63,6 +63,11 @@ inline tjs_int ToInt(const tTJSVariant &v, tjs_int fallback = 0) {
 inline tjs_int NormalizeExtent(tjs_int v, tjs_int fb) { return v > 0 ? v : fb; }
 
 using ModuleName = std::basic_string<tjs_char>;
+using ModuleCache =
+    std::unordered_map<uintptr_t,
+                       std::unordered_map<ModuleName, tTJSVariant>>;
+static ModuleCache g_drawDeviceModules;
+static ModuleCache g_adaptorModules;
 
 inline ModuleName NormalizeModuleName(tjs_int n, tTJSVariant **p) {
     if (n <= 0 || !p || !p[0] || p[0]->Type() == tvtVoid) return TJS_W("live2d");
@@ -1525,12 +1530,11 @@ extern "C" tjs_error TVPKrkrGLESCreateModuleObject(tTJSVariant *result,
 // ---------------------------------------------------------------------------
 static tjs_error DrawDeviceGetModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **p,
                                        iTJSDispatch2 *objthis) {
-    static std::unordered_map<uintptr_t, std::unordered_map<ModuleName, tTJSVariant>> s_mod;
     const ModuleName mn = NormalizeModuleName(n, p);
     const uintptr_t key = reinterpret_cast<uintptr_t>(objthis);
     if (key) {
-        auto dit = s_mod.find(key);
-        if (dit != s_mod.end()) {
+        auto dit = g_drawDeviceModules.find(key);
+        if (dit != g_drawDeviceModules.end()) {
             auto mit = dit->second.find(mn);
             if (mit != dit->second.end() && mit->second.Type() == tvtObject &&
                 mit->second.AsObjectNoAddRef())
@@ -1541,7 +1545,7 @@ static tjs_error DrawDeviceGetModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **
     tjs_error er = CreateModuleObject(&created);
     if (TJS_FAILED(er)) { if (r) r->Clear(); return er; }
     if (key && created.Type() == tvtObject && created.AsObjectNoAddRef())
-        s_mod[key][mn] = created;
+        g_drawDeviceModules[key][mn] = created;
     if (r) *r = created;
     return TJS_S_OK;
 }
@@ -1564,12 +1568,11 @@ public:
     }
 
     static tjs_error getModuleCb(tTJSVariant *r, tjs_int n, tTJSVariant **p, GLESAdaptor *s) {
-        static std::unordered_map<uintptr_t, std::unordered_map<ModuleName, tTJSVariant>> sm;
         const ModuleName mn = NormalizeModuleName(n, p);
         const uintptr_t key = reinterpret_cast<uintptr_t>(s);
         if (key) {
-            auto dit = sm.find(key);
-            if (dit != sm.end()) {
+            auto dit = g_adaptorModules.find(key);
+            if (dit != g_adaptorModules.end()) {
                 auto mit = dit->second.find(mn);
                 if (mit != dit->second.end() && mit->second.Type() == tvtObject &&
                     mit->second.AsObjectNoAddRef())
@@ -1581,7 +1584,7 @@ public:
                          : CreateModuleObject(&created);
         if (TJS_FAILED(er)) { if (r) r->Clear(); return er; }
         if (key && created.Type() == tvtObject && created.AsObjectNoAddRef())
-            sm[key][mn] = created;
+            g_adaptorModules[key][mn] = created;
         if (r) *r = created;
         return TJS_S_OK;
     }
@@ -1719,8 +1722,14 @@ private:
 // ---------------------------------------------------------------------------
 static void KrkrGlesPreRegist() {}
 static void KrkrGlesPostRegist() {}
+static void KrkrGlesPostUnregist() {
+    g_drawDeviceModules.clear();
+    g_adaptorModules.clear();
+    g_registeredLayer = nullptr;
+}
 NCB_PRE_REGIST_CALLBACK(KrkrGlesPreRegist);
 NCB_POST_REGIST_CALLBACK(KrkrGlesPostRegist);
+NCB_POST_UNREGIST_CALLBACK(KrkrGlesPostUnregist);
 
 NCB_REGISTER_CLASS(GLESModule) {
     Constructor();

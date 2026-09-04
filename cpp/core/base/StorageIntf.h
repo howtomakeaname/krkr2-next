@@ -166,6 +166,10 @@ TJS_EXP_FUNC_DEF(ttstr, TVPGetTemporaryName, ());
 TJS_EXP_FUNC_DEF(ttstr, TVPGetAppPath, ());
 // retrieve program path, in normalized storage name
 
+// Forget the per-project application path before starting another project in
+// the same host process. TVPGetAppPath itself remains stable for one project.
+void TVPResetAppPathForHost();
+
 void TVPPreNormalizeStorageName(ttstr &name);
 // called by TVPNormalizeStorageName before it process the storage
 // name. user may pass the OS's native filename to the TVP storage
@@ -282,6 +286,9 @@ TJS_EXP_FUNC_DEF(void, TVPClearStorageCaches, ());
 // clear all internal storage related caches.
 void TVPRemoveFromStorageCache(const ttstr &name);
 void TVPClearArchiveCache();
+// Drop project-specific archive and auto-path state while preserving the
+// process-wide storage media registrations.
+void TVPResetStorageForHost();
 void TVPSetArchiveCacheCount(tjs_uint max_count);
 tjs_uint TVPGetArchiveCacheCount();
 tjs_uint TVPGetArchiveCacheLimit();
@@ -296,6 +303,7 @@ tjs_uint TVPGetXP3SegmentCacheTotalBytes();
 
 void TVPAutoMountSiblingXP3Archives();
 void TVPBoostAutoMountPaths();
+void TVPResetAutoMountPathsForHost();
 
 //---------------------------------------------------------------------------
 
