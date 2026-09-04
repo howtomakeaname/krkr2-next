@@ -106,11 +106,13 @@ class _UiContextMenuState extends State<UiContextMenu> {
     if (renderBox == null || !renderBox.hasSize) return;
     final offset = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
+    final colors = context.uiColors;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     await Navigator.of(context, rootNavigator: true).push<void>(
       PageRouteBuilder<void>(
         opaque: false,
-        barrierColor: Colors.black.withValues(alpha: 0.22),
+        barrierColor: colors.overlay.withValues(alpha: isLight ? 0.18 : 0.30),
         transitionDuration: UiDuration.slow,
         reverseTransitionDuration: UiDuration.fast,
         pageBuilder: (ctx, anim, secondary) => _ContextMenuOverlay(
@@ -219,6 +221,7 @@ class _AnchoredMenu extends StatefulWidget {
   final Rect anchor;
   final List<UiMenuItem> items;
   final Animation<double> animation;
+
   /// Whether to align the menu's right edge with the anchor's right edge.
   /// `null` selects the nearest horizontal screen edge automatically.
   final bool? alignEnd;
@@ -249,10 +252,10 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
   }
 
   CurvedAnimation _newCurved() => CurvedAnimation(
-        parent: widget.animation,
-        curve: UiCurves.iosSpringOut,
-        reverseCurve: UiCurves.iosSmooth,
-      );
+    parent: widget.animation,
+    curve: UiCurves.iosSpringOut,
+    reverseCurve: UiCurves.iosSmooth,
+  );
 
   @override
   void dispose() {
@@ -267,8 +270,7 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
     final size = MediaQuery.sizeOf(context);
     final padding = MediaQuery.paddingOf(context);
     final curved = _curved;
-    final alignEnd =
-        widget.alignEnd ?? (anchor.center.dx >= size.width / 2);
+    final alignEnd = widget.alignEnd ?? (anchor.center.dx >= size.width / 2);
 
     var estimatedHeight = 8.0;
     for (final item in items) {
@@ -322,12 +324,8 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
             child: ScaleTransition(
               scale: Tween<double>(begin: 0.78, end: 1).animate(curved),
               alignment: placeBelow
-                  ? (alignEnd
-                      ? Alignment.topRight
-                      : Alignment.topLeft)
-                  : (alignEnd
-                      ? Alignment.bottomRight
-                      : Alignment.bottomLeft),
+                  ? (alignEnd ? Alignment.topRight : Alignment.topLeft)
+                  : (alignEnd ? Alignment.bottomRight : Alignment.bottomLeft),
               child: _GlassMenuCard(items: items),
             ),
           ),
@@ -348,13 +346,19 @@ class _GlassMenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     final isLight = Theme.of(context).brightness == Brightness.light;
-    // 浅色页底是分组灰 #F2F3F7。菜单要成一张白纸，不能再铺一层同色灰，
+    // 浅色页底是分组灰。菜单要成一张白纸，不能再铺一层同色灰，
     // 否则全靠阴影分形，OHOS 上大 blur 又会糊成一块脏印。
-    final fillTop = isLight ? const Color(0xFFFFFFFF) : const Color(0xFF3A3A3E);
-    final fillBottom = isLight ? const Color(0xFFF6F6F8) : const Color(0xFF2C2C30);
-    // 设置页卡片的 #C6C6C8 描边是为了贴在同色灰底上能看见。
+    final fillTop = isLight
+        ? colors.surfaceElevated
+        : Color.lerp(colors.surfaceElevated, colors.textPrimary, 0.10)!;
+    final fillBottom = isLight
+        ? Color.lerp(colors.surfaceElevated, colors.groupedBackground, 0.42)!
+        : Color.lerp(colors.surfaceElevated, colors.textPrimary, 0.03)!;
+    // 设置页卡片的主题描边是为了贴在同色灰底上能看见。
     // 浮层已经是白纸，再用那条描边就像描了一圈炭笔，浅色上最掉价。
-    final rim = isLight ? const Color(0xFFE5E5EA) : const Color(0x47FFFFFF);
+    final rim = isLight
+        ? Color.lerp(colors.surfaceElevated, colors.border, 0.35)!
+        : colors.border.withValues(alpha: 0.28);
     final rimWidth = 1.0;
 
     Widget panel = DecoratedBox(
@@ -372,11 +376,7 @@ class _GlassMenuCard extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++) ...[
             if (i != 0)
-              Divider(
-                height: 0.5,
-                thickness: 0.5,
-                color: colors.separator,
-              ),
+              Divider(height: 0.5, thickness: 0.5, color: colors.separator),
             _MenuRow(
               item: items[i],
               isFirst: i == 0,
@@ -398,9 +398,7 @@ class _GlassMenuCard extends StatelessWidget {
     // OHOS 的 BoxShadow 要么糊成脏印（大 blur），要么印出一块硬灰板
     // （小 blur）。自己铺一层比卡片略小的冷灰底板再 ImageFiltered：
     // 露出来的只有晕，不是整块实心灰。
-    final shadowFill = isLight
-        ? const Color(0x0C3C3C43)
-        : const Color(0x59000000);
+    final shadowFill = colors.overlay.withValues(alpha: isLight ? 0.05 : 0.35);
     // 浮层不在 Scaffold/Material 里。不包一层的话，文字会吃到
     // MaterialApp 的 _errorTextStyle：双黄下划线。
     return Material(
@@ -428,10 +426,7 @@ class _GlassMenuCard extends StatelessWidget {
               ),
             ),
           ),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(_radius),
-            child: panel,
-          ),
+          ClipRRect(borderRadius: BorderRadius.circular(_radius), child: panel),
         ],
       ),
     );
@@ -498,12 +493,11 @@ class _MenuRowState extends State<_MenuRow> {
     final typography = context.uiType;
     final item = widget.item;
     final tint = item.isDestructive ? colors.danger : colors.textPrimary;
-    final isLight = Theme.of(context).brightness == Brightness.light;
     final Color wash;
     if (_pressed) {
-      wash = isLight ? const Color(0x14000000) : const Color(0x24FFFFFF);
+      wash = colors.textPrimary.withValues(alpha: 0.08);
     } else if (_hovered) {
-      wash = isLight ? const Color(0x0A000000) : const Color(0x14FFFFFF);
+      wash = colors.textPrimary.withValues(alpha: 0.04);
     } else {
       wash = Colors.transparent;
     }
@@ -559,8 +553,9 @@ class _MenuRowState extends State<_MenuRow> {
                     if (item.subtitle != null && item.subtitle!.isNotEmpty)
                       Text(
                         item.subtitle!,
-                        style: typography.caption
-                            .copyWith(color: colors.textSecondary),
+                        style: typography.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

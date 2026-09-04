@@ -68,4 +68,53 @@ void main() {
     expect(expandedBar.backgroundColor?.a, 0);
     expect(expandedLaunchWidth, closeTo(initialLaunchWidth, 0.001));
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('collapsed toolbar follows $brightness theme colors', (
+      WidgetTester tester,
+    ) async {
+      final game = GameInfo(
+        path: '/games/test-game',
+        title: '测试游戏',
+        developer: '测试开发者',
+        description: List<String>.filled(20, '游戏简介内容').join('，'),
+      );
+      final palette = UiColors.fromSeed(UiSeedPalette.teal, brightness);
+      final theme = brightness == Brightness.light
+          ? UiTheme.light()
+          : UiTheme.dark();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: theme,
+          home: GameDetailPage(game: game, gameManager: GameManager()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -320),
+      );
+      await tester.pumpAndSettle();
+
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      final title = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('game-detail-toolbar-title')),
+          matching: find.text('测试游戏'),
+        ),
+      );
+
+      expect(appBar.backgroundColor, palette.background);
+      expect(title.style?.color, palette.textPrimary);
+      expect(
+        appBar.systemOverlayStyle?.statusBarIconBrightness,
+        brightness == Brightness.light ? Brightness.dark : Brightness.light,
+      );
+    });
+  }
 }

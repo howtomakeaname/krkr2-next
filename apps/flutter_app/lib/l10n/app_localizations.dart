@@ -586,6 +586,12 @@ abstract class AppLocalizations {
   /// **'Theme'**
   String get themeMode;
 
+  /// No description provided for @themeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System Default'**
+  String get themeSystem;
+
   /// No description provided for @themeDark.
   ///
   /// In en, this message translates to:

@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../engine/engine_bridge.dart';
+import '../ui/theme/ui_theme.dart';
 
 class EngineInputEventType {
   static const int pointerDown = 1;
@@ -985,7 +986,8 @@ class EngineSurfaceState extends State<EngineSurface> {
               }
             },
             child: Container(
-              color: Colors.black,
+              // Game frames need a stable black matte regardless of app theme.
+              color: context.uiColors.overlay.withValues(alpha: 1),
               child: Stack(
                 fit: StackFit.expand,
                 children: [

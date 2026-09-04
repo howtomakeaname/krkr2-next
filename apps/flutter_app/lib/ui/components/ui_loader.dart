@@ -67,11 +67,7 @@ class UiLoader extends StatelessWidget {
 
 /// 全屏/局部遮罩加载。常用于异步操作。
 class UiLoadingOverlay extends StatelessWidget {
-  const UiLoadingOverlay({
-    super.key,
-    this.message,
-    this.opacity = 0.32,
-  });
+  const UiLoadingOverlay({super.key, this.message, this.opacity = 0.32});
 
   final String? message;
   final double opacity;
@@ -81,11 +77,13 @@ class UiLoadingOverlay extends StatelessWidget {
     final colors = context.uiColors;
     final typography = context.uiType;
     return Container(
-      color: Colors.black.withValues(alpha: opacity),
+      color: colors.overlay.withValues(alpha: opacity),
       alignment: Alignment.center,
       child: Container(
         padding: const EdgeInsets.symmetric(
-            horizontal: UiSpacing.xl, vertical: UiSpacing.lg),
+          horizontal: UiSpacing.xl,
+          vertical: UiSpacing.lg,
+        ),
         decoration: BoxDecoration(
           color: colors.surfaceElevated,
           borderRadius: UiRadius.brLg,
@@ -96,9 +94,10 @@ class UiLoadingOverlay extends StatelessWidget {
             const UiLoader(size: UiLoaderSize.large),
             if (message != null) ...[
               const SizedBox(height: UiSpacing.md),
-              Text(message!,
-                  style:
-                      typography.callout.copyWith(color: colors.textPrimary)),
+              Text(
+                message!,
+                style: typography.callout.copyWith(color: colors.textPrimary),
+              ),
             ],
           ],
         ),

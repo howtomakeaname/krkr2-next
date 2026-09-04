@@ -41,8 +41,7 @@ class UiTabs extends StatelessWidget {
     // 指示器通过 `Align(widthFactor: 1/count)` 占据总宽度的 1/N，
     // 其横向位置由 Alignment.x ∈ [-1, 1] 根据选中索引线性映射；
     // 这样指示器的滑动不依赖对每个 tab 单独测量。
-    final double alignX =
-        count <= 1 ? 0 : (safeIndex / (count - 1)) * 2 - 1;
+    final double alignX = count <= 1 ? 0 : (safeIndex / (count - 1)) * 2 - 1;
 
     final tabRow = Row(
       mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
@@ -85,7 +84,7 @@ class UiTabs extends StatelessWidget {
                           borderRadius: UiRadius.brSm,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
+                              color: colors.overlay.withValues(alpha: 0.08),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -138,16 +137,19 @@ class _TabButton extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            horizontal: UiSpacing.md, vertical: UiSpacing.sm),
+          horizontal: UiSpacing.md,
+          vertical: UiSpacing.sm,
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (item.icon != null) ...[
-              Icon(item.icon,
-                  size: 16,
-                  color:
-                      isSelected ? colors.textPrimary : colors.textSecondary),
+              Icon(
+                item.icon,
+                size: 16,
+                color: isSelected ? colors.textPrimary : colors.textSecondary,
+              ),
               const SizedBox(width: UiSpacing.xs),
             ],
             // Flexible + ellipsis：在窄 Tab（等分 Expanded）里防止 1~2px
@@ -206,8 +208,9 @@ class UiTabView extends StatefulWidget {
 
 class _UiTabViewState extends State<UiTabView> {
   late int _index = widget.initialIndex;
-  late final PageController _controller =
-      PageController(initialPage: widget.initialIndex);
+  late final PageController _controller = PageController(
+    initialPage: widget.initialIndex,
+  );
 
   void _go(int i) {
     if (i == _index) return;
@@ -231,11 +234,7 @@ class _UiTabViewState extends State<UiTabView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        UiTabs(
-          items: widget.items,
-          selectedIndex: _index,
-          onChanged: _go,
-        ),
+        UiTabs(items: widget.items, selectedIndex: _index, onChanged: _go),
         const SizedBox(height: UiSpacing.md),
         Expanded(
           child: PageView.builder(
@@ -247,9 +246,7 @@ class _UiTabViewState extends State<UiTabView> {
             },
             itemBuilder: (context, i) {
               final child = widget.children[i];
-              return widget.keepAlive
-                  ? _KeepAliveWrapper(child: child)
-                  : child;
+              return widget.keepAlive ? _KeepAliveWrapper(child: child) : child;
             },
           ),
         ),

@@ -232,8 +232,7 @@ class _Header extends StatelessWidget {
           child: Center(
             child: Text(
               '${visible.year} 年 ${visible.month} 月',
-              style:
-                  typography.headline.copyWith(color: colors.textPrimary),
+              style: typography.headline.copyWith(color: colors.textPrimary),
             ),
           ),
         ),
@@ -258,23 +257,36 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     final typography = context.uiType;
-    String fmt(DateTime? d) =>
-        d == null ? '--' : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    String fmt(DateTime? d) => d == null
+        ? '--'
+        : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final days = (start != null && end != null)
         ? end!.difference(start!).inDays + 1
         : null;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _Chip(label: '起', value: fmt(start), colors: colors, typography: typography),
+        _Chip(
+          label: '起',
+          value: fmt(start),
+          colors: colors,
+          typography: typography,
+        ),
         const SizedBox(width: UiSpacing.sm),
         Icon(UiIcons.arrowRight, size: 14, color: colors.textTertiary),
         const SizedBox(width: UiSpacing.sm),
-        _Chip(label: '终', value: fmt(end), colors: colors, typography: typography),
+        _Chip(
+          label: '终',
+          value: fmt(end),
+          colors: colors,
+          typography: typography,
+        ),
         if (days != null) ...[
           const SizedBox(width: UiSpacing.md),
-          Text('· 共 $days 天',
-              style: typography.caption.copyWith(color: colors.textSecondary)),
+          Text(
+            '· 共 $days 天',
+            style: typography.caption.copyWith(color: colors.textSecondary),
+          ),
         ],
       ],
     );
@@ -297,7 +309,9 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: UiSpacing.sm, vertical: UiSpacing.xs),
+        horizontal: UiSpacing.sm,
+        vertical: UiSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: colors.groupedBackground,
         borderRadius: UiRadius.brSm,
@@ -305,12 +319,18 @@ class _Chip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style: typography.caption.copyWith(color: colors.textTertiary)),
+          Text(
+            label,
+            style: typography.caption.copyWith(color: colors.textTertiary),
+          ),
           const SizedBox(width: 4),
-          Text(value,
-              style: typography.body
-                  .copyWith(color: colors.textPrimary, fontSize: 13.0)),
+          Text(
+            value,
+            style: typography.body.copyWith(
+              color: colors.textPrimary,
+              fontSize: 13.0,
+            ),
+          ),
         ],
       ),
     );
@@ -400,17 +420,19 @@ class _MonthGrid extends StatelessWidget {
         continue;
       }
       final date = DateTime(visible.year, visible.month, day);
-      cells.add(_Cell(
-        date: date,
-        start: start,
-        end: end,
-        minDate: minDate,
-        maxDate: maxDate,
-        colors: colors,
-        typography: typography,
-        onTap: onTap,
-        onHover: onHover,
-      ));
+      cells.add(
+        _Cell(
+          date: date,
+          start: start,
+          end: end,
+          minDate: minDate,
+          maxDate: maxDate,
+          colors: colors,
+          typography: typography,
+          onTap: onTap,
+          onHover: onHover,
+        ),
+      );
     }
 
     return Column(
@@ -420,8 +442,7 @@ class _MonthGrid extends StatelessWidget {
             height: 40,
             child: Row(
               children: [
-                for (var c = 0; c < 7; c++)
-                  Expanded(child: cells[r * 7 + c]),
+                for (var c = 0; c < 7; c++) Expanded(child: cells[r * 7 + c]),
               ],
             ),
           ),
@@ -471,7 +492,8 @@ class _Cell extends StatelessWidget {
     final inRange = _inRange();
     final today = _sameDay(date, DateTime.now());
 
-    final disabled = (minDate != null && _d(date).isBefore(_d(minDate!))) ||
+    final disabled =
+        (minDate != null && _d(date).isBefore(_d(minDate!))) ||
         (maxDate != null && _d(date).isAfter(_d(maxDate!)));
 
     final bgRange = colors.brandSoft;
@@ -481,7 +503,7 @@ class _Cell extends StatelessWidget {
     if (disabled) {
       textColor = colors.textTertiary;
     } else if (isEdge) {
-      textColor = Colors.white;
+      textColor = colors.textOnBrand;
     } else if (inRange) {
       textColor = colors.brand;
     } else {
@@ -504,13 +526,20 @@ class _Cell extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (inRange && !isEdge)
-              Container(color: bgRange),
+            if (inRange && !isEdge) Container(color: bgRange),
             if (isEdge && bothEnds)
               Row(
                 children: [
-                  Expanded(child: Container(color: isLeft ? Colors.transparent : bgRange)),
-                  Expanded(child: Container(color: isRight ? Colors.transparent : bgRange)),
+                  Expanded(
+                    child: Container(
+                      color: isLeft ? Colors.transparent : bgRange,
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      color: isRight ? Colors.transparent : bgRange,
+                    ),
+                  ),
                 ],
               ),
             if (isEdge)
@@ -601,8 +630,7 @@ class _RangeSheetState extends State<_RangeSheet> {
                 child: UiButton(
                   label: widget.resetText,
                   variant: UiButtonVariant.secondary,
-                  onPressed: () =>
-                      setState(() => _range = const UiDateRange()),
+                  onPressed: () => setState(() => _range = const UiDateRange()),
                 ),
               ),
               const SizedBox(width: UiSpacing.md),

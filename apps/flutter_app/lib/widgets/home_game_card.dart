@@ -69,8 +69,8 @@ class HomeGameCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             _buildBackground(context),
-            _buildGradientOverlay(),
-            _buildTitleOverlay(),
+            _buildGradientOverlay(context),
+            _buildTitleOverlay(context),
           ],
         ),
       ),
@@ -108,8 +108,9 @@ class HomeGameCard extends StatelessWidget {
     );
   }
 
-  Widget _buildGradientOverlay() {
-    return const Positioned(
+  Widget _buildGradientOverlay(BuildContext context) {
+    final colors = context.uiColors;
+    return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
@@ -119,14 +120,18 @@ class HomeGameCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black54],
+            colors: [
+              Colors.transparent,
+              colors.overlay.withValues(alpha: 0.54),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTitleOverlay() {
+  Widget _buildTitleOverlay(BuildContext context) {
+    final colors = context.uiColors;
     final lastPlayed = game.lastPlayed;
     final totalSeconds = game.playDurationSeconds ?? 0;
     final hasDuration = totalSeconds >= 60;
@@ -140,8 +145,8 @@ class HomeGameCard extends StatelessWidget {
         children: [
           Text(
             game.displayTitle,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: colors.textOnBrand,
               fontSize: 13,
               fontWeight: FontWeight.w600,
               height: 1.2,
@@ -158,7 +163,7 @@ class HomeGameCard extends StatelessWidget {
                   l10n.playDuration(GameInfo.formatPlayDuration(totalSeconds)),
               ].join(' · '),
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: colors.textOnBrand.withValues(alpha: 0.6),
                 fontSize: 11,
               ),
             ),

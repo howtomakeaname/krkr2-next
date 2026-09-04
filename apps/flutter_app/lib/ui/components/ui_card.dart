@@ -39,7 +39,7 @@ class UiCard extends StatelessWidget {
         boxShadow: elevation > 0
             ? [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06 * elevation),
+                  color: colors.overlay.withValues(alpha: 0.06 * elevation),
                   blurRadius: 16 * elevation,
                   offset: Offset(0, 6 * elevation),
                 ),

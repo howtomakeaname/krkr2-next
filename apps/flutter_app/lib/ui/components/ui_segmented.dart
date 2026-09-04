@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../theme/ui_colors.dart';
 import '../theme/ui_metrics.dart';
 import '../theme/ui_theme.dart';
+import '../theme/ui_typography.dart';
 
 /// iOS 分段控制器选项。
 class UiSegmentedItem<T> {
-  const UiSegmentedItem({
-    required this.value,
-    required this.label,
-    this.icon,
-  });
+  const UiSegmentedItem({required this.value, required this.label, this.icon});
 
   final T value;
   final String label;
@@ -58,90 +56,97 @@ class UiSegmented<T> extends StatelessWidget {
           'ConstrainedBox 包裹它。',
         );
         return RepaintBoundary(
-          child: _buildContent(
-              colors, typography, count, safeIdx, alignX),
+          child: _buildContent(colors, typography, count, safeIdx, alignX),
         );
       },
     );
   }
 
   Widget _buildContent(
-      colors, typography, int count, int safeIdx, double alignX) {
+    UiColors colors,
+    UiTypography typography,
+    int count,
+    int safeIdx,
+    double alignX,
+  ) {
     return Container(
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: colors.groupedBackground,
-          borderRadius: UiRadius.brMd,
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedAlign(
-                duration: UiDuration.base,
-                curve: UiCurves.emphasized,
-                alignment: Alignment(alignX, 0),
-                child: FractionallySizedBox(
-                  widthFactor: 1 / count,
-                  heightFactor: 1,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colors.surfaceElevated,
-                      borderRadius: UiRadius.brSm,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: colors.groupedBackground,
+        borderRadius: UiRadius.brMd,
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: UiDuration.base,
+              curve: UiCurves.emphasized,
+              alignment: Alignment(alignX, 0),
+              child: FractionallySizedBox(
+                widthFactor: 1 / count,
+                heightFactor: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colors.surfaceElevated,
+                    borderRadius: UiRadius.brSm,
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.overlay.withValues(alpha: 0.08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-            Row(
-              children: [
-                for (var i = 0; i < count; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onChanged(items[i].value),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: UiSpacing.sm),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (items[i].icon != null) ...[
-                              Icon(items[i].icon,
-                                  size: 15,
-                                  color: i == safeIdx
-                                      ? colors.textPrimary
-                                      : colors.textSecondary),
-                              const SizedBox(width: 4),
-                            ],
-                            AnimatedDefaultTextStyle(
-                              duration: UiDuration.fast,
-                              style: typography.footnote.copyWith(
-                                color: i == safeIdx
-                                    ? colors.textPrimary
-                                    : colors.textSecondary,
-                                fontWeight: i == safeIdx
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                              ),
-                              child: Text(items[i].label),
+          ),
+          Row(
+            children: [
+              for (var i = 0; i < count; i++)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onChanged(items[i].value),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: UiSpacing.sm,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (items[i].icon != null) ...[
+                            Icon(
+                              items[i].icon,
+                              size: 15,
+                              color: i == safeIdx
+                                  ? colors.textPrimary
+                                  : colors.textSecondary,
                             ),
+                            const SizedBox(width: 4),
                           ],
-                        ),
+                          AnimatedDefaultTextStyle(
+                            duration: UiDuration.fast,
+                            style: typography.footnote.copyWith(
+                              color: i == safeIdx
+                                  ? colors.textPrimary
+                                  : colors.textSecondary,
+                              fontWeight: i == safeIdx
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
+                            child: Text(items[i].label),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-            ),
-          ],
-        ),
-      );
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

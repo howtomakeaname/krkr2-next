@@ -64,17 +64,18 @@ class UiSwitch extends StatelessWidget {
                 AnimatedAlign(
                   duration: UiDuration.base,
                   curve: UiCurves.emphasized,
-                  alignment:
-                      value ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: value
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Container(
                     width: _thumbSize,
                     height: _thumbSize,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: colors.textOnBrand,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
+                          color: colors.overlay.withValues(alpha: 0.15),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),

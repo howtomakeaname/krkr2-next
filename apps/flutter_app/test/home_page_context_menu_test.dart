@@ -10,6 +10,36 @@ import 'package:flutter_app/pages/home_page.dart';
 import 'package:flutter_app/ui/ui.dart';
 
 void main() {
+  testWidgets('home shell paints immediately without a full-screen loader', (
+    WidgetTester tester,
+  ) async {
+    final game = GameInfo(
+      path: '/games/test-game',
+      title: '测试游戏',
+      engine: GameEngine.krkr2,
+    );
+    SharedPreferences.setMockInitialValues({
+      'krkr2_game_list': GameInfo.listToJsonString([game]),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: UiTheme.dark(),
+        home: const HomePage(),
+      ),
+    );
+
+    expect(find.text('KrKr2 Next'), findsOneWidget);
+    expect(find.byType(UiLoader), findsNothing);
+    expect(find.byType(UiSkeleton), findsWidgets);
+
+    await tester.pumpAndSettle();
+    expect(find.text('测试游戏'), findsOneWidget);
+  });
+
   testWidgets('game context menu starts with launch and omits XP3 packing', (
     WidgetTester tester,
   ) async {

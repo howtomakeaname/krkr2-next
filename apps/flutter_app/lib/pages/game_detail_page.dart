@@ -385,6 +385,8 @@ class _GameDetailPageState extends State<GameDetailPage> {
       child: ValueListenableBuilder<double>(
         valueListenable: _toolbarCollapseProgress,
         builder: (context, progress, _) {
+          final colors = context.uiColors;
+          final isLight = Theme.of(context).brightness == Brightness.light;
           final backgroundProgress = Curves.easeOutCubic.transform(progress);
           final titleProgress = UiCurves.iosSmooth.transform(
             _intervalProgress(progress, 0.42, 1),
@@ -392,13 +394,22 @@ class _GameDetailPageState extends State<GameDetailPage> {
           final actionProgress = UiCurves.iosSmooth.transform(
             _intervalProgress(progress, 0.18, 0.92),
           );
+          final toolbarBackground = colors.background.withValues(
+            alpha: backgroundProgress,
+          );
+          final toolbarForeground = Color.lerp(
+            colors.textOnBrand,
+            colors.textPrimary,
+            backgroundProgress,
+          )!;
+          final overlayStyle = isLight && backgroundProgress >= 0.55
+              ? SystemUiOverlayStyle.dark
+              : SystemUiOverlayStyle.light;
 
           return AppBar(
-            backgroundColor: Colors.black.withValues(alpha: backgroundProgress),
-            systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
-              statusBarColor: Colors.black.withValues(
-                alpha: backgroundProgress,
-              ),
+            backgroundColor: toolbarBackground,
+            systemOverlayStyle: overlayStyle.copyWith(
+              statusBarColor: toolbarBackground,
             ),
             surfaceTintColor: Colors.transparent,
             elevation: 0,
@@ -406,8 +417,8 @@ class _GameDetailPageState extends State<GameDetailPage> {
             centerTitle: true,
             shape: Border(
               bottom: BorderSide(
-                color: Colors.white.withValues(
-                  alpha: 0.10 * backgroundProgress,
+                color: colors.separator.withValues(
+                  alpha: colors.separator.a * backgroundProgress,
                 ),
                 width: 0.5,
               ),
@@ -428,7 +439,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: context.uiType.headline.copyWith(
-                      color: Colors.white,
+                      color: toolbarForeground,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -461,6 +472,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   /// 顶部一块：高度由内容决定（卡片+标题+开发者），背景毛玻璃随该区域动态填充
   Widget _buildTopHeroSection() {
     final typography = context.uiType;
+    final colors = context.uiColors;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -482,12 +494,12 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   game.displayTitle,
                   style: typography.title2.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    shadows: const [
+                    color: colors.textOnBrand,
+                    shadows: [
                       Shadow(
-                        color: Color(0xB3000000),
+                        color: colors.overlay.withValues(alpha: 0.70),
                         blurRadius: 12,
-                        offset: Offset(0, 2),
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -502,13 +514,13 @@ class _GameDetailPageState extends State<GameDetailPage> {
                   child: Text(
                     game.developer!,
                     style: typography.body.copyWith(
-                      color: Colors.white.withValues(alpha: 0.82),
+                      color: colors.textOnBrand.withValues(alpha: 0.82),
                       fontWeight: FontWeight.w500,
-                      shadows: const [
+                      shadows: [
                         Shadow(
-                          color: Color(0x99000000),
+                          color: colors.overlay.withValues(alpha: 0.60),
                           blurRadius: 10,
-                          offset: Offset(0, 1),
+                          offset: const Offset(0, 1),
                         ),
                       ],
                     ),
@@ -530,6 +542,7 @@ class _GameDetailPageState extends State<GameDetailPage> {
   /// OHOS 上 BackdropFilter 偶尔采不到已经合成的下层图片，因此直接对
   /// 封面做 ImageFiltered，保证不同渲染后端下标题区域都有稳定的模糊度。
   Widget _buildBlurredBlock() {
+    final colors = context.uiColors;
     return _hasCover
         ? Stack(
             fit: StackFit.expand,
@@ -558,9 +571,9 @@ class _GameDetailPageState extends State<GameDetailPage> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: 0.48),
-                        Colors.black.withValues(alpha: 0.58),
-                        Colors.black.withValues(alpha: 0.78),
+                        colors.overlay.withValues(alpha: 0.48),
+                        colors.overlay.withValues(alpha: 0.58),
+                        colors.overlay.withValues(alpha: 0.78),
                       ],
                       stops: const [0, 0.58, 1],
                     ),
@@ -573,12 +586,17 @@ class _GameDetailPageState extends State<GameDetailPage> {
   }
 
   Widget _buildPlaceholderBackground() {
+    final colors = context.uiColors;
+    final opaqueScrim = colors.overlay.withValues(alpha: 1);
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF253047), Color(0xFF090B10)],
+          colors: [
+            Color.lerp(colors.brand, opaqueScrim, 0.58)!,
+            Color.lerp(colors.background, opaqueScrim, 0.82)!,
+          ],
         ),
       ),
     );
@@ -586,10 +604,11 @@ class _GameDetailPageState extends State<GameDetailPage> {
 
   /// 顶部居中卡片：仅封面
   Widget _buildTopCoverCard() {
+    final colors = context.uiColors;
     final height = _coverCardWidth / _coverCardAspectRatio;
     return Card(
       elevation: 12,
-      shadowColor: Colors.black.withValues(alpha: 0.4),
+      shadowColor: colors.overlay.withValues(alpha: 0.4),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: UiRadius.brLg),
       child: SizedBox(

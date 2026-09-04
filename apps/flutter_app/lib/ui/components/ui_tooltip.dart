@@ -33,13 +33,15 @@ class UiTooltip extends StatelessWidget {
       preferBelow: preferBelow,
       waitDuration: waitDuration,
       padding: const EdgeInsets.symmetric(
-          horizontal: UiSpacing.md, vertical: UiSpacing.sm),
+        horizontal: UiSpacing.md,
+        vertical: UiSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: colors.textPrimary.withValues(alpha: 0.92),
         borderRadius: UiRadius.brSm,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
+            color: colors.overlay.withValues(alpha: 0.16),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),

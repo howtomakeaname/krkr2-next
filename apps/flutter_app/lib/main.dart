@@ -1,23 +1,57 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'config/stats_base_url.dart' if (dart.library.io) 'config/stats_base_url_io.dart';
+import 'config/app_theme_mode.dart';
+import 'config/stats_base_url.dart'
+    if (dart.library.io) 'config/stats_base_url_io.dart';
+import 'constants/prefs_keys.dart';
 import 'l10n/app_localizations.dart';
 import 'pages/home_page.dart';
+import 'services/app_theme_platform.dart';
 import 'services/first_open_analytics.dart';
 import 'ui/ui.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  FirstOpenAnalytics.reportIfNeeded(
-    baseUrl: statsBaseUrl,
-    version: '1.0.0',
+
+  Locale? initialLocale;
+  var initialThemeCode = AppThemeMode.defaultCode;
+  var initialThemeMode = ThemeMode.dark;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final localeCode = prefs.getString(PrefsKeys.locale);
+    if (localeCode != null && localeCode != 'system') {
+      initialLocale = Locale(localeCode);
+    }
+    initialThemeCode = AppThemeMode.normalize(
+      prefs.getString(PrefsKeys.themeMode),
+    );
+    initialThemeMode = AppThemeMode.fromCode(initialThemeCode);
+  } catch (error) {
+    debugPrint('Failed to load initial app preferences: $error');
+  }
+
+  await AppThemePlatform.apply(initialThemeCode);
+
+  unawaited(
+    FirstOpenAnalytics.reportIfNeeded(baseUrl: statsBaseUrl, version: '1.0.0'),
   );
-  runApp(const Krkr2App());
+  runApp(
+    Krkr2App(initialLocale: initialLocale, initialThemeMode: initialThemeMode),
+  );
 }
 
 class Krkr2App extends StatefulWidget {
-  const Krkr2App({super.key});
+  const Krkr2App({
+    super.key,
+    this.initialLocale,
+    this.initialThemeMode = ThemeMode.dark,
+  });
+
+  final Locale? initialLocale;
+  final ThemeMode initialThemeMode;
 
   /// Change the app locale at runtime. Pass null to follow system default.
   static void setLocale(BuildContext context, Locale? locale) {
@@ -36,47 +70,16 @@ class Krkr2App extends StatefulWidget {
 }
 
 class _Krkr2AppState extends State<Krkr2App> {
-  static const String _localeKey = 'krkr2_locale';
-  static const String _themeModeKey = 'krkr2_theme_mode';
-  Locale? _locale; // null = follow system
-  ThemeMode _themeMode = ThemeMode.dark; // default to dark
-
-  final UiThemeController _uiTheme = UiThemeController(
-    seed: UiSeedPalette.pink,
-    mode: ThemeMode.dark,
-  );
+  late Locale? _locale;
+  late ThemeMode _themeMode;
+  late final UiThemeController _uiTheme;
 
   @override
   void initState() {
     super.initState();
-    _loadLocale();
-    _loadThemeMode();
-  }
-
-  Future<void> _loadLocale() async {
-    final prefs = await SharedPreferences.getInstance();
-    final code = prefs.getString(_localeKey);
-    if (code != null && code != 'system' && mounted) {
-      setState(() => _locale = Locale(code));
-    }
-  }
-
-  Future<void> _loadThemeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final mode = prefs.getString(_themeModeKey);
-    if (mode != null && mounted) {
-      setState(() {
-        switch (mode) {
-          case 'light':
-            _themeMode = ThemeMode.light;
-          case 'dark':
-            _themeMode = ThemeMode.dark;
-          default:
-            _themeMode = ThemeMode.dark;
-        }
-      });
-      _uiTheme.updateMode(_themeMode);
-    }
+    _locale = widget.initialLocale;
+    _themeMode = widget.initialThemeMode;
+    _uiTheme = UiThemeController(seed: UiSeedPalette.pink, mode: _themeMode);
   }
 
   void _setLocale(Locale? locale) {

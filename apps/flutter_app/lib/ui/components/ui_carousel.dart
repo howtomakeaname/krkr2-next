@@ -114,10 +114,7 @@ class _UiCarouselState extends State<UiCarousel> {
           padding: EdgeInsets.symmetric(
             horizontal: widget.viewportFraction < 1 ? UiSpacing.xs : 0,
           ),
-          child: ClipRRect(
-            borderRadius: widget.borderRadius,
-            child: item,
-          ),
+          child: ClipRRect(borderRadius: widget.borderRadius, child: item),
         );
       },
     );
@@ -144,7 +141,7 @@ class _UiCarouselState extends State<UiCarousel> {
                 count: widget.items.length,
                 current: _realIndex,
                 brand: colors.brand,
-                background: Colors.white.withValues(alpha: 0.7),
+                background: colors.textOnBrand.withValues(alpha: 0.7),
               ),
             ),
           if (widget.indicator == UiCarouselIndicator.counter &&
@@ -154,14 +151,16 @@ class _UiCarouselState extends State<UiCarousel> {
               bottom: 10,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
+                  color: colors.overlay.withValues(alpha: 0.45),
                   borderRadius: UiRadius.brPill,
                 ),
                 child: Text(
                   '${_realIndex + 1}/${widget.items.length}',
-                  style: typography.caption.copyWith(color: Colors.white),
+                  style: typography.caption.copyWith(color: colors.textOnBrand),
                 ),
               ),
             ),

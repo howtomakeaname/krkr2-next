@@ -23,13 +23,11 @@ class UiSkeleton extends StatefulWidget {
   });
 
   /// 圆形占位（如头像）。
-  const UiSkeleton.circle({
-    super.key,
-    required double size,
-  })  : width = size,
-        height = size,
-        borderRadius = UiRadius.brPill,
-        shape = BoxShape.circle;
+  const UiSkeleton.circle({super.key, required double size})
+    : width = size,
+      height = size,
+      borderRadius = UiRadius.brPill,
+      shape = BoxShape.circle;
 
   final double? width;
   final double height;
@@ -57,7 +55,10 @@ class _UiSkeletonState extends State<UiSkeleton>
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     final base = colors.shimmer;
-    final highlight = Color.lerp(base, Colors.white, 0.5) ?? base;
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final highlightTarget = isLight ? colors.surface : colors.textPrimary;
+    final highlight =
+        Color.lerp(base, highlightTarget, isLight ? 0.72 : 0.18) ?? base;
 
     return AnimatedBuilder(
       animation: _controller,
@@ -79,8 +80,9 @@ class _UiSkeletonState extends State<UiSkeleton>
             decoration: BoxDecoration(
               color: base,
               shape: widget.shape,
-              borderRadius:
-                  widget.shape == BoxShape.rectangle ? widget.borderRadius : null,
+              borderRadius: widget.shape == BoxShape.rectangle
+                  ? widget.borderRadius
+                  : null,
             ),
           ),
         );

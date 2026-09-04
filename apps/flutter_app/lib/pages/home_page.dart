@@ -38,6 +38,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GameManager _gameManager = GameManager();
   final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   bool _loading = true;
+  bool _startupScanInProgress = false;
   String? _iosGamesDir;
   // OHOS: sandbox path of Download/<bundleName>/games (and its short label
   // for UI copy). Users drop whole game folders here with the file manager.
@@ -114,7 +115,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // without making the user pull to refresh.
     if (state == AppLifecycleState.resumed &&
         Platform.operatingSystem == 'ohos' &&
-        !_loading) {
+        !_loading &&
+        !_startupScanInProgress) {
       unawaited(_refreshOhosGames(silent: true));
     }
   }
@@ -147,16 +149,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       legacyForceLandscape: prefs.getBool(PrefsKeys.forceLandscape),
     );
     await _gameManager.load();
-    await _gameManager.applyPendingPlaySession();
+    if (!mounted) return;
 
-    if (Platform.isIOS) {
-      await _initIosGamesDir();
-    } else if (Platform.operatingSystem == 'ohos') {
-      await _initOhosGamesDir();
-      await _scanOhosGamesDir();
+    final needsStartupScan =
+        Platform.isIOS || Platform.operatingSystem == 'ohos';
+    setState(() {
+      _loading = false;
+      _startupScanInProgress = needsStartupScan;
+    });
+
+    // Restore the persisted library first so the home shell and existing
+    // cards can paint immediately. File-system discovery is non-critical and
+    // starts only after that frame has reached the screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_finishStartupTasks());
+    });
+  }
+
+  Future<void> _finishStartupTasks() async {
+    try {
+      await _gameManager.applyPendingPlaySession();
+      if (Platform.isIOS) {
+        await _initIosGamesDir();
+      } else if (Platform.operatingSystem == 'ohos') {
+        await _initOhosGamesDir();
+        await _scanOhosGamesDir();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Background home initialization failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      if (mounted) {
+        setState(() => _startupScanInProgress = false);
+      }
     }
-
-    if (mounted) setState(() => _loading = false);
   }
 
   /// OHOS: resolve (and on first run create) `Download/<bundleName>/games/`.
@@ -1508,7 +1534,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           ),
-          if (isDesktop)
+          if (isDesktop && !_loading)
             Tooltip(
               message: _engineMode == EngineMode.builtIn
                   ? (_builtInAvailable
@@ -1532,69 +1558,91 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Builder(
               builder: (btnContext) => UiButton.icon(
                 icon: LucideIcons.plus,
-                onPressed: () {
-                  _addGame(anchor: UiPopupMenu.rectOf(btnContext));
-                },
+                onPressed: _loading
+                    ? null
+                    : () {
+                        _addGame(anchor: UiPopupMenu.rectOf(btnContext));
+                      },
               ),
             ),
-          UiButton.icon(icon: LucideIcons.settings, onPressed: _openSettings),
+          UiButton.icon(
+            icon: LucideIcons.settings,
+            onPressed: _loading ? null : _openSettings,
+          ),
         ],
       ),
     );
 
-    Widget content = CustomScrollView(
-      slivers: [
-        if (_restartDeferred)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            sliver: SliverToBoxAdapter(
-              child: UiBanner(
-                tone: UiBannerTone.warning,
-                message: l10n.restartPendingBanner,
-                actionLabel: l10n.restartNow,
-                onAction: restartKrkr2App,
+    final showLibrarySkeleton =
+        _loading || (_startupScanInProgress && games.isEmpty);
+    Widget content;
+    if (showLibrarySkeleton) {
+      content = _buildLibrarySkeleton();
+    } else {
+      content = CustomScrollView(
+        slivers: [
+          if (_restartDeferred)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              sliver: SliverToBoxAdapter(
+                child: UiBanner(
+                  tone: UiBannerTone.warning,
+                  message: l10n.restartPendingBanner,
+                  actionLabel: l10n.restartNow,
+                  onAction: restartKrkr2App,
+                ),
               ),
             ),
-          ),
-        if (games.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _buildEmptyState(l10n),
-          )
-        else
-          _buildGameGrid(games, l10n),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-      ],
-    );
-    if (canPullRefresh) {
-      content = UiPullRefresh(
-        pullingText: l10n.pullToRefresh,
-        readyText: l10n.releaseToRefresh,
-        refreshingText: l10n.refreshing,
-        doneText: l10n.refreshDone,
-        onRefresh: () async {
-          if (isOhos) {
-            await _refreshOhosGames();
-          } else {
-            await _scanIosGamesDir();
-            if (mounted) setState(() {});
-          }
-        },
-        child: content,
+          if (games.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(l10n),
+            )
+          else
+            _buildGameGrid(games, l10n),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+        ],
       );
+      if (canPullRefresh && !_startupScanInProgress) {
+        content = UiPullRefresh(
+          pullingText: l10n.pullToRefresh,
+          readyText: l10n.releaseToRefresh,
+          refreshingText: l10n.refreshing,
+          doneText: l10n.refreshDone,
+          onRefresh: () async {
+            if (isOhos) {
+              await _refreshOhosGames();
+            } else {
+              await _scanIosGamesDir();
+              if (mounted) setState(() {});
+            }
+          },
+          child: content,
+        );
+      }
     }
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: _loading
-          ? const Center(child: UiLoader())
-          : Column(
-              children: [
-                header,
-                Expanded(child: content),
-              ],
+      body: Column(
+        children: [
+          header,
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: UiDuration.fast,
+              switchInCurve: UiCurves.iosSmooth,
+              switchOutCurve: UiCurves.iosSmooth,
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: KeyedSubtree(
+                key: ValueKey<bool>(showLibrarySkeleton),
+                child: content,
+              ),
             ),
-      floatingActionButton: Platform.isIOS
+          ),
+        ],
+      ),
+      floatingActionButton: Platform.isIOS && !_loading
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1645,6 +1693,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       description: description,
       actionLabel: Platform.isIOS ? l10n.howToImport : l10n.addGame,
       onAction: Platform.isIOS ? _showIosImportGuide : _addGame,
+    );
+  }
+
+  Widget _buildLibrarySkeleton() {
+    return CustomScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: [
+        SliverLayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = _gridCrossAxisCount(
+              constraints.crossAxisExtent,
+            );
+            return SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 3 / 4,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => LayoutBuilder(
+                    builder: (context, constraints) => UiSkeleton(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      borderRadius: UiRadius.brLg,
+                    ),
+                  ),
+                  childCount: crossAxisCount * 2,
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

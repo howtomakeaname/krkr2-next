@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ui_metrics.dart';
+import '../theme/ui_theme.dart';
 
 /// 可缩放 / 可拖拽的图片查看器。
 ///
@@ -40,19 +41,20 @@ class UiImageViewer extends StatefulWidget {
     double maxScale = 4,
     Object Function(int index)? heroTagBuilder,
   }) {
+    final colors = context.uiColors;
     return Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
         opaque: false,
-        barrierColor: Colors.black,
+        barrierColor: colors.overlay.withValues(alpha: 1),
         transitionDuration: UiDuration.base,
         reverseTransitionDuration: UiDuration.base,
-        pageBuilder: (_, __, ___) => UiImageViewer(
+        pageBuilder: (_, _, _) => UiImageViewer(
           images: images,
           initialIndex: initialIndex,
           maxScale: maxScale,
           heroTagBuilder: heroTagBuilder,
         ),
-        transitionsBuilder: (_, a, __, child) =>
+        transitionsBuilder: (_, a, _, child) =>
             FadeTransition(opacity: a, child: child),
       ),
     );
@@ -64,8 +66,9 @@ class UiImageViewer extends StatefulWidget {
 
 class _UiImageViewerState extends State<UiImageViewer> {
   late int _index = widget.initialIndex;
-  late final PageController _pc =
-      PageController(initialPage: widget.initialIndex);
+  late final PageController _pc = PageController(
+    initialPage: widget.initialIndex,
+  );
 
   @override
   void dispose() {
@@ -75,10 +78,11 @@ class _UiImageViewerState extends State<UiImageViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: colors.overlay.withValues(alpha: 1),
         body: SafeArea(
           child: Stack(
             children: [
@@ -94,7 +98,10 @@ class _UiImageViewerState extends State<UiImageViewer> {
                       onDismiss: () => Navigator.of(context).maybePop(),
                     );
                     if (widget.heroTagBuilder != null) {
-                      child = Hero(tag: widget.heroTagBuilder!(i), child: child);
+                      child = Hero(
+                        tag: widget.heroTagBuilder!(i),
+                        child: child,
+                      );
                     }
                     return child;
                   },
@@ -119,13 +126,13 @@ class _UiImageViewerState extends State<UiImageViewer> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: colors.textOnBrand.withValues(alpha: 0.2),
                           borderRadius: UiRadius.brPill,
                         ),
                         child: Text(
                           '${_index + 1}/${widget.images.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: colors.textOnBrand,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -176,30 +183,35 @@ class _ZoomableImageState extends State<_ZoomableImage>
 
   void _handleDoubleTap() {
     final end = _tc.value.isIdentity() ? _zoomedMatrix() : Matrix4.identity();
-    _anim = Matrix4Tween(begin: _tc.value, end: end).animate(
-      CurvedAnimation(parent: _ac, curve: UiCurves.emphasized),
-    )..addListener(() {
-        _tc.value = _anim!.value;
-      });
+    _anim =
+        Matrix4Tween(begin: _tc.value, end: end).animate(
+          CurvedAnimation(parent: _ac, curve: UiCurves.emphasized),
+        )..addListener(() {
+          _tc.value = _anim!.value;
+        });
     _ac
       ..reset()
       ..forward();
   }
 
   Matrix4 _zoomedMatrix() {
-    final pos = _doubleTapDetails?.localPosition ??
-        Offset(MediaQuery.sizeOf(context).width / 2,
-            MediaQuery.sizeOf(context).height / 2);
+    final pos =
+        _doubleTapDetails?.localPosition ??
+        Offset(
+          MediaQuery.sizeOf(context).width / 2,
+          MediaQuery.sizeOf(context).height / 2,
+        );
     const scale = 2.5;
     final x = -pos.dx * (scale - 1);
     final y = -pos.dy * (scale - 1);
     return Matrix4.identity()
-      ..translate(x, y)
-      ..scale(scale);
+      ..translateByDouble(x, y, 0, 1)
+      ..scaleByDouble(scale, scale, scale, 1);
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return GestureDetector(
       onDoubleTapDown: (d) => _doubleTapDetails = d,
       onDoubleTap: _handleDoubleTap,
@@ -212,9 +224,9 @@ class _ZoomableImageState extends State<_ZoomableImage>
           child: Image(
             image: widget.image,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Icon(
+            errorBuilder: (_, _, _) => Icon(
               Icons.broken_image_outlined,
-              color: Colors.white,
+              color: colors.textOnBrand,
               size: 48,
             ),
           ),
@@ -231,8 +243,9 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return Material(
-      color: Colors.white.withValues(alpha: 0.2),
+      color: colors.textOnBrand.withValues(alpha: 0.2),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -240,7 +253,7 @@ class _RoundIconButton extends StatelessWidget {
         child: SizedBox(
           width: 36,
           height: 36,
-          child: Icon(icon, color: Colors.white, size: 22),
+          child: Icon(icon, color: colors.textOnBrand, size: 22),
         ),
       ),
     );
