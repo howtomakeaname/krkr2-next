@@ -271,10 +271,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (added > 0 || !silent) setState(() {});
     if (silent) return;
     final l10n = AppLocalizations.of(context)!;
-    UiSnackbar.show(
+    UiToast.show(
       context,
       message: added > 0 ? l10n.gamesImported(added) : l10n.noNewGamesFound,
-      type: added > 0 ? UiSnackbarType.success : UiSnackbarType.info,
+      type: added > 0 ? UiToastType.success : UiToastType.info,
     );
   }
 
@@ -867,12 +867,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ..sort();
     if (!mounted) return;
     if (fresh.isEmpty) {
-      UiSnackbar.show(
+      UiToast.show(
         context,
         message: candidates.isEmpty
             ? l10n.noGamesFoundInSandbox
             : l10n.allSandboxGamesRegistered,
-        type: UiSnackbarType.info,
+        type: UiToastType.info,
       );
       return;
     }
