@@ -103,6 +103,7 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     final graphicsApi = _parseGraphicsApi(widget.rendererInfo);
     final fpsText = _formatNumber(_fps);
     final averageFrameText = _formatNumber(_averageFrameMs, suffix: ' ms');
@@ -110,6 +111,26 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
     final engineText =
         '${widget.engineName} / ${_shortGraphicsApi(graphicsApi)}';
     final pacingText = _shortPacingMode(widget.pacingMode);
+    final secondaryStyle = TextStyle(
+      color: colors.textOnBrand.withValues(alpha: 0.55),
+      fontSize: 8.5,
+      fontFamily: 'monospace',
+      fontWeight: FontWeight.w500,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      letterSpacing: 0.1,
+      height: 1.25,
+      decoration: TextDecoration.none,
+    );
+    final valueStyle = TextStyle(
+      color: colors.textOnBrand.withValues(alpha: 0.82),
+      fontSize: 9,
+      fontFamily: 'monospace',
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+      height: 1.2,
+      decoration: TextDecoration.none,
+    );
+    final detailStyle = secondaryStyle.copyWith(fontSize: 8);
 
     return Positioned(
       left: UiSpacing.md,
@@ -129,17 +150,17 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
                 width: 148,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xD91C1C1E),
+                  color: colors.overlay.withValues(alpha: 0.85),
                   borderRadius: UiRadius.brSm,
                   border: Border.all(
-                    color: const Color(0x24FFFFFF),
+                    color: colors.textOnBrand.withValues(alpha: 0.14),
                     width: 0.5,
                   ),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x2E000000),
+                      color: colors.overlay.withValues(alpha: 0.18),
                       blurRadius: 8,
-                      offset: Offset(0, 2),
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -153,27 +174,27 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
                       children: [
                         Text(
                           fpsText,
-                          style: const TextStyle(
-                            color: Color(0xFFF2F2F7),
+                          style: TextStyle(
+                            color: colors.textOnBrand.withValues(alpha: 0.95),
                             fontSize: 11.5,
                             fontFamily: 'monospace',
                             fontWeight: FontWeight.w700,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                            fontFeatures: const [FontFeature.tabularFigures()],
                             height: 1.15,
                             decoration: TextDecoration.none,
                           ),
                         ),
-                        const Text(' fps', style: _secondaryStyle),
+                        Text(' fps', style: secondaryStyle),
                         const Spacer(),
-                        Text(averageFrameText, style: _valueStyle),
+                        Text(averageFrameText, style: valueStyle),
                       ],
                     ),
                     const SizedBox(height: 1),
                     Row(
                       children: [
-                        Text('p95 $p95FrameText', style: _secondaryStyle),
+                        Text('p95 $p95FrameText', style: secondaryStyle),
                         const Spacer(),
-                        Text(pacingText, style: _detailStyle),
+                        Text(pacingText, style: detailStyle),
                       ],
                     ),
                     const SizedBox(height: 1),
@@ -182,7 +203,7 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
                       maxLines: 1,
                       overflow: TextOverflow.fade,
                       softWrap: false,
-                      style: _detailStyle,
+                      style: detailStyle,
                     ),
                   ],
                 ),
@@ -194,34 +215,3 @@ class EnginePerformanceOverlayState extends State<EnginePerformanceOverlay> {
     );
   }
 }
-
-const _secondaryStyle = TextStyle(
-  color: Color(0xFF8E8E93),
-  fontSize: 8.5,
-  fontFamily: 'monospace',
-  fontWeight: FontWeight.w500,
-  fontFeatures: [FontFeature.tabularFigures()],
-  letterSpacing: 0.1,
-  height: 1.25,
-  decoration: TextDecoration.none,
-);
-
-const _valueStyle = TextStyle(
-  color: Color(0xFFD1D1D6),
-  fontSize: 9,
-  fontFamily: 'monospace',
-  fontWeight: FontWeight.w600,
-  fontFeatures: [FontFeature.tabularFigures()],
-  height: 1.2,
-  decoration: TextDecoration.none,
-);
-
-const _detailStyle = TextStyle(
-  color: Color(0xFF8E8E93),
-  fontSize: 8,
-  fontFamily: 'monospace',
-  fontWeight: FontWeight.w500,
-  letterSpacing: 0.05,
-  height: 1.25,
-  decoration: TextDecoration.none,
-);

@@ -30,11 +30,9 @@ class UiBottomSheet {
       isScrollControlled: isScrollControlled,
       isDismissible: barrierDismissible,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      barrierColor: context.uiColors.overlay,
       useSafeArea: true,
-      constraints: BoxConstraints(
-        maxWidth: maxWidth ?? 560,
-      ),
+      constraints: BoxConstraints(maxWidth: maxWidth ?? 560),
       builder: (ctx) => _SheetView(
         title: title,
         showHandle: showHandle,
@@ -72,7 +70,7 @@ class _SheetView extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: UiRadius.xxl),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.16),
+              color: colors.overlay.withValues(alpha: 0.16),
               blurRadius: 32,
               offset: const Offset(0, -8),
             ),
@@ -97,14 +95,19 @@ class _SheetView extends StatelessWidget {
             if (title != null || showCloseButton)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    UiSpacing.xl, UiSpacing.md, UiSpacing.sm, UiSpacing.sm),
+                  UiSpacing.xl,
+                  UiSpacing.md,
+                  UiSpacing.sm,
+                  UiSpacing.sm,
+                ),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         title ?? '',
-                        style: typography.title3
-                            .copyWith(color: colors.textPrimary),
+                        style: typography.title3.copyWith(
+                          color: colors.textPrimary,
+                        ),
                       ),
                     ),
                     if (showCloseButton)
@@ -120,7 +123,11 @@ class _SheetView extends StatelessWidget {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
-                    UiSpacing.xl, UiSpacing.sm, UiSpacing.xl, UiSpacing.xl),
+                  UiSpacing.xl,
+                  UiSpacing.sm,
+                  UiSpacing.xl,
+                  UiSpacing.xl,
+                ),
                 child: child,
               ),
             ),

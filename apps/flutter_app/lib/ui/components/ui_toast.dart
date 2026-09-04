@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/ui_colors.dart';
 import '../theme/ui_metrics.dart';
 import '../theme/ui_theme.dart';
 import 'ui_icon.dart';
@@ -63,8 +64,10 @@ class _ToastViewState extends State<_ToastView>
     vsync: this,
     duration: UiDuration.base,
   );
-  late final Animation<double> _opacity =
-      CurvedAnimation(parent: _controller, curve: UiCurves.standard);
+  late final Animation<double> _opacity = CurvedAnimation(
+    parent: _controller,
+    curve: UiCurves.standard,
+  );
   late final Animation<Offset> _offset = Tween<Offset>(
     begin: const Offset(0, 0.25),
     end: Offset.zero,
@@ -89,7 +92,7 @@ class _ToastViewState extends State<_ToastView>
     super.dispose();
   }
 
-  (IconData, Color) _decor(colors) {
+  (IconData, Color) _decor(UiColors colors) {
     switch (widget.type) {
       case UiToastType.success:
         return (UiIcons.success, colors.success);
@@ -123,13 +126,15 @@ class _ToastViewState extends State<_ToastView>
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: UiSpacing.lg, vertical: UiSpacing.md),
+                      horizontal: UiSpacing.lg,
+                      vertical: UiSpacing.md,
+                    ),
                     decoration: BoxDecoration(
                       color: colors.surfaceElevated,
                       borderRadius: UiRadius.brLg,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
+                          color: colors.overlay.withValues(alpha: 0.18),
                           blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
@@ -143,8 +148,9 @@ class _ToastViewState extends State<_ToastView>
                         Flexible(
                           child: Text(
                             widget.message,
-                            style: typography.callout
-                                .copyWith(color: colors.textPrimary),
+                            style: typography.callout.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                         ),
                       ],

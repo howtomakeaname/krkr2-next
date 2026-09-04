@@ -1459,79 +1459,105 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final bool surfaceActive = _phase == _EnginePhase.running;
     final l10n = AppLocalizations.of(context)!;
+    final colors = context.uiColors;
+    final usesDarkMediaSurface =
+        surfaceActive ||
+        (_phase != _EnginePhase.error && _bootCoverFile != null);
+    final appIsLight = Theme.of(context).brightness == Brightness.light;
+    final systemBarColor = usesDarkMediaSurface
+        ? colors.overlay.withValues(alpha: 1)
+        : colors.background;
+    final systemOverlayStyle =
+        (usesDarkMediaSurface || !appIsLight
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark)
+            .copyWith(
+              statusBarColor: systemBarColor,
+              systemNavigationBarColor: systemBarColor,
+            );
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        _handleSystemBack();
-      },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Full-screen engine surface
-            Positioned.fill(
-              child: _phase == _EnginePhase.error
-                  ? _buildErrorView()
-                  : _phase == _EnginePhase.running
-                  ? EngineSurface(
-                      key: _surfaceKey,
-                      bridge: _bridge,
-                      active: surfaceActive,
-                      surfaceMode: EngineSurfaceMode.gpuZeroCopy,
-                      externalTickDriven: _isTicking,
-                      onLog: (msg) => _log('surface: $msg'),
-                      onError: (msg) => _log('surface error: $msg'),
-                    )
-                  : _buildBootLogView(),
-            ),
-
-            // Performance overlay (top-left)
-            if (_showPerfOverlay && _phase == _EnginePhase.running)
-              EnginePerformanceOverlay(
-                key: _perfOverlayKey0,
-                rendererInfo: _rendererInfo,
-                engineName: _engine.label,
-                pacingMode: _fpsLimitEnabled
-                    ? 'Cap $_targetFps FPS'
-                    : Platform.operatingSystem == 'ohos'
-                    ? 'DisplaySync'
-                    : 'VSync',
-                hidden: _showOverlay,
-              ),
-
-            if (_showOverlay && _phase == _EnginePhase.running)
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: systemOverlayStyle,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _handleSystemBack();
+        },
+        child: Scaffold(
+          // The live engine canvas is always black; pre-game and error states
+          // use the selected application theme.
+          backgroundColor: surfaceActive
+              ? colors.overlay.withValues(alpha: 1)
+              : colors.background,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Full-screen engine surface
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _toggleOverlay,
-                ),
+                child: _phase == _EnginePhase.error
+                    ? _buildErrorView()
+                    : _phase == _EnginePhase.running
+                    ? EngineSurface(
+                        key: _surfaceKey,
+                        bridge: _bridge,
+                        active: surfaceActive,
+                        surfaceMode: EngineSurfaceMode.gpuZeroCopy,
+                        externalTickDriven: _isTicking,
+                        onLog: (msg) => _log('surface: $msg'),
+                        onError: (msg) => _log('surface error: $msg'),
+                      )
+                    : _buildBootLogView(),
               ),
 
-            // Floating game controls — only while the game is up.
-            if (_phase == _EnginePhase.running)
-              Positioned(
-                right: 16,
-                top: MediaQuery.paddingOf(context).top + 8,
-                child: _GameControls(
-                  expanded: _showOverlay,
-                  debugVisible: _showDebug,
-                  ticking: _isTicking,
-                  showRotate: PrefsKeys.orientationSupported,
-                  showDebugLabel: _showDebug ? l10n.hideDebug : l10n.showDebug,
-                  pauseLabel: _isTicking ? l10n.pause : l10n.resume,
-                  rotateLabel: l10n.rotateScreen,
-                  exitLabel: l10n.exitGame,
-                  onToggle: _toggleOverlay,
-                  onDebug: () => _selectGameMenuAction(_GameMenuAction.debug),
-                  onPause: () => _selectGameMenuAction(_GameMenuAction.pause),
-                  onRotate: () => _selectGameMenuAction(_GameMenuAction.rotate),
-                  onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
+              // Performance overlay (top-left)
+              if (_showPerfOverlay && _phase == _EnginePhase.running)
+                EnginePerformanceOverlay(
+                  key: _perfOverlayKey0,
+                  rendererInfo: _rendererInfo,
+                  engineName: _engine.label,
+                  pacingMode: _fpsLimitEnabled
+                      ? 'Cap $_targetFps FPS'
+                      : Platform.operatingSystem == 'ohos'
+                      ? 'DisplaySync'
+                      : 'VSync',
+                  hidden: _showOverlay,
                 ),
-              ),
-          ],
+
+              if (_showOverlay && _phase == _EnginePhase.running)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleOverlay,
+                  ),
+                ),
+
+              // Floating game controls — only while the game is up.
+              if (_phase == _EnginePhase.running)
+                Positioned(
+                  right: 16,
+                  top: MediaQuery.paddingOf(context).top + 8,
+                  child: _GameControls(
+                    expanded: _showOverlay,
+                    debugVisible: _showDebug,
+                    ticking: _isTicking,
+                    showRotate: PrefsKeys.orientationSupported,
+                    showDebugLabel: _showDebug
+                        ? l10n.hideDebug
+                        : l10n.showDebug,
+                    pauseLabel: _isTicking ? l10n.pause : l10n.resume,
+                    rotateLabel: l10n.rotateScreen,
+                    exitLabel: l10n.exitGame,
+                    onToggle: _toggleOverlay,
+                    onDebug: () => _selectGameMenuAction(_GameMenuAction.debug),
+                    onPause: () => _selectGameMenuAction(_GameMenuAction.pause),
+                    onRotate: () =>
+                        _selectGameMenuAction(_GameMenuAction.rotate),
+                    onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1565,7 +1591,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 
   /// 当前步骤从下方刷入、旧步骤向上刷出。
-  Widget _buildBootStepTicker(String label) {
+  Widget _buildBootStepTicker(String label, Color foreground) {
     return ClipRect(
       child: SizedBox(
         height: 28,
@@ -1599,8 +1625,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
             label,
             key: ValueKey<String>(label),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: foreground,
               fontSize: 16,
               fontWeight: FontWeight.w600,
               height: 1.2,
@@ -1618,6 +1644,17 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         MediaQuery.orientationOf(context) == Orientation.landscape;
     final reversedLogs = _logs.reversed.toList();
     final step = _bootStep;
+    final colors = context.uiColors;
+    final foreground = cover == null ? colors.textPrimary : colors.textOnBrand;
+    final secondaryForeground = cover == null
+        ? colors.textSecondary
+        : colors.textOnBrand.withValues(alpha: 0.72);
+    final logSurface = cover == null
+        ? colors.surfaceElevated
+        : colors.overlay.withValues(alpha: 0.50);
+    final logBorder = cover == null
+        ? colors.border
+        : colors.textOnBrand.withValues(alpha: 0.12);
     final stepLabels = [
       l10n.gamePreparingEngine,
       l10n.gameOpening,
@@ -1637,7 +1674,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const ColoredBox(color: Color(0xFF0C0C0F)),
+        ColoredBox(color: colors.background),
         if (cover != null)
           ClipRect(
             child: ImageFiltered(
@@ -1653,16 +1690,21 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
               ),
             ),
           ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xC2000000), Color(0xA8000000), Color(0xD6000000)],
-              stops: [0, 0.5, 1],
+        if (cover != null)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colors.overlay.withValues(alpha: 0.76),
+                  colors.overlay.withValues(alpha: 0.66),
+                  colors.overlay.withValues(alpha: 0.84),
+                ],
+                stops: const [0, 0.5, 1],
+              ),
             ),
           ),
-        ),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
@@ -1704,8 +1746,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: foreground,
                               fontSize: 22,
                               fontWeight: FontWeight.w600,
                               height: 1.25,
@@ -1715,18 +1757,18 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                           Text(
                             l10n.gameEngine(_engine.label),
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.72),
+                              color: secondaryForeground,
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: UiSpacing.xl),
-                          const UiLoader(
+                          UiLoader(
                             size: UiLoaderSize.medium,
-                            color: Colors.white,
+                            color: foreground,
                           ),
                           const SizedBox(height: UiSpacing.lg),
-                          _buildBootStepTicker(stepLabels[step]),
+                          _buildBootStepTicker(stepLabels[step], foreground),
                         ],
                       ),
                     ),
@@ -1739,18 +1781,18 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     ),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
+                        color: logSurface,
                         borderRadius: UiRadius.brLg,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
+                        border: Border.all(color: logBorder),
                       ),
                       child: reversedLogs.isEmpty
                           ? Center(
                               child: Text(
                                 l10n.gameStarting,
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.35),
+                                  color: secondaryForeground.withValues(
+                                    alpha: 0.48,
+                                  ),
                                   fontSize: 13,
                                 ),
                               ),
@@ -1769,11 +1811,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                                     log,
                                     style: TextStyle(
                                       color: isError
-                                          ? const Color(0xFFFF6961)
+                                          ? colors.danger
                                           : isOk
-                                          ? const Color(0xFF34C77A)
-                                          : Colors.white.withValues(
-                                              alpha: 0.55,
+                                          ? colors.success
+                                          : secondaryForeground.withValues(
+                                              alpha: 0.72,
                                             ),
                                       fontSize: 11,
                                       height: 1.35,
@@ -1804,22 +1846,19 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   Widget _buildErrorView() {
     final l10n = AppLocalizations.of(context)!;
+    final colors = context.uiColors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              LucideIcons.circleAlert,
-              color: Colors.redAccent,
-              size: 64,
-            ),
+            Icon(LucideIcons.circleAlert, color: colors.danger, size: 64),
             const SizedBox(height: 16),
             Text(
               l10n.gameEngineError,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: colors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -1828,13 +1867,14 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: colors.surfaceElevated,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colors.border),
               ),
               child: SelectableText(
                 _errorMessage ?? l10n.unknownError,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 13,
                   fontFamily: 'monospace',
                 ),
@@ -2101,6 +2141,9 @@ class _GameControlsState extends State<_GameControls>
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final colors = context.uiColors;
+    final mediaBackdrop = colors.overlay.withValues(alpha: 1);
+    final mediaForeground = colors.textOnBrand;
 
     return RepaintBoundary(
       child: AnimatedBuilder(
@@ -2124,6 +2167,16 @@ class _GameControlsState extends State<_GameControls>
           final target = widget.expanded ? 1.0 : 0.0;
           double reveal(Curve curve) =>
               reduceMotion ? target : curve.transform(rawProgress);
+          final topFill = Color.lerp(
+            mediaBackdrop,
+            mediaForeground,
+            0.23,
+          )!.withValues(alpha: 0.82 + (0.10 * geometryProgress));
+          final bottomFill = Color.lerp(
+            mediaBackdrop,
+            mediaForeground,
+            0.16,
+          )!.withValues(alpha: 0.90 + (0.05 * geometryProgress));
 
           return Semantics(
             container: true,
@@ -2137,34 +2190,19 @@ class _GameControlsState extends State<_GameControls>
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color.lerp(
-                      const Color(0xD13A3A3C),
-                      const Color(0xEB3A3A3C),
-                      geometryProgress,
-                    )!,
-                    Color.lerp(
-                      const Color(0xE628282A),
-                      const Color(0xF22C2C2E),
-                      geometryProgress,
-                    )!,
-                  ],
+                  colors: [topFill, bottomFill],
                 ),
                 border: Border.all(
-                  color: Color.lerp(
-                    const Color(0x30FFFFFF),
-                    const Color(0x3DFFFFFF),
-                    geometryProgress,
-                  )!,
+                  color: mediaForeground.withValues(
+                    alpha: 0.19 + (0.05 * geometryProgress),
+                  ),
                   width: 0.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Color.lerp(
-                      const Color(0x38000000),
-                      const Color(0x52000000),
-                      geometryProgress,
-                    )!,
+                    color: mediaBackdrop.withValues(
+                      alpha: 0.22 + (0.10 * geometryProgress),
+                    ),
                     blurRadius: 10 + (8 * geometryProgress),
                     offset: Offset(0, 3 + (3 * geometryProgress)),
                   ),
@@ -2179,11 +2217,9 @@ class _GameControlsState extends State<_GameControls>
                     top: 0,
                     height: 0.5,
                     child: ColoredBox(
-                      color: Color.lerp(
-                        const Color(0x24FFFFFF),
-                        const Color(0x47FFFFFF),
-                        geometryProgress,
-                      )!,
+                      color: mediaForeground.withValues(
+                        alpha: 0.14 + (0.14 * geometryProgress),
+                      ),
                     ),
                   ),
                   IgnorePointer(
@@ -2242,10 +2278,10 @@ class _GameControlsState extends State<_GameControls>
                           top: 52,
                           child: Opacity(
                             opacity: reveal(_dividerReveal).clamp(0.0, 1.0),
-                            child: const Divider(
+                            child: Divider(
                               height: 0.5,
                               thickness: 0.5,
-                              color: Color(0x24FFFFFF),
+                              color: mediaForeground.withValues(alpha: 0.14),
                             ),
                           ),
                         ),
@@ -2336,6 +2372,7 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return Semantics(
       button: true,
       label: widget.expanded ? 'Close game controls' : 'Open game controls',
@@ -2358,22 +2395,22 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
               AnimatedOpacity(
                 opacity: _pressed ? 1 : 0,
                 duration: UiDuration.fast,
-                child: const DecoratedBox(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Color(0x24FFFFFF),
+                    color: colors.textOnBrand.withValues(alpha: 0.14),
                     shape: BoxShape.circle,
                   ),
-                  child: SizedBox.expand(),
+                  child: const SizedBox.expand(),
                 ),
               ),
               Opacity(
                 opacity: (1 - widget.progress).clamp(0.0, 1.0),
                 child: Transform.rotate(
                   angle: widget.progress * 0.7,
-                  child: const UiIcon(
+                  child: UiIcon(
                     UiIcons.moreHorizontal,
                     size: 20,
-                    color: Color(0xEBFFFFFF),
+                    color: colors.textOnBrand.withValues(alpha: 0.92),
                   ),
                 ),
               ),
@@ -2381,10 +2418,10 @@ class _MorphingMenuButtonState extends State<_MorphingMenuButton> {
                 opacity: widget.progress.clamp(0.0, 1.0),
                 child: Transform.rotate(
                   angle: (1 - widget.progress) * -0.7,
-                  child: const UiIcon(
+                  child: UiIcon(
                     UiIcons.close,
                     size: 18,
-                    color: Color(0xD6FFFFFF),
+                    color: colors.textOnBrand.withValues(alpha: 0.84),
                   ),
                 ),
               ),
@@ -2423,6 +2460,7 @@ class _GlassIconActionState extends State<_GlassIconAction> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return Semantics(
       button: true,
       selected: widget.selected,
@@ -2451,9 +2489,9 @@ class _GlassIconActionState extends State<_GlassIconAction> {
                 curve: UiCurves.iosSmooth,
                 decoration: BoxDecoration(
                   color: _pressed
-                      ? const Color(0x29FFFFFF)
+                      ? colors.textOnBrand.withValues(alpha: 0.16)
                       : widget.selected
-                      ? const Color(0x3D0A84FF)
+                      ? colors.brand.withValues(alpha: 0.24)
                       : Colors.transparent,
                   shape: BoxShape.circle,
                 ),
@@ -2462,8 +2500,8 @@ class _GlassIconActionState extends State<_GlassIconAction> {
                   widget.icon,
                   size: 17,
                   color: widget.selected
-                      ? const Color(0xFF64D2FF)
-                      : const Color(0xE6FFFFFF),
+                      ? colors.brand
+                      : colors.textOnBrand.withValues(alpha: 0.90),
                 ),
               ),
             ),
@@ -2494,6 +2532,7 @@ class _GlassExitActionState extends State<_GlassExitAction> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.uiColors;
     return Semantics(
       button: true,
       label: widget.label,
@@ -2515,24 +2554,22 @@ class _GlassExitActionState extends State<_GlassExitAction> {
             curve: UiCurves.iosSmooth,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: _pressed ? const Color(0x1FFF453A) : Colors.transparent,
+              color: _pressed
+                  ? colors.danger.withValues(alpha: 0.12)
+                  : Colors.transparent,
               borderRadius: UiRadius.brLg,
             ),
             child: Row(
               children: [
-                const UiIcon(
-                  LucideIcons.logOut,
-                  size: 17,
-                  color: Color(0xFFFF6961),
-                ),
+                UiIcon(LucideIcons.logOut, size: 17, color: colors.danger),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFFFF6961),
+                    style: TextStyle(
+                      color: colors.danger,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: -0.1,

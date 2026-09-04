@@ -25,7 +25,7 @@ class UiModal {
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: 'UiModal',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      barrierColor: context.uiColors.overlay,
       transitionDuration: UiDuration.base,
       pageBuilder: (ctx, a, b) => _ModalView(
         title: title,
@@ -89,7 +89,7 @@ class _ModalView extends StatelessWidget {
                 borderRadius: UiRadius.brXl,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
+                    color: colors.overlay.withValues(alpha: 0.2),
                     blurRadius: 40,
                     offset: const Offset(0, 16),
                   ),
@@ -102,15 +102,19 @@ class _ModalView extends StatelessWidget {
                   if (title != null || showCloseButton)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
-                          UiSpacing.xl, UiSpacing.lg, UiSpacing.sm,
-                          UiSpacing.sm),
+                        UiSpacing.xl,
+                        UiSpacing.lg,
+                        UiSpacing.sm,
+                        UiSpacing.sm,
+                      ),
                       child: Row(
                         children: [
                           Expanded(
                             child: Text(
                               title ?? '',
-                              style: typography.title3
-                                  .copyWith(color: colors.textPrimary),
+                              style: typography.title3.copyWith(
+                                color: colors.textPrimary,
+                              ),
                             ),
                           ),
                           if (showCloseButton)
@@ -118,8 +122,7 @@ class _ModalView extends StatelessWidget {
                               icon: UiIcons.close,
                               variant: UiButtonVariant.ghost,
                               size: UiButtonSize.small,
-                              onPressed: () =>
-                                  Navigator.of(context).maybePop(),
+                              onPressed: () => Navigator.of(context).maybePop(),
                             ),
                         ],
                       ),
@@ -127,7 +130,11 @@ class _ModalView extends StatelessWidget {
                   Flexible(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(
-                          UiSpacing.xl, 0, UiSpacing.xl, UiSpacing.xl),
+                        UiSpacing.xl,
+                        0,
+                        UiSpacing.xl,
+                        UiSpacing.xl,
+                      ),
                       child: child,
                     ),
                   ),

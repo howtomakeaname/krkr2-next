@@ -6,11 +6,7 @@ import 'ui_icon.dart';
 
 /// 下拉选项。
 class UiDropdownItem<T> {
-  const UiDropdownItem({
-    required this.value,
-    required this.label,
-    this.icon,
-  });
+  const UiDropdownItem({required this.value, required this.label, this.icon});
 
   final T value;
   final String label;
@@ -105,7 +101,7 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
                         borderRadius: UiRadius.brMd,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.12),
+                            color: colors.overlay.withValues(alpha: 0.12),
                             blurRadius: 24,
                             offset: const Offset(0, 10),
                           ),
@@ -117,7 +113,7 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           itemCount: widget.items.length,
-                          separatorBuilder: (_, __) => Divider(
+                          separatorBuilder: (_, _) => Divider(
                             height: 0.6,
                             thickness: 0.6,
                             color: colors.separator,
@@ -132,16 +128,19 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: UiSpacing.lg,
-                                    vertical: UiSpacing.md),
+                                  horizontal: UiSpacing.lg,
+                                  vertical: UiSpacing.md,
+                                ),
                                 child: Row(
                                   children: [
                                     if (item.icon != null) ...[
-                                      Icon(item.icon,
-                                          size: 18,
-                                          color: selected
-                                              ? colors.brand
-                                              : colors.textSecondary),
+                                      Icon(
+                                        item.icon,
+                                        size: 18,
+                                        color: selected
+                                            ? colors.brand
+                                            : colors.textSecondary,
+                                      ),
                                       const SizedBox(width: UiSpacing.sm),
                                     ],
                                     Expanded(
@@ -160,8 +159,11 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
                                       ),
                                     ),
                                     if (selected)
-                                      UiIcon(UiIcons.check,
-                                          size: 16, color: colors.brand),
+                                      UiIcon(
+                                        UiIcons.check,
+                                        size: 16,
+                                        color: colors.brand,
+                                      ),
                                   ],
                                 ),
                               ),
@@ -188,10 +190,7 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
     final typography = context.uiType;
     final selected = widget.items.firstWhere(
       (e) => e.value == widget.value,
-      orElse: () => UiDropdownItem<T>(
-        value: widget.value as T,
-        label: '',
-      ),
+      orElse: () => UiDropdownItem<T>(value: widget.value as T, label: ''),
     );
     final display = widget.value == null || selected.label.isEmpty
         ? widget.placeholder
@@ -202,9 +201,10 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.label != null) ...[
-          Text(widget.label!,
-              style: typography.footnote
-                  .copyWith(color: colors.textSecondary)),
+          Text(
+            widget.label!,
+            style: typography.footnote.copyWith(color: colors.textSecondary),
+          ),
           const SizedBox(height: UiSpacing.xs),
         ],
         CompositedTransformTarget(
@@ -215,13 +215,16 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
             child: AnimatedContainer(
               duration: UiDuration.fast,
               padding: const EdgeInsets.symmetric(
-                  horizontal: UiSpacing.md, vertical: UiSpacing.md),
+                horizontal: UiSpacing.md,
+                vertical: UiSpacing.md,
+              ),
               decoration: BoxDecoration(
                 color: colors.groupedBackground,
                 borderRadius: UiRadius.brMd,
                 border: Border.all(
-                    color: _open ? colors.brand : Colors.transparent,
-                    width: 1.2),
+                  color: _open ? colors.brand : Colors.transparent,
+                  width: 1.2,
+                ),
               ),
               child: Row(
                 children: [
@@ -241,8 +244,11 @@ class _UiDropdownState<T> extends State<UiDropdown<T>> {
                     turns: _open ? 0.5 : 0,
                     duration: UiDuration.base,
                     curve: UiCurves.standard,
-                    child: UiIcon(UiIcons.chevronDown,
-                        size: 18, color: colors.textSecondary),
+                    child: UiIcon(
+                      UiIcons.chevronDown,
+                      size: 18,
+                      color: colors.textSecondary,
+                    ),
                   ),
                 ],
               ),

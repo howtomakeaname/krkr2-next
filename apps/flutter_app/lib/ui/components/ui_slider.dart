@@ -34,7 +34,7 @@ class UiSlider extends StatelessWidget {
         trackHeight: 4,
         activeTrackColor: colors.brand,
         inactiveTrackColor: colors.separator,
-        thumbColor: Colors.white,
+        thumbColor: colors.textOnBrand,
         overlayColor: colors.brand.withValues(alpha: 0.08),
         thumbShape: const RoundSliderThumbShape(
           enabledThumbRadius: 12,
@@ -97,7 +97,7 @@ class UiRangeSlider extends StatelessWidget {
         ),
         rangeTrackShape: const RoundedRectRangeSliderTrackShape(),
         overlayColor: colors.brand.withValues(alpha: 0.08),
-        thumbColor: Colors.white,
+        thumbColor: colors.textOnBrand,
       ),
       child: RangeSlider(
         values: values,

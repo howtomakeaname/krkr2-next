@@ -53,7 +53,7 @@ class UiDialog {
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: 'UiDialog',
-      barrierColor: Colors.black.withValues(alpha: 0.4),
+      barrierColor: context.uiColors.overlay,
       transitionDuration: UiDuration.base,
       pageBuilder: (ctx, a, b) {
         return _DialogView(
@@ -144,7 +144,7 @@ class _DialogView extends StatelessWidget {
                               color: colors.textSecondary,
                             ),
                           ),
-                        if (content != null) content!,
+                        ?content,
                       ],
                     ),
                   ),

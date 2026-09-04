@@ -63,7 +63,11 @@ class _GameDetailContentState extends State<GameDetailContent> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: colors.overlay.withValues(
+              alpha: Theme.of(context).brightness == Brightness.light
+                  ? 0.08
+                  : 0.22,
+            ),
             blurRadius: 12,
             offset: const Offset(0, -4),
           ),
