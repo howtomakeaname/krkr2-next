@@ -92,6 +92,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profilePlayTimeTitle => '游玩时间';
 
   @override
+  String get profileLifetime => '累计游玩';
+
+  @override
+  String get profileLast7Days => '近 7 天';
+
+  @override
+  String get profileTrackingHint => '游玩趋势将从现在开始记录';
+
+  @override
+  String get profileActiveDays => '活跃天数';
+
+  @override
+  String get profileGamesPlayed => '玩过的游戏';
+
+  @override
+  String get profileAverageSession => '单次平均';
+
+  @override
+  String get profileTopGames => '常玩游戏';
+
+  @override
   String get profileGameRecords => '游戏记录';
 
   @override

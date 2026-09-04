@@ -262,6 +262,48 @@ abstract class AppLocalizations {
   /// **'Play Time'**
   String get profilePlayTimeTitle;
 
+  /// No description provided for @profileLifetime.
+  ///
+  /// In en, this message translates to:
+  /// **'All Time'**
+  String get profileLifetime;
+
+  /// No description provided for @profileLast7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 7 Days'**
+  String get profileLast7Days;
+
+  /// No description provided for @profileTrackingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your activity trend starts here'**
+  String get profileTrackingHint;
+
+  /// No description provided for @profileActiveDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Active Days'**
+  String get profileActiveDays;
+
+  /// No description provided for @profileGamesPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Games Played'**
+  String get profileGamesPlayed;
+
+  /// No description provided for @profileAverageSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Avg. Session'**
+  String get profileAverageSession;
+
+  /// No description provided for @profileTopGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Most Played'**
+  String get profileTopGames;
+
   /// No description provided for @profileGameRecords.
   ///
   /// In en, this message translates to:

@@ -93,6 +93,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profilePlayTimeTitle => 'プレイ時間';
 
   @override
+  String get profileLifetime => '累計プレイ';
+
+  @override
+  String get profileLast7Days => '直近7日間';
+
+  @override
+  String get profileTrackingHint => 'プレイ傾向はこれから記録されます';
+
+  @override
+  String get profileActiveDays => 'プレイ日数';
+
+  @override
+  String get profileGamesPlayed => 'プレイしたゲーム';
+
+  @override
+  String get profileAverageSession => '平均プレイ時間';
+
+  @override
+  String get profileTopGames => 'よく遊ぶゲーム';
+
+  @override
   String get profileGameRecords => 'ゲーム記録';
 
   @override

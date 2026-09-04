@@ -95,6 +95,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profilePlayTimeTitle => 'Play Time';
 
   @override
+  String get profileLifetime => 'All Time';
+
+  @override
+  String get profileLast7Days => 'Last 7 Days';
+
+  @override
+  String get profileTrackingHint => 'Your activity trend starts here';
+
+  @override
+  String get profileActiveDays => 'Active Days';
+
+  @override
+  String get profileGamesPlayed => 'Games Played';
+
+  @override
+  String get profileAverageSession => 'Avg. Session';
+
+  @override
+  String get profileTopGames => 'Most Played';
+
+  @override
   String get profileGameRecords => 'Games';
 
   @override
