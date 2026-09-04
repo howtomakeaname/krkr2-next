@@ -1556,22 +1556,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           const SizedBox(width: 4),
-          if (!Platform.isIOS)
-            Builder(
-              builder: (btnContext) => UiBarIconButton(
-                icon: LucideIcons.plus,
-                semanticLabel: l10n.addGame,
-                onPressed: _loading
-                    ? null
-                    : () {
-                        _addGame(anchor: UiPopupMenu.rectOf(btnContext));
-                      },
+          UiGlassToolbar(
+            children: [
+              if (!Platform.isIOS)
+                Builder(
+                  builder: (btnContext) => UiGlassIconButton(
+                    icon: LucideIcons.plus,
+                    semanticLabel: l10n.addGame,
+                    contained: false,
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            _addGame(anchor: UiPopupMenu.rectOf(btnContext));
+                          },
+                  ),
+                ),
+              UiGlassIconButton(
+                icon: LucideIcons.settings,
+                semanticLabel: l10n.settings,
+                contained: false,
+                onPressed: _loading ? null : _openSettings,
               ),
-            ),
-          UiBarIconButton(
-            icon: LucideIcons.settings,
-            semanticLabel: l10n.settings,
-            onPressed: _loading ? null : _openSettings,
+            ],
           ),
         ],
       ),

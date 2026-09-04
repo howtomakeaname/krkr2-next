@@ -3,12 +3,15 @@
 library;
 
 export 'theme/ui_colors.dart';
+export 'theme/ui_glass_theme.dart';
 export 'theme/ui_metrics.dart';
+export 'theme/ui_springs.dart';
 export 'theme/ui_theme.dart';
 export 'theme/ui_theme_controller.dart';
 export 'theme/ui_typography.dart';
 
 export 'components/ui_icon.dart';
+export 'components/ui_glass.dart';
 export 'components/ui_button.dart';
 export 'components/ui_input.dart';
 export 'components/ui_search.dart';

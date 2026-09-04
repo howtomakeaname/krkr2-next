@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ui_metrics.dart';
+import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
+import 'ui_glass.dart';
 import 'ui_icon.dart';
 
 /// 菜单项。长按 [UiContextMenu] 与点按 [UiPopupMenu] 共用。
@@ -253,8 +255,8 @@ class _AnchoredMenuState extends State<_AnchoredMenu> {
 
   CurvedAnimation _newCurved() => CurvedAnimation(
     parent: widget.animation,
-    curve: UiCurves.iosSpringOut,
-    reverseCurve: UiCurves.iosSmooth,
+    curve: UiSprings.materializeCurve,
+    reverseCurve: UiSprings.dismissCurve,
   );
 
   @override
@@ -340,37 +342,17 @@ class _GlassMenuCard extends StatelessWidget {
 
   final List<UiMenuItem> items;
 
-  static const double _radius = 14;
+  static const double _radius = 22;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.uiColors;
     final isLight = Theme.of(context).brightness == Brightness.light;
-    // 浅色页底是分组灰。菜单要成一张白纸，不能再铺一层同色灰，
-    // 否则全靠阴影分形，OHOS 上大 blur 又会糊成一块脏印。
-    final fillTop = isLight
-        ? colors.surfaceElevated
-        : Color.lerp(colors.surfaceElevated, colors.textPrimary, 0.10)!;
-    final fillBottom = isLight
-        ? Color.lerp(colors.surfaceElevated, colors.groupedBackground, 0.42)!
-        : Color.lerp(colors.surfaceElevated, colors.textPrimary, 0.03)!;
-    // 设置页卡片的主题描边是为了贴在同色灰底上能看见。
-    // 浮层已经是白纸，再用那条描边就像描了一圈炭笔，浅色上最掉价。
-    final rim = isLight
-        ? Color.lerp(colors.surfaceElevated, colors.border, 0.35)!
-        : colors.border.withValues(alpha: 0.28);
-    final rimWidth = 1.0;
-
-    Widget panel = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(_radius),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [fillTop, fillBottom],
-        ),
-        border: Border.all(color: rim, width: rimWidth),
-      ),
+    Widget panel = UiGlassSurface(
+      variant: UiGlassVariant.regular,
+      borderRadius: BorderRadius.circular(_radius),
+      enableBlur: false,
+      showShadow: false,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
