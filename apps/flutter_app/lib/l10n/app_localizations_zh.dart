@@ -62,6 +62,152 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gotIt => '知道了';
 
   @override
+  String get tabHome => '首页';
+
+  @override
+  String get tabExplore => '探索';
+
+  @override
+  String get tabManage => '管理';
+
+  @override
+  String get tabProfile => '我的';
+
+  @override
+  String get search => '搜索';
+
+  @override
+  String get searchGamesHint => '搜索游戏';
+
+  @override
+  String get searchNoResults => '没有找到匹配的游戏';
+
+  @override
+  String get searchComingSoon => '搜索功能正在准备中';
+
+  @override
+  String get help => '帮助';
+
+  @override
+  String get profilePlayTimeTitle => '游玩时间';
+
+  @override
+  String get profileLifetime => '累计游玩';
+
+  @override
+  String get profileLast7Days => '近 7 天';
+
+  @override
+  String get profileTrackingHint => '游玩趋势将从现在开始记录';
+
+  @override
+  String get profileActiveDays => '活跃天数';
+
+  @override
+  String get profileGamesPlayed => '玩过的游戏';
+
+  @override
+  String get profileAverageSession => '单次平均';
+
+  @override
+  String get profileTopGames => '常玩游戏';
+
+  @override
+  String get profileStatistics => '游玩统计';
+
+  @override
+  String get profileViewStatistics => '查看详细统计';
+
+  @override
+  String get profileHonorTitle => '称号';
+
+  @override
+  String get profileHonorNewcomer => '初来乍到';
+
+  @override
+  String get profileHonorStoryTraveler => '剧情旅人';
+
+  @override
+  String get profileHonorImmersedReader => '沉浸读者';
+
+  @override
+  String get profileHonorVeteran => '资深玩家';
+
+  @override
+  String get profileHonorCollector => '游戏藏家';
+
+  @override
+  String get profileHonorCurator => '典藏家';
+
+  @override
+  String profileHonorNext(String title) {
+    return '下一档 · $title';
+  }
+
+  @override
+  String profileHonorRemainingBoth(String duration, int count) {
+    return '还差 $duration和 $count 款游戏';
+  }
+
+  @override
+  String profileHonorRemainingTime(String duration) {
+    return '还差 $duration';
+  }
+
+  @override
+  String profileHonorRemainingGames(int count) {
+    return '还差 $count 款游戏';
+  }
+
+  @override
+  String get profileHonorHighest => '已经到最高档';
+
+  @override
+  String get profileGameRecords => '游戏记录';
+
+  @override
+  String get profileRecentGame => '最近游玩';
+
+  @override
+  String get profileNoHistory => '暂无记录';
+
+  @override
+  String profilePlaySummary(String duration, int count) {
+    return '已玩 $duration · $count 个游戏';
+  }
+
+  @override
+  String get playTimeLessThanMinute => '不足 1 分钟';
+
+  @override
+  String playTimeMinutes(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String playTimeHours(int hours) {
+    return '$hours 小时';
+  }
+
+  @override
+  String playTimeHoursMinutes(int hours, int minutes) {
+    return '$hours 小时 $minutes 分钟';
+  }
+
+  @override
+  String get helpImportTitle => '导入游戏';
+
+  @override
+  String get helpImportBody =>
+      '将完整游戏文件夹或 XP3 / PFS 封包导入游戏库；HarmonyOS 也可以把文件夹放入应用的公共游戏目录后下拉刷新。';
+
+  @override
+  String get helpLaunchTitle => '启动与快捷操作';
+
+  @override
+  String get helpLaunchBody => '点按游戏卡片查看详情；长按卡片可以直接启动、刮削信息、重命名或移除。';
+
+  @override
   String get removeGame => '移除游戏';
 
   @override

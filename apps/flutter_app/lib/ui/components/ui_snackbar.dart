@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/ui_metrics.dart';
 import '../theme/ui_theme.dart';
+import 'ui_button.dart';
+import 'ui_glass.dart';
 import 'ui_icon.dart';
 
 /// SnackBar 类型。
@@ -35,33 +37,47 @@ class UiSnackbar {
       SnackBar(
         duration: duration,
         behavior: SnackBarBehavior.floating,
-        backgroundColor: colors.surfaceElevated,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         margin: const EdgeInsets.all(UiSpacing.lg),
-        padding: const EdgeInsets.symmetric(
-            horizontal: UiSpacing.lg, vertical: UiSpacing.md),
-        shape: const RoundedRectangleBorder(borderRadius: UiRadius.brLg),
-        content: Row(
-          children: [
-            Icon(icon, color: tint, size: 20),
-            const SizedBox(width: UiSpacing.sm),
-            Expanded(
-              child: Text(
-                message,
-                style: typography.callout.copyWith(color: colors.textPrimary),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+        padding: EdgeInsets.zero,
+        content: UiGlassSurface(
+          variant: UiGlassVariant.regular,
+          borderRadius: UiRadius.brLg,
+          enableBlur: true,
+          padding: const EdgeInsets.fromLTRB(
+            UiSpacing.lg,
+            UiSpacing.sm,
+            UiSpacing.sm,
+            UiSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: tint, size: 20),
+              const SizedBox(width: UiSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: typography.callout.copyWith(color: colors.textPrimary),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          ],
+              if (actionLabel != null) ...[
+                const SizedBox(width: UiSpacing.xs),
+                UiButton(
+                  label: actionLabel,
+                  size: UiButtonSize.small,
+                  variant: UiButtonVariant.ghost,
+                  onPressed: () {
+                    messenger.hideCurrentSnackBar();
+                    onAction?.call();
+                  },
+                ),
+              ],
+            ],
+          ),
         ),
-        action: actionLabel != null
-            ? SnackBarAction(
-                label: actionLabel,
-                textColor: colors.brand,
-                onPressed: onAction ?? () {},
-              )
-            : null,
       ),
     );
   }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../theme/ui_metrics.dart';
+import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
-import 'ui_button.dart';
+import 'ui_glass.dart';
 import 'ui_icon.dart';
 
 /// iOS18 风格中央模态框。
@@ -26,7 +27,7 @@ class UiModal {
       barrierDismissible: barrierDismissible,
       barrierLabel: 'UiModal',
       barrierColor: context.uiColors.overlay,
-      transitionDuration: UiDuration.base,
+      transitionDuration: UiSprings.materializeDuration,
       pageBuilder: (ctx, a, b) => _ModalView(
         title: title,
         maxWidth: maxWidth,
@@ -37,7 +38,8 @@ class UiModal {
       transitionBuilder: (ctx, anim, _, child) {
         final curved = CurvedAnimation(
           parent: anim,
-          curve: UiCurves.emphasized,
+          curve: UiSprings.materializeCurve,
+          reverseCurve: UiSprings.dismissCurve,
         );
         return FadeTransition(
           opacity: curved,
@@ -83,19 +85,10 @@ class _ModalView extends StatelessWidget {
           ),
           child: Material(
             color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.surfaceElevated,
-                borderRadius: UiRadius.brXl,
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.overlay.withValues(alpha: 0.2),
-                    blurRadius: 40,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
+            child: UiGlassSurface(
+              variant: UiGlassVariant.regular,
+              borderRadius: UiRadius.brXl,
+              enableBlur: true,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -118,10 +111,12 @@ class _ModalView extends StatelessWidget {
                             ),
                           ),
                           if (showCloseButton)
-                            UiButton.icon(
+                            UiGlassIconButton(
                               icon: UiIcons.close,
-                              variant: UiButtonVariant.ghost,
-                              size: UiButtonSize.small,
+                              semanticLabel: 'Close',
+                              size: 36,
+                              iconSize: 18,
+                              contained: false,
                               onPressed: () => Navigator.of(context).maybePop(),
                             ),
                         ],

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/ui_colors.dart';
 import '../theme/ui_metrics.dart';
 import '../theme/ui_theme.dart';
+import 'ui_glass.dart';
 import 'ui_icon.dart';
 
 /// Toast 类型。
@@ -24,14 +27,17 @@ class UiToast {
   }) {
     final overlay = Overlay.of(context, rootOverlay: true);
     _current?.remove();
+    _current = null;
 
-    final entry = OverlayEntry(
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
       builder: (ctx) => _ToastView(
         message: message,
         type: type,
         duration: duration,
         onHide: () {
-          _current?.remove();
+          if (!identical(_current, entry)) return;
+          entry.remove();
           _current = null;
         },
       ),
@@ -63,31 +69,61 @@ class _ToastViewState extends State<_ToastView>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: UiDuration.base,
+    reverseDuration: UiDuration.fast,
   );
   late final Animation<double> _opacity = CurvedAnimation(
     parent: _controller,
-    curve: UiCurves.standard,
+    curve: UiCurves.iosSmooth,
+    reverseCurve: UiCurves.iosSmooth,
+  );
+  late final Animation<double> _motion = CurvedAnimation(
+    parent: _controller,
+    curve: UiCurves.iosSpringOut,
+    reverseCurve: UiCurves.iosSmooth,
   );
   late final Animation<Offset> _offset = Tween<Offset>(
-    begin: const Offset(0, 0.25),
+    begin: const Offset(0, 0.18),
     end: Offset.zero,
-  ).animate(CurvedAnimation(parent: _controller, curve: UiCurves.emphasized));
+  ).animate(_motion);
+  late final Animation<double> _scale = Tween<double>(
+    begin: 0.92,
+    end: 1,
+  ).animate(_motion);
+  Timer? _hideTimer;
+  bool _dismissing = false;
+  bool _reduceMotion = false;
+  bool _started = false;
 
   @override
-  void initState() {
-    super.initState();
-    _controller.forward();
-    Future.delayed(widget.duration, _dismiss);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ??
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .disableAnimations;
+    if (_reduceMotion) {
+      _controller.value = 1;
+    } else {
+      _controller.forward();
+    }
+    _hideTimer = Timer(widget.duration, _dismiss);
   }
 
   Future<void> _dismiss() async {
-    if (!mounted) return;
-    await _controller.reverse();
+    if (!mounted || _dismissing) return;
+    _dismissing = true;
+    if (!_reduceMotion) await _controller.reverse();
     if (mounted) widget.onHide();
   }
 
   @override
   void dispose() {
+    _hideTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -115,45 +151,58 @@ class _ToastViewState extends State<_ToastView>
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 64),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 76),
           child: FadeTransition(
             opacity: _opacity,
             child: SlideTransition(
               position: _offset,
-              child: Material(
-                color: Colors.transparent,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: UiSpacing.lg,
-                      vertical: UiSpacing.md,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceElevated,
-                      borderRadius: UiRadius.brLg,
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.overlay.withValues(alpha: 0.18),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
+              child: ScaleTransition(
+                scale: _scale,
+                alignment: Alignment.bottomCenter,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Semantics(
+                    container: true,
+                    liveRegion: true,
+                    label: widget.message,
+                    child: GestureDetector(
+                      onTap: _dismiss,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: 48,
+                          maxWidth: 360,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20, color: tint),
-                        const SizedBox(width: UiSpacing.sm),
-                        Flexible(
-                          child: Text(
-                            widget.message,
-                            style: typography.callout.copyWith(
-                              color: colors.textPrimary,
-                            ),
+                        child: UiGlassSurface(
+                          key: const ValueKey<String>('ui-toast-surface'),
+                          variant: UiGlassVariant.regular,
+                          borderRadius: UiRadius.brXl,
+                          tint: widget.type == UiToastType.info ? null : tint,
+                          blurScale: 0.72,
+                          materialStrength: 0.96,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 11,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 18, color: tint),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  widget.message,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: typography.callout.copyWith(
+                                    color: colors.textPrimary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

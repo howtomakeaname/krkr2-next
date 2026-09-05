@@ -3,14 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/prefs_keys.dart';
 import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
@@ -18,10 +20,13 @@ import '../models/game_info.dart';
 import '../services/game_manager.dart';
 import '../ui/ui.dart';
 import '../widgets/home_game_card.dart';
+import '../widgets/home_profile_tab.dart';
+import 'about_page.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
+import 'help_page.dart';
+import 'play_statistics_page.dart';
 import 'settings_page.dart';
-import '../constants/prefs_keys.dart';
 
 /// Engine loading mode: built-in (bundled in .app) or custom (user-specified).
 enum EngineMode { builtIn, custom }
@@ -57,6 +62,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _angleBackend = PrefsKeys.angleBackendGles;
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
   bool _restartDeferred = false;
+  int _selectedTab = 0;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _searchActive = false;
+  String _searchQuery = '';
 
   String? _resolveBuiltInDylibPath() {
     if (Platform.isIOS) {
@@ -106,6 +116,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -259,10 +271,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (added > 0 || !silent) setState(() {});
     if (silent) return;
     final l10n = AppLocalizations.of(context)!;
-    UiSnackbar.show(
+    UiToast.show(
       context,
       message: added > 0 ? l10n.gamesImported(added) : l10n.noNewGamesFound,
-      type: added > 0 ? UiSnackbarType.success : UiSnackbarType.info,
+      type: added > 0 ? UiToastType.success : UiToastType.info,
     );
   }
 
@@ -855,12 +867,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ..sort();
     if (!mounted) return;
     if (fresh.isEmpty) {
-      UiSnackbar.show(
+      UiToast.show(
         context,
         message: candidates.isEmpty
             ? l10n.noGamesFoundInSandbox
             : l10n.allSandboxGamesRegistered,
-        type: UiSnackbarType.info,
+        type: UiToastType.info,
       );
       return;
     }
@@ -1364,7 +1376,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  void _launchGame(GameInfo game) {
+  Future<void> _launchGame(GameInfo game) async {
     final l10n = AppLocalizations.of(context)!;
     final dylibPath = _effectiveDylibPath;
     final isSystemLoadedBuiltIn =
@@ -1386,7 +1398,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     _gameManager.markPlayed(game.path);
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => GamePage(
           gamePath: game.path,
@@ -1398,6 +1410,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
     );
+    if (mounted) setState(() {});
   }
 
   Future<void> _openGameDetail(GameInfo game) async {
@@ -1502,10 +1515,83 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return sorted;
   }
 
+  void _beginSearch() {
+    if (_loading || _searchActive) return;
+    setState(() => _searchActive = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _searchController.selection = TextSelection.collapsed(
+        offset: _searchController.text.length,
+      );
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _finishSearch() {
+    _searchFocusNode.unfocus();
+    if (_searchActive) setState(() => _searchActive = false);
+  }
+
+  void _updateSearch(String value) {
+    if (value == _searchQuery) return;
+    setState(() => _searchQuery = value);
+  }
+
+  void _selectTab(int index) {
+    if (index != 0) {
+      _searchFocusNode.unfocus();
+      _searchActive = false;
+    }
+    setState(() => _selectedTab = index);
+  }
+
+  List<GameInfo> _filterGames(List<GameInfo> games) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return games;
+    return games
+        .where((game) {
+          final searchable = <String>[
+            game.displayTitle,
+            ?game.developer,
+            ...game.keywords,
+          ].join('\n').toLowerCase();
+          return searchable.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  void _openHelp() => UiMotion.push<void>(context, const HelpPage());
+
+  void _openAbout() => UiMotion.push<void>(context, const AboutPage());
+
+  void _openStatistics() => UiMotion.push<void>(
+    context,
+    PlayStatisticsPage(
+      games: _sortedGames,
+      playSessions: _gameManager.playSessions,
+    ),
+  );
+
+  Widget _buildPlaceholderTab({required String title}) {
+    final colors = context.uiColors;
+    final topPadding = MediaQuery.paddingOf(context).top;
+    return ColoredBox(
+      color: colors.background,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 8),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Text(title, style: context.uiType.largeTitle),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final games = _sortedGames;
+    final allGames = _sortedGames;
+    final games = _filterGames(allGames);
     final isDesktop =
         !Platform.isAndroid &&
         !Platform.isIOS &&
@@ -1518,6 +1604,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final canPullRefresh = isOhos || Platform.isIOS;
 
     // The title bar stays put; only the library below it scrolls and pulls.
+    const collapsedToolbarWidth = 94.0;
     final Widget header = Padding(
       padding: EdgeInsets.only(
         top: topPadding + 16,
@@ -1525,60 +1612,176 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         right: 20,
         bottom: 8,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text(
-              l10n.appTitle,
-              style: context.uiType.headline.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (isDesktop && !_loading)
-            Tooltip(
-              message: _engineMode == EngineMode.builtIn
-                  ? (_builtInAvailable
-                        ? l10n.builtInReady
-                        : l10n.builtInNotReady)
-                  : (_customDylibPath != null
-                        ? _customDylibPath!.split('/').last
-                        : l10n.customNotSet),
-              child: Icon(
-                _engineMode == EngineMode.builtIn
-                    ? LucideIcons.packageOpen
-                    : LucideIcons.puzzle,
-                color: _engineReady
-                    ? context.uiColors.brand
-                    : context.uiColors.danger,
-                size: 22,
-              ),
-            ),
-          const SizedBox(width: 4),
-          if (!Platform.isIOS)
-            Builder(
-              builder: (btnContext) => UiBarIconButton(
-                icon: LucideIcons.plus,
-                semanticLabel: l10n.addGame,
-                onPressed: _loading
-                    ? null
-                    : () {
-                        _addGame(anchor: UiPopupMenu.rectOf(btnContext));
-                      },
-              ),
-            ),
-          UiBarIconButton(
-            icon: LucideIcons.settings,
-            semanticLabel: l10n.settings,
-            onPressed: _loading ? null : _openSettings,
-          ),
-        ],
+      child: SizedBox(
+        height: UiNavigationMetrics.buttonExtent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
+              alignment: Alignment.centerRight,
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: 0,
+                  right: collapsedToolbarWidth + 8,
+                  top: 0,
+                  bottom: 0,
+                  child: ExcludeSemantics(
+                    excluding: _searchActive,
+                    child: AnimatedOpacity(
+                      key: const ValueKey<String>('home-app-title'),
+                      opacity: _searchActive ? 0 : 1,
+                      duration: UiDuration.fast,
+                      curve: UiCurves.iosSmooth,
+                      child: AnimatedSlide(
+                        offset: _searchActive
+                            ? const Offset(-0.04, 0)
+                            : Offset.zero,
+                        duration: UiDuration.fast,
+                        curve: UiCurves.iosSmooth,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                l10n.appTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.uiType.headline.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (isDesktop && !_loading) ...[
+                              const SizedBox(width: UiSpacing.sm),
+                              Tooltip(
+                                message: _engineMode == EngineMode.builtIn
+                                    ? (_builtInAvailable
+                                          ? l10n.builtInReady
+                                          : l10n.builtInNotReady)
+                                    : (_customDylibPath != null
+                                          ? _customDylibPath!.split('/').last
+                                          : l10n.customNotSet),
+                                child: Icon(
+                                  _engineMode == EngineMode.builtIn
+                                      ? LucideIcons.packageOpen
+                                      : LucideIcons.puzzle,
+                                  color: _engineReady
+                                      ? context.uiColors.brand
+                                      : context.uiColors.danger,
+                                  size: 22,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedPositioned(
+                  left: _searchActive
+                      ? 0
+                      : constraints.maxWidth - collapsedToolbarWidth,
+                  width: _searchActive
+                      ? constraints.maxWidth
+                      : collapsedToolbarWidth,
+                  top: 0,
+                  bottom: 0,
+                  duration: UiSprings.materializeDuration,
+                  curve: UiSprings.materializeCurve,
+                  child: UiGlassSurface(
+                    key: const ValueKey<String>('home-search-toolbar'),
+                    variant: UiGlassVariant.clear,
+                    borderRadius: UiRadius.brPill,
+                    padding: const EdgeInsets.all(2),
+                    child: AnimatedSwitcher(
+                      duration: UiDuration.fast,
+                      switchInCurve: UiCurves.iosSmooth,
+                      switchOutCurve: UiCurves.iosSmooth,
+                      layoutBuilder: (currentChild, previousChildren) => Stack(
+                        alignment: Alignment.centerRight,
+                        children: <Widget>[...previousChildren, ?currentChild],
+                      ),
+                      child: _searchActive
+                          ? Row(
+                              key: const ValueKey<String>('search-editor'),
+                              children: [
+                                const SizedBox(width: 10),
+                                Icon(
+                                  LucideIcons.search,
+                                  size: 18,
+                                  color: context.uiColors.textSecondary,
+                                ),
+                                const SizedBox(width: UiSpacing.sm),
+                                Expanded(
+                                  child: TextField(
+                                    key: const ValueKey<String>(
+                                      'home-search-field',
+                                    ),
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    textInputAction: TextInputAction.done,
+                                    onChanged: _updateSearch,
+                                    onSubmitted: (_) => _finishSearch(),
+                                    style: context.uiType.body.copyWith(
+                                      color: context.uiColors.textPrimary,
+                                    ),
+                                    cursorColor: context.uiColors.brand,
+                                    decoration: InputDecoration.collapsed(
+                                      hintText: l10n.searchGamesHint,
+                                      hintStyle: context.uiType.body.copyWith(
+                                        color: context.uiColors.textTertiary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                UiGlassIconButton(
+                                  icon: LucideIcons.check,
+                                  semanticLabel: l10n.done,
+                                  contained: false,
+                                  onPressed: _finishSearch,
+                                ),
+                              ],
+                            )
+                          : Row(
+                              key: const ValueKey<String>('home-actions'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                UiGlassIconButton(
+                                  icon: LucideIcons.search,
+                                  semanticLabel: l10n.search,
+                                  contained: false,
+                                  onPressed: _loading ? null : _beginSearch,
+                                ),
+                                Builder(
+                                  builder: (btnContext) => UiGlassIconButton(
+                                    icon: LucideIcons.plus,
+                                    semanticLabel: l10n.importGames,
+                                    contained: false,
+                                    onPressed: _loading
+                                        ? null
+                                        : () {
+                                            _addGame(
+                                              anchor: UiPopupMenu.rectOf(
+                                                btnContext,
+                                              ),
+                                            );
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
 
     final showLibrarySkeleton =
-        _loading || (_startupScanInProgress && games.isEmpty);
+        _loading || (_startupScanInProgress && allGames.isEmpty);
     Widget content;
     if (showLibrarySkeleton) {
       content = _buildLibrarySkeleton();
@@ -1600,11 +1803,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (games.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: _buildEmptyState(l10n),
+              child: allGames.isEmpty
+                  ? _buildEmptyState(l10n)
+                  : UiEmpty(
+                      icon: LucideIcons.search,
+                      title: l10n.searchNoResults,
+                    ),
             )
           else
             _buildGameGrid(games, l10n),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 112)),
         ],
       );
       if (canPullRefresh && !_startupScanInProgress) {
@@ -1626,48 +1834,74 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Column(
-        children: [
-          header,
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: UiDuration.fast,
-              switchInCurve: UiCurves.iosSmooth,
-              switchOutCurve: UiCurves.iosSmooth,
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: KeyedSubtree(
-                key: ValueKey<bool>(showLibrarySkeleton),
-                child: content,
+    final tabs = <Widget>[
+      ColoredBox(
+        color: context.uiColors.background,
+        child: Column(
+          children: [
+            header,
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: UiDuration.fast,
+                switchInCurve: UiCurves.iosSmooth,
+                switchOutCurve: UiCurves.iosSmooth,
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: KeyedSubtree(
+                  key: ValueKey<bool>(showLibrarySkeleton),
+                  child: content,
+                ),
               ),
             ),
+          ],
+        ),
+      ),
+      _buildPlaceholderTab(title: l10n.tabExplore),
+      _buildPlaceholderTab(title: l10n.tabManage),
+      HomeProfileTab(
+        games: allGames,
+        playSessions: _gameManager.playSessions,
+        onOpenStatistics: _openStatistics,
+        onOpenSettings: _openSettings,
+        onOpenHelp: _openHelp,
+        onOpenAbout: _openAbout,
+      ),
+    ];
+
+    return Scaffold(
+      backgroundColor: context.uiColors.background,
+      extendBody: true,
+      // Native tab bars switch content immediately; the continuity lives in
+      // the moving glass lens below. IndexedStack also preserves each tab's
+      // scroll position without repainting hidden pages.
+      body: IndexedStack(index: _selectedTab, children: tabs),
+      bottomNavigationBar: UiNavBar(
+        currentIndex: _selectedTab,
+        overMedia: _selectedTab == 0 && games.isNotEmpty,
+        onChanged: _selectTab,
+        items: [
+          UiNavItem(
+            icon: CupertinoIcons.house,
+            activeIcon: CupertinoIcons.house_fill,
+            label: l10n.tabHome,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.compass,
+            activeIcon: CupertinoIcons.compass_fill,
+            label: l10n.tabExplore,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.folder,
+            activeIcon: CupertinoIcons.folder_fill,
+            label: l10n.tabManage,
+          ),
+          UiNavItem(
+            icon: CupertinoIcons.person,
+            activeIcon: CupertinoIcons.person_fill,
+            label: l10n.tabProfile,
           ),
         ],
       ),
-      floatingActionButton: Platform.isIOS && !_loading
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                UiButton(
-                  label: l10n.refresh,
-                  leadingIcon: LucideIcons.refreshCw,
-                  variant: UiButtonVariant.secondary,
-                  onPressed: () async {
-                    await _scanIosGamesDir();
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const SizedBox(width: UiSpacing.md),
-                UiButton(
-                  label: l10n.howToImport,
-                  leadingIcon: LucideIcons.circleHelp,
-                  onPressed: _showIosImportGuide,
-                ),
-              ],
-            )
-          : null,
     );
   }
 

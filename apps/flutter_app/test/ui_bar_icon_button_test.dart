@@ -24,7 +24,7 @@ void main() {
 
     final button = find.descendant(
       of: find.byType(UiBarIconButton),
-      matching: find.byType(AnimatedContainer),
+      matching: find.byType(UiGlassIconButton),
     );
     final icon = tester.widget<Icon>(find.byIcon(LucideIcons.arrowLeft));
 

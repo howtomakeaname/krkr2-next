@@ -30,6 +30,9 @@ class PrefsKeys {
   /// Recently settled play session IDs. Used to avoid duplicate crediting.
   static const String settledPlaySessionIds = 'krkr2_settled_play_session_ids';
 
+  /// Rolling play-session history used by the profile activity overview.
+  static const String playSessionHistory = 'krkr2_play_session_history';
+
   // ── Engine option keys (must match C++ ENGINE_OPTION_* constants) ─
   static const String optionAngleBackend = 'angle_backend';
   static const String optionFpsLimit = 'fps_limit';

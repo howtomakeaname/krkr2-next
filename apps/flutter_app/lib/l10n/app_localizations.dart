@@ -202,6 +202,264 @@ abstract class AppLocalizations {
   /// **'Got it'**
   String get gotIt;
 
+  /// No description provided for @tabHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get tabHome;
+
+  /// No description provided for @tabExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get tabExplore;
+
+  /// No description provided for @tabManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get tabManage;
+
+  /// No description provided for @tabProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Me'**
+  String get tabProfile;
+
+  /// No description provided for @search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get search;
+
+  /// No description provided for @searchGamesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search games'**
+  String get searchGamesHint;
+
+  /// No description provided for @searchNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching games'**
+  String get searchNoResults;
+
+  /// No description provided for @searchComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Search is coming soon'**
+  String get searchComingSoon;
+
+  /// No description provided for @help.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get help;
+
+  /// No description provided for @profilePlayTimeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Time'**
+  String get profilePlayTimeTitle;
+
+  /// No description provided for @profileLifetime.
+  ///
+  /// In en, this message translates to:
+  /// **'All Time'**
+  String get profileLifetime;
+
+  /// No description provided for @profileLast7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 7 Days'**
+  String get profileLast7Days;
+
+  /// No description provided for @profileTrackingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your activity trend starts here'**
+  String get profileTrackingHint;
+
+  /// No description provided for @profileActiveDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Active Days'**
+  String get profileActiveDays;
+
+  /// No description provided for @profileGamesPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Games Played'**
+  String get profileGamesPlayed;
+
+  /// No description provided for @profileAverageSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Avg. Session'**
+  String get profileAverageSession;
+
+  /// No description provided for @profileTopGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Most Played'**
+  String get profileTopGames;
+
+  /// No description provided for @profileStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Play Statistics'**
+  String get profileStatistics;
+
+  /// No description provided for @profileViewStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'View Detailed Statistics'**
+  String get profileViewStatistics;
+
+  /// No description provided for @profileHonorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get profileHonorTitle;
+
+  /// No description provided for @profileHonorNewcomer.
+  ///
+  /// In en, this message translates to:
+  /// **'New Arrival'**
+  String get profileHonorNewcomer;
+
+  /// No description provided for @profileHonorStoryTraveler.
+  ///
+  /// In en, this message translates to:
+  /// **'Story Traveler'**
+  String get profileHonorStoryTraveler;
+
+  /// No description provided for @profileHonorImmersedReader.
+  ///
+  /// In en, this message translates to:
+  /// **'Immersed Reader'**
+  String get profileHonorImmersedReader;
+
+  /// No description provided for @profileHonorVeteran.
+  ///
+  /// In en, this message translates to:
+  /// **'Seasoned Player'**
+  String get profileHonorVeteran;
+
+  /// No description provided for @profileHonorCollector.
+  ///
+  /// In en, this message translates to:
+  /// **'Game Collector'**
+  String get profileHonorCollector;
+
+  /// No description provided for @profileHonorCurator.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive Curator'**
+  String get profileHonorCurator;
+
+  /// No description provided for @profileHonorNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next · {title}'**
+  String profileHonorNext(String title);
+
+  /// No description provided for @profileHonorRemainingBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} and {count} more games to go'**
+  String profileHonorRemainingBoth(String duration, int count);
+
+  /// No description provided for @profileHonorRemainingTime.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} to go'**
+  String profileHonorRemainingTime(String duration);
+
+  /// No description provided for @profileHonorRemainingGames.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more games to go'**
+  String profileHonorRemainingGames(int count);
+
+  /// No description provided for @profileHonorHighest.
+  ///
+  /// In en, this message translates to:
+  /// **'Top title reached'**
+  String get profileHonorHighest;
+
+  /// No description provided for @profileGameRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'Games'**
+  String get profileGameRecords;
+
+  /// No description provided for @profileRecentGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently Played'**
+  String get profileRecentGame;
+
+  /// No description provided for @profileNoHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No activity yet'**
+  String get profileNoHistory;
+
+  /// No description provided for @profilePlaySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} played · {count} games'**
+  String profilePlaySummary(String duration, int count);
+
+  /// No description provided for @playTimeLessThanMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'Less than 1 min'**
+  String get playTimeLessThanMinute;
+
+  /// No description provided for @playTimeMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String playTimeMinutes(int minutes);
+
+  /// No description provided for @playTimeHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr'**
+  String playTimeHours(int hours);
+
+  /// No description provided for @playTimeHoursMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr {minutes} min'**
+  String playTimeHoursMinutes(int hours, int minutes);
+
+  /// No description provided for @helpImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Games'**
+  String get helpImportTitle;
+
+  /// No description provided for @helpImportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app\'s public games directory, then pull to refresh.'**
+  String get helpImportBody;
+
+  /// No description provided for @helpLaunchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch & Quick Actions'**
+  String get helpLaunchTitle;
+
+  /// No description provided for @helpLaunchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.'**
+  String get helpLaunchBody;
+
   /// No description provided for @removeGame.
   ///
   /// In en, this message translates to:

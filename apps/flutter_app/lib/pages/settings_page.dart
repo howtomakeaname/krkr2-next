@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_theme_mode.dart';
 import '../l10n/app_localizations.dart';
@@ -587,50 +586,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
 
-            // ── About section ──
-            UiListSection(
-              header: l10n.settingsAbout,
-              children: [
-                UiListTile(
-                  icon: LucideIcons.flaskConical,
-                  title: l10n.version,
-                  subtitle: l10n.aboutVersionDesc,
-                ),
-                UiListTile(
-                  icon: LucideIcons.user,
-                  title: l10n.aboutAuthor,
-                  trailingText: 'reAAAq',
-                ),
-                UiListTile(
-                  icon: LucideIcons.mail,
-                  title: l10n.aboutEmail,
-                  trailingText: 'wangguanzhiabcd@126.com',
-                  onTap: () {
-                    Clipboard.setData(
-                      const ClipboardData(text: 'wangguanzhiabcd@126.com'),
-                    );
-                    UiSnackbar.show(
-                      context,
-                      message: l10n.aboutEmailCopied,
-                      type: UiSnackbarType.success,
-                      duration: const Duration(seconds: 2),
-                    );
-                  },
-                ),
-                UiListTile(
-                  icon: LucideIcons.code,
-                  title: 'GitHub',
-                  subtitle: 'github.com/reAAAq/KrKr2-Next',
-                  showChevron: true,
-                  onTap: () {
-                    launchUrl(
-                      Uri.parse('https://github.com/reAAAq/KrKr2-Next'),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
-                ),
-              ],
-            ),
             const SizedBox(height: UiSpacing.xxl),
           ],
         ),

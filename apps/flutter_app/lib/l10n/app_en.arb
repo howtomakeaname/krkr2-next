@@ -20,6 +20,83 @@
   "gamesDirectory": "Games directory: Games/",
   "gotIt": "Got it",
 
+  "tabHome": "Home",
+  "tabExplore": "Explore",
+  "tabManage": "Manage",
+  "tabProfile": "Me",
+  "search": "Search",
+  "searchGamesHint": "Search games",
+  "searchNoResults": "No matching games",
+  "searchComingSoon": "Search is coming soon",
+  "help": "Help",
+  "profilePlayTimeTitle": "Play Time",
+  "profileLifetime": "All Time",
+  "profileLast7Days": "Last 7 Days",
+  "profileTrackingHint": "Your activity trend starts here",
+  "profileActiveDays": "Active Days",
+  "profileGamesPlayed": "Games Played",
+  "profileAverageSession": "Avg. Session",
+  "profileTopGames": "Most Played",
+  "profileStatistics": "Play Statistics",
+  "profileViewStatistics": "View Detailed Statistics",
+  "profileHonorTitle": "Title",
+  "profileHonorNewcomer": "New Arrival",
+  "profileHonorStoryTraveler": "Story Traveler",
+  "profileHonorImmersedReader": "Immersed Reader",
+  "profileHonorVeteran": "Seasoned Player",
+  "profileHonorCollector": "Game Collector",
+  "profileHonorCurator": "Archive Curator",
+  "profileHonorNext": "Next · {title}",
+  "@profileHonorNext": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "profileHonorRemainingBoth": "{duration} and {count} more games to go",
+  "@profileHonorRemainingBoth": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "profileHonorRemainingTime": "{duration} to go",
+  "@profileHonorRemainingTime": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
+  "profileHonorRemainingGames": "{count} more games to go",
+  "@profileHonorRemainingGames": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "profileHonorHighest": "Top title reached",
+  "profileGameRecords": "Games",
+  "profileRecentGame": "Recently Played",
+  "profileNoHistory": "No activity yet",
+  "profilePlaySummary": "{duration} played · {count} games",
+  "@profilePlaySummary": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "playTimeLessThanMinute": "Less than 1 min",
+  "playTimeMinutes": "{minutes} min",
+  "@playTimeMinutes": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "playTimeHours": "{hours} hr",
+  "@playTimeHours": {
+    "placeholders": { "hours": { "type": "int" } }
+  },
+  "playTimeHoursMinutes": "{hours} hr {minutes} min",
+  "@playTimeHoursMinutes": {
+    "placeholders": {
+      "hours": { "type": "int" },
+      "minutes": { "type": "int" }
+    }
+  },
+  "helpImportTitle": "Import Games",
+  "helpImportBody": "Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app's public games directory, then pull to refresh.",
+  "helpLaunchTitle": "Launch & Quick Actions",
+  "helpLaunchBody": "Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.",
+
   "removeGame": "Remove Game",
   "removeGameConfirm": "Remove \"{title}\" from the list?\nThis will NOT delete the game files.",
   "@removeGameConfirm": {

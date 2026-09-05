@@ -63,6 +63,153 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gotIt => '了解';
 
   @override
+  String get tabHome => 'ホーム';
+
+  @override
+  String get tabExplore => '見つける';
+
+  @override
+  String get tabManage => '管理';
+
+  @override
+  String get tabProfile => 'マイページ';
+
+  @override
+  String get search => '検索';
+
+  @override
+  String get searchGamesHint => 'ゲームを検索';
+
+  @override
+  String get searchNoResults => '一致するゲームがありません';
+
+  @override
+  String get searchComingSoon => '検索機能は準備中です';
+
+  @override
+  String get help => 'ヘルプ';
+
+  @override
+  String get profilePlayTimeTitle => 'プレイ時間';
+
+  @override
+  String get profileLifetime => '累計プレイ';
+
+  @override
+  String get profileLast7Days => '直近7日間';
+
+  @override
+  String get profileTrackingHint => 'プレイ傾向はこれから記録されます';
+
+  @override
+  String get profileActiveDays => 'プレイ日数';
+
+  @override
+  String get profileGamesPlayed => 'プレイしたゲーム';
+
+  @override
+  String get profileAverageSession => '平均プレイ時間';
+
+  @override
+  String get profileTopGames => 'よく遊ぶゲーム';
+
+  @override
+  String get profileStatistics => 'プレイ統計';
+
+  @override
+  String get profileViewStatistics => '詳しい統計を見る';
+
+  @override
+  String get profileHonorTitle => '称号';
+
+  @override
+  String get profileHonorNewcomer => 'はじめの一歩';
+
+  @override
+  String get profileHonorStoryTraveler => '物語の旅人';
+
+  @override
+  String get profileHonorImmersedReader => '没入する読者';
+
+  @override
+  String get profileHonorVeteran => 'ベテランプレイヤー';
+
+  @override
+  String get profileHonorCollector => 'ゲームコレクター';
+
+  @override
+  String get profileHonorCurator => '物語の蒐集家';
+
+  @override
+  String profileHonorNext(String title) {
+    return '次 · $title';
+  }
+
+  @override
+  String profileHonorRemainingBoth(String duration, int count) {
+    return 'あと$durationと$count本';
+  }
+
+  @override
+  String profileHonorRemainingTime(String duration) {
+    return 'あと$duration';
+  }
+
+  @override
+  String profileHonorRemainingGames(int count) {
+    return 'あと$count本';
+  }
+
+  @override
+  String get profileHonorHighest => '最高ランクです';
+
+  @override
+  String get profileGameRecords => 'ゲーム記録';
+
+  @override
+  String get profileRecentGame => '最近プレイしたゲーム';
+
+  @override
+  String get profileNoHistory => '記録はありません';
+
+  @override
+  String profilePlaySummary(String duration, int count) {
+    return 'プレイ時間 $duration · $count本';
+  }
+
+  @override
+  String get playTimeLessThanMinute => '1分未満';
+
+  @override
+  String playTimeMinutes(int minutes) {
+    return '$minutes分';
+  }
+
+  @override
+  String playTimeHours(int hours) {
+    return '$hours時間';
+  }
+
+  @override
+  String playTimeHoursMinutes(int hours, int minutes) {
+    return '$hours時間$minutes分';
+  }
+
+  @override
+  String get helpImportTitle => 'ゲームをインポート';
+
+  @override
+  String get helpImportBody =>
+      'ゲームフォルダ全体、または XP3 / PFS パックをライブラリに追加します。HarmonyOS では公開ゲームフォルダに配置してから、下に引いて更新することもできます。';
+
+  @override
+  String get helpLaunchTitle => '起動とクイック操作';
+
+  @override
+  String get helpLaunchBody =>
+      'ゲームカードをタップすると詳細を表示します。長押しすると、起動、情報取得、名前変更、削除ができます。';
+
+  @override
   String get removeGame => 'ゲームを削除';
 
   @override
