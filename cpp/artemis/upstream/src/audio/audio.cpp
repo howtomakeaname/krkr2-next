@@ -16,7 +16,8 @@
 #if defined(__ANDROID__)
 #define STB_VORBIS_NO_STDIO 1
 #endif
-#include "../third_party/stb_vorbis/stb_vorbis.c"
+#define STB_VORBIS_HEADER_ONLY
+#include "../../third_party/stb_vorbis/stb_vorbis.c"
 
 namespace artc {
 

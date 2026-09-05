@@ -25,6 +25,7 @@
 #include "pack/pack_manager.h"
 
 #define STB_VORBIS_NO_STDIO 1
+#define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis/stb_vorbis.c"   // -I upstream/third_party
 
 #include <ohaudio/native_audiorenderer.h>

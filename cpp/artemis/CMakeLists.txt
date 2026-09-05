@@ -48,7 +48,8 @@ else()
     list(APPEND ARTC_CORE_SOURCES ${ARTC_UPSTREAM}/src/audio/audio.cpp)
 endif()
 
-add_library(artemis_core STATIC ${ARTC_CORE_SOURCES})
+add_library(artemis_core STATIC ${ARTC_CORE_SOURCES}
+    ${ARTC_UPSTREAM}/src/audio/vorbis_stream.cpp)
 target_compile_features(artemis_core PUBLIC cxx_std_17)
 target_include_directories(artemis_core
     PUBLIC
