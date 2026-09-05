@@ -320,6 +320,22 @@ int main() {
     c.EndTweenSet(4300); c.Update(4500); c.Draw();
     Check(At(10,15)[0]==255,"sequential rotations retain their implicit starting angles");
     c.DeleteLayer("9");
+    Check(c.LoadImage("9.1","small.tga"),"load transformed draggable fixture");
+    c.SetProps("9",{{"left","16"},{"top","10"},{"rotate","90"},
+                    {"xscale","200"},{"yscale","100"}});
+    c.SetProps("9.1",{{"left","2"},{"top","1"},{"draggable","1"},
+                      {"dragarea","0,0,4,3"}});
+    messages.BeginDrag(14,18);
+    Check(messages.DragActive(),"grab a draggable child in its rotated position");
+    messages.DragMove(13,20);
+    Check(c.GetLayerInfo("9.1").left==3 && c.GetLayerInfo("9.1").top==2,
+          "drag displacement is inverse-rotated and inverse-scaled into parent coordinates");
+    messages.DragMove(0,40);
+    Check(c.GetLayerInfo("9.1").left==4 && c.GetLayerInfo("9.1").top==3,
+          "transformed drag bounds remain local to the parent");
+    c.SetProps("9",{{"xscale","0"}}); messages.DragMove(10,10);
+    Check(c.GetLayerInfo("9.1").left==4,"collapsed parent ignores subsequent drag motion");
+    messages.EndDrag(); c.DeleteLayer("9");
 #if defined(ARTC_TEST_MOVIE)
     c.DeleteLayer("3");
     artc::Audio movie_audio; movie_audio.Init(&packs);

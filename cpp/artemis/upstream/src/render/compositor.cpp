@@ -146,6 +146,17 @@ bool Compositor::ContainsPoint(const Layer& l, float x, float y) const {
     return local_x>=0 && local_y>=0 && local_x<l.w && local_y<l.h;
 }
 
+bool Compositor::ParentDelta(const std::string& id, float dx, float dy, float* x, float* y) const {
+    // An identity child with this id collects exactly the real layer's ancestors.
+    Layer child; child.id=id;
+    const auto m=EffectiveTransform(child);
+    const float det=m.a*m.d-m.b*m.c;
+    if (!std::isfinite(det) || std::abs(det)<1e-8f) return false;
+    *x=(m.d*dx-m.c*dy)/det;
+    *y=(m.a*dy-m.b*dx)/det;
+    return true;
+}
+
 std::string Compositor::HitLayer(float x, float y) const {
     const Layer *best = nullptr;
     for (const auto &l : layers_) {

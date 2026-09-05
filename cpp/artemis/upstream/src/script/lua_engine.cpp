@@ -1360,8 +1360,10 @@ void LuaEngine::DragMove(float x, float y) {
     if (drag_id_.empty() || !compositor_) return;
     const auto info = compositor_->GetLayerInfo(drag_id_);
     if (!info.found) { EndDrag(); return; }
-    float nx = drag_off_x_ + (x - drag_origin_x_);
-    float ny = drag_off_y_ + (y - drag_origin_y_);
+    float dx, dy;
+    if (!compositor_->ParentDelta(drag_id_,x-drag_origin_x_,y-drag_origin_y_,&dx,&dy)) return;
+    float nx = drag_off_x_ + dx;
+    float ny = drag_off_y_ + dy;
     if (info.has_dragarea) {
         if (nx < info.drag_l) nx = info.drag_l;
         else if (nx > info.drag_r) nx = info.drag_r;
@@ -1370,6 +1372,7 @@ void LuaEngine::DragMove(float x, float y) {
     }
     std::map<std::string, std::string> props;
     props["left"] = std::to_string((int)nx);
+    props["top"] = std::to_string((int)ny);
     compositor_->SetProps(drag_id_, props);
     std::vector<std::pair<std::string, std::string>> attrs;
     if (FindLayerEvent(drag_id_, "drag", &attrs))

@@ -125,6 +125,8 @@ public:
     };
     // Local content coordinates -> stage; used by rendering and inverse hit tests.
     Transform EffectiveTransform(const Layer& layer) const;
+    // Convert a pointer displacement to the coordinate space of lyprop left/top.
+    bool ParentDelta(const std::string& id, float dx, float dy, float* x, float* y) const;
     std::string HitLayer(float x, float y) const;
     // KrKr2-Next: every visible textured layer containing the stage point,
     // topmost first. Lets the input layer pick the frontmost *event-bearing*
