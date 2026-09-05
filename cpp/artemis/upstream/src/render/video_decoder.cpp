@@ -107,6 +107,7 @@ struct Track {
                 status=av_read_frame(format,packet);
             } while(status>=0 && packet->stream_index!=stream);
             if(status<0) {
+                if(status!=AVERROR_EOF) DecodeError("read packet",status);
                 draining=true;
                 if(avcodec_send_packet(codec,nullptr)<0) { ended=true; return false; }
             } else {
@@ -207,13 +208,20 @@ bool VideoDecoder::Next(Frame& out) {
     auto& v=impl_->video;
     if(!v.Next()) return false;
     const int w=v.frame->width,h=v.frame->height;
-    if(w<=0 || h<=0 || w>8192 || h>8192) return false;
+    if(w<=0 || h<=0 || w>8192 || h>8192) {
+        Log(kLogError,"video: invalid frame dimensions "+std::to_string(w)+"x"+std::to_string(h));
+        return false;
+    }
     impl_->sws=sws_getCachedContext(impl_->sws,w,h,static_cast<AVPixelFormat>(v.frame->format),
         w,h,AV_PIX_FMT_RGBA,SWS_BILINEAR,nullptr,nullptr,nullptr);
-    if(!impl_->sws) return false;
+    if(!impl_->sws) {
+        Log(kLogError,"video: cannot convert pixel format "+std::to_string(v.frame->format)+" to RGBA");
+        return false;
+    }
     out.width=w; out.height=h; out.rgba.resize(static_cast<size_t>(w)*h*4);
     uint8_t* pixels[4]={out.rgba.data(),nullptr,nullptr,nullptr}; int stride[4]={w*4,0,0,0};
-    if(sws_scale(impl_->sws,v.frame->data,v.frame->linesize,0,h,pixels,stride)<=0) return false;
+    const int rows=sws_scale(impl_->sws,v.frame->data,v.frame->linesize,0,h,pixels,stride);
+    if(rows<=0) return DecodeError("convert frame",rows);
     const double pts=v.Pts(); out.pts_ms=pts<0 ? impl_->last_pts : pts;
     out.duration_ms=impl_->frame_ms; impl_->last_pts=out.pts_ms+out.duration_ms;
     return true;
