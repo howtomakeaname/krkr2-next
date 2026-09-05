@@ -75,16 +75,27 @@ int main() {
         effect.Set({{"red","1"}});shaders.End(0,effect,0,false,1,{});
         Check(Pixel()[0]==255,"recompile retained shader after GL release");
         Check(shaders.Load("integers",R"(
-            precision mediump float; uniform ivec3 tint; uniform bvec3 mask;
+            precision mediump float; uniform ivec3 tint; uniform bvec3 mask; uniform mat3 basis;
             uniform sampler2D images[2]; varying vec2 resultCoord1;
             void main(){vec3 c=vec3(tint)/255.0*vec3(mask);
-                gl_FragColor=vec4(c*texture2D(images[0],resultCoord1).rgb*texture2D(images[1],resultCoord1).rgb,1.0);}
+                gl_FragColor=vec4(basis*c*texture2D(images[0],resultCoord1).rgb*texture2D(images[1],resultCoord1).rgb,1.0);}
         )"),"compile integer/boolean vectors and sampler array");
-        effect.Set({{"shader","integers"},{"tint","128,64,255"},{"mask","-2,0,1"}});
+        effect.Set({{"shader","integers"},{"tint","128,64,255"},{"mask","-2,0,1"},{"basis","1,0,0,0,1,0,0,0,1"}});
         shaders.Begin(0,32,32,0,false);glClearColor(0,0,0,0);glClear(GL_COLOR_BUFFER_BIT);
         Check(shaders.End(0,effect,0,false,1,{}),"bind all reflected GLSL uniform types");
         pixel=Pixel();Check(abs(pixel[0]-128)<=1 && pixel[1]==0 && pixel[2]==255 && glGetError()==GL_NO_ERROR,
             "integer vectors and bool normalization reach shader without stale texture-array units");
+        GLuint inputs[2];glGenTextures(2,inputs);
+        const uint8_t colors[2][4]={{255,128,255,255},{128,255,255,255}};
+        for(int n=0;n<2;++n) {
+            glBindTexture(GL_TEXTURE_2D,inputs[n]);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,colors[n]);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+        }
+        effect.Set({{"images[0]","first"},{"images[1]","second"}});
+        shaders.Begin(0,32,32,0,false);glClearColor(0,0,0,0);glClear(GL_COLOR_BUFFER_BIT);
+        shaders.End(0,effect,0,false,1,{{"first",inputs[0]},{"second",inputs[1]}});
+        pixel=Pixel();Check(abs(pixel[0]-64)<=1 && pixel[1]==0 && pixel[2]==255,"sampler array elements use distinct texture units");
+        glDeleteTextures(2,inputs);
         shaders.ReleaseGl();
     }
     artc::Compositor c; c.Init(32,32);
