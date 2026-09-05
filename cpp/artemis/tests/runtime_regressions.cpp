@@ -228,6 +228,17 @@ int main(int argc, char** argv) {
     artc::PackManager packs;
     artc::Ini ini;
     Check(lua.Init(&packs, ini, "android", 1280, 720), "initialize Lua");
+    Check(lua.DoString(R"(
+        e:tag{'var',name='t.stamp',system='date'}
+        local n={};for _,field in ipairs{'year','month','day','hour','minute','second'} do
+            n[#n+1]=assert(tonumber(e:var('t.stamp.'..field)))
+        end
+        assert(n[1]>=1970 and n[2]>=1 and n[2]<=12 and n[3]>=1 and n[3]<=31)
+        assert(n[4]>=0 and n[4]<=23 and n[5]>=0 and n[5]<=59 and n[6]>=0 and n[6]<=60)
+        assert(string.format('%04d/%02d/%02d %02d:%02d',unpack(n)))
+        local data=pluto.persist({},n);local restored=pluto.unpersist({},data)
+        assert(#restored==6 and restored[1]==n[1])
+    )","save timestamp"),"save calendar fields survive Pluto and can format a slot caption");
     Check(lua.DoString("e:tag{'var',name='t.cond',data='$1==1'}; assert(tonumber(e:var('t.cond'))==1); "
         "e:tag{'var',name='t.cond',data='$1==0'}; assert(tonumber(e:var('t.cond'))==0); "
         "e:tag{'var',name='t.count',data=2}; e:tag{'var',name='t.count',data='$t.count + 1'}; "

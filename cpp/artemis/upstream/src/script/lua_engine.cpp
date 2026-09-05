@@ -15,6 +15,7 @@
 
 #include <cstring>
 #include <chrono>
+#include <ctime>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -319,6 +320,23 @@ int LuaEngine::l_tag(lua_State *L) {
         if (name && sys) {
             if (std::string(sys) == "delete") {
                 self->vars_.erase(name);
+            } else if (std::string(sys) == "date") {
+                // Save metadata reads six dotted calendar fields, not a Unix
+                // timestamp or the literal string "date". Use local wall time
+                // independently of the pausable monotonic animation clock.
+                const std::time_t now=std::time(nullptr);std::tm date{};
+#if defined(_WIN32)
+                const bool valid=localtime_s(&date,&now)==0;
+#else
+                const bool valid=localtime_r(&now,&date)!=nullptr;
+#endif
+                if(valid) {
+                    const std::string prefix=std::string(name)+".";
+                    for(const auto& field:std::vector<std::pair<std::string,int>>{
+                        {"year",date.tm_year+1900},{"month",date.tm_mon+1},{"day",date.tm_mday},
+                        {"hour",date.tm_hour},{"minute",date.tm_min},{"second",date.tm_sec}})
+                        self->vars_[prefix+field.first]=std::to_string(field.second);
+                } else Log(kLogError,"date: local wall clock conversion failed");
             } else if (std::string(sys) == "get_message_layer_height") {
                 // Framework query (msg/ui.lua uihelp_over): the message
                 // layer's content height after font layout — used to center
