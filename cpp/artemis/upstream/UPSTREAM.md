@@ -126,6 +126,15 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   `../tests/video_decoder_regressions.cpp` and GLES tests use generated movies;
   no commercial movie is committed.
 
+- `src/render/compositor.*` — anchored rotation and independent reverse flags
+  compose through the full layer ancestry, including nonuniform scales. Images
+  and glyph batches transform their corners; inverse hit tests reject empty
+  regions of a rotated bounding box. Uniform zoom respects explicit axis scales.
+  Rotation is also a tween property, retaining sequence/loop/yoyo behavior.
+- `src/script/lua_engine.cpp`, `src/render/compositor.*` — dragging maps stage
+  displacement back into the parent coordinate space before applying local drag
+  bounds, and updates both axes. Singular transforms ignore pointer movement.
+
 Current save persistence and the Lua-source Pluto subset are **not** compatible
 with original `BOWS` engine snapshots. Full key roles/skip, shader semantics,
 E-mote, complex typography and native snapshot restoration remain incomplete.

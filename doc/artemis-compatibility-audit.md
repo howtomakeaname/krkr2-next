@@ -7,11 +7,22 @@
 | 能力 | 本轮结果 | 尚未覆盖 |
 | --- | --- | --- |
 | 表情差分 | `0f7f0cb` 在同层换图时更新自然宽高和裁剪 UV，保留位置、锚点和父级变换。天梨 `a0054`（200×152）→ `a0051`（280×176）→ `a0002`（208×176）已在宿主及 Mate80 验证对齐 | 此场景为 PNG 差分，不经过 E-mote；E-mote 自身仍未实现 |
-| 视频 | PFS 与包旁散装文件均可读；FFmpeg 解码、PCM 输出、全屏及指定图层播放、循环、等待、取消键、播完恢复场景已经接通。Mate80 已播放原 `movie/logo.mp4` | 长视频完整真机播放、OGV/透明视频、所有原版视频标签组合尚未验证 |
+| 视频 | PFS 与包旁散装文件均可读；FFmpeg 解码、PCM 输出、全屏及指定图层播放、循环、等待、取消键、播完恢复场景已经接通。Mate80 已播放原 `movie/logo.mp4` 和 84 秒剧情视频 | 第三段长视频、OGV/透明视频、所有原版视频标签组合尚未验证 |
 | 逐字 / ruby | 每字入场时序、批量字形绘制、首次点击补全文字、再次点击推进；消息层独立页；ruby 标签与 UTF-8 范围，读音和底文一起换行；`prohibit/hung` 基本禁则和悬挂标点 | 混合字体 / 嵌套样式、竖排、复杂 ruby 分配、完整断行与字形塑形、文字清除和隐藏动画 |
-| 动画 | `tweenset` 同属性连续片段、loop、yoyo、无限循环和取消；无限等待不再溢出 | rotate、reverse、完整 shader、图层效果中间缓冲及更多原版组合 |
+| 动画 | `tweenset` 同属性连续片段、loop、yoyo、无限循环和取消；锚点旋转、左右/上下翻转及旋转动画；绘制、点击、拖拽共用父级变换 | 完整 shader、图层效果中间缓冲及更多原版组合 |
 | 按键 / 自动阅读 | override 各输入状态位和恢复、逐帧边沿、帧回调后的输入派发；自动阅读等文字和指定语音结束，再计算阅读间隔；点击/stop 停止自动阅读 | 完整快进 / 已读策略、更多 key role、脚本状态 get/set |
 | 原版存档快照 | 已识别原包存档 `BOWS` 头、版本 1003、压缩长度和 zlib 负载，用于后续格式对照 | **尚未实现**原版快照导入或同格式写出；当前变量银行持久化和 Lua-source Pluto 子集不能替代原版存档 |
+
+### 合并 main 后的图层变换修补
+
+- `2f2b4c0` 合并 `origin/main` 的 `171ba79`（新首页、统计页及玻璃组件）。没有合并冲突，原有六项本机文件修改/删除经哈希检查保持不变。
+- `d595b4f`（3 文件）：`rotate`、`reversex/reversey` 以及 `zoom`，采用 `T(position) T(anchor) R S(reverse×scale) T(-anchor)` 的父子矩阵组合。原 Android 库 `CDisplayObject::ApplyPropertyToMatrix`（`0x4d6dc8`）提供旋转角度、缩放、翻转及锚点顺序的对照。图片和字形四角均通过同一变换绘制；点击使用逆矩阵，避免旋转矩形包围盒中的空白也触发按钮。
+- `d899ffc`（2 文件）：旋转角度接入 tween 参数读写，支持连续片段的隐式起点、往返及已有的循环机制。
+- `9fad736`（4 文件）：拖拽位移先还原到父级坐标，再限制到 `dragarea`；同步写回横纵坐标。零缩放时忽略不可逆的拖拽位移。
+- 合并后 Flutter **48 项测试通过**；GLES/视频配置 **4/4** 回归通过，无 GLES/无 FFmpeg 配置 **2/2** 通过；SDK 20 `engine_api` 与签名 Release HAP 构建成功。`flutter analyze` 返回 14 条 info、无 error/warning；七个被提示的文件与合并前逐字节一致，未在本轮改动。
+- 宿主真实游戏到达天梨课堂剧情，额外施加 15° 旋转及水平翻转后，身体与表情保持对齐；这是受控变换验证，未声称该角度来自原剧情。无商业图片加入测试或提交。
+- Mate80 上 `movie/dcpyzcv3t.mp4`（23359303 字节，约 84.93 秒）显示连续剧情画面，播完回到天梨课堂正文；音轨提交 4078592 帧，与宿主完整解码一致，`underflows=0`。本轮未录制扬声器声音，不能以此声称已量化声画同步精度。
+- 新包已覆盖安装 Mate80；新首页和玻璃导航可显示，启动视频、标题及剧情可进入。新签名 HAP SHA-256：`3d88d2a46cd8221924a6dd9a2044744d0f569732ac49566f02e2bf22c36d5b78`；包内原生库 SHA-256：`b971019c1294b90b43985ea0e31df8b3705eba2bf2bd122914fb2b17eb234dc1`；build ID：`92451ab1dbfb47650f72b972baf3896971e286d5`。移除 `.comment` 后与 staged 库逐字节一致。
 
 ### 视频失败的两层根因
 
@@ -26,7 +37,7 @@
 - 另在宿主编译相同 FFmpeg 3.3.9（Darwin 禁用汇编），原包三段 MP4 均完整解码：logo 151 帧、dcpyzcv3t 2548 帧、o4p6jwsag 2755 帧，分辨率均 1280×720，同时完整读出 PCM。这是宿主验证，不是三段均已在真机看完。
 - HarmonyOS vcpkg 重新构建 FFmpeg Release/Debug，原生 `engine_api`、Release 签名 HAP 成功；覆盖安装保留应用数据。核对 HAP 中原生库与 staged 库，移除 `.comment` 后逐字节一致。
 - Mate80 两次正常启动均打开原目录 `movie/logo.mp4`，画面 HEVC、声音 AAC。连续设备截图显示 Madosoft 标志动画；视频音轨提交 241860 帧，`underflows=0`，没有此前首帧转换失败，随后继续显示启动画面与标题。日志帧数不能代替扬声器听感或严格 A/V 同步测量。
-- 当前签名 HAP SHA-256：`858efbb400165aae98c4f6d50ea549282530265be49d598a66bd66ffd3b7e757`；包内 `libengine_api.so`：`9aa2e721d5ffca2e2e48d90abd01812184c83d0abefde26598c41040d61f5874`；build ID：`50dafa74d4abbd9a3d2fb2ffe3ae84edfd0f609e`。
+- 视频阶段签名 HAP SHA-256：`858efbb400165aae98c4f6d50ea549282530265be49d598a66bd66ffd3b7e757`；包内 `libengine_api.so`：`9aa2e721d5ffca2e2e48d90abd01812184c83d0abefde26598c41040d61f5874`；build ID：`50dafa74d4abbd9a3d2fb2ffe3ae84edfd0f609e`。
 - 日志、游戏截图和反汇编资料保存在未纳入版本管理的 `agent-artifacts/artemis-audit/`。公共引擎补丁在 vendor 源码；OHAudio 输出和生命周期留在鸿蒙后端。
 
 禁则字符分类参考 [W3C JLReq 的行首、行尾禁则及悬挂标点](https://www.w3.org/TR/jlreq/#line_start_prohibition)，当前实现为横排基本子集，显式换行优先。
