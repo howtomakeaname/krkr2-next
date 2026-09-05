@@ -132,6 +132,7 @@ int Persist(lua_State* L) {
 }
 int Unpersist(lua_State* L) {
     luaL_checktype(L,1,LUA_TTABLE);size_t n;const char* s=luaL_checklstring(L,2,&n);
+    if(!n){lua_pushnil(L);return 1;}
     if(n>kMaxBytes)return luaL_error(L,"Pluto data too large");
     if(n && (s[0]=='t' || s[0]=='\n')) {
         lua_pushvalue(L,lua_upvalueindex(1));lua_pushvalue(L,1);lua_pushvalue(L,2);
