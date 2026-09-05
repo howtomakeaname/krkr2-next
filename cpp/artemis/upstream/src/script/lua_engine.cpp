@@ -1,5 +1,6 @@
 #include "script/lua_engine.h"
 #include "script/asb_parser.h"
+#include "script/expression.h"
 #include "render/compositor.h"
 #include "render/stb_image.h"
 #include "audio/audio.h"
@@ -298,9 +299,10 @@ int LuaEngine::l_tag(lua_State *L) {
         // persists these; on reboot LoadSystemData re-injects them so the
         // framework's fload_pluto→e:var can restore sys/conf/gscr.
         lua_getfield(L, 2, "data");
-        const char *data = lua_tostring(L, -1);
+        size_t data_size=0;
+        const char *data = lua_tolstring(L, -1, &data_size);
         if (name && data) {
-            self->vars_[name] = data;
+            self->vars_[name] = self->ResolveValue(std::string(data,data_size));
             lua_pop(L, 2);
             return 0;
         }
@@ -308,7 +310,9 @@ int LuaEngine::l_tag(lua_State *L) {
         lua_getfield(L, 2, "system");
         const char *sys = lua_tostring(L, -1);
         if (name && sys) {
-            if (std::string(sys) == "get_message_layer_height") {
+            if (std::string(sys) == "delete") {
+                self->vars_.erase(name);
+            } else if (std::string(sys) == "get_message_layer_height") {
                 // Framework query (msg/ui.lua uihelp_over): the message
                 // layer's content height after font layout — used to center
                 // UI help text vertically. We approximate with the height of
@@ -400,7 +404,7 @@ int LuaEngine::l_tag(lua_State *L) {
             if (lua_type(L, -2) == LUA_TSTRING) {
                 const char *k = lua_tostring(L, -2);
                 const char *v = lua_tostring(L, -1); // numbers: value slot, safe
-                if (k && v) m[k] = v;
+                if (k && v) m[k] = inst->ResolveValue(v);
             }
             lua_pop(L, 1);
         }
@@ -877,6 +881,21 @@ int LuaEngine::l_tag(lua_State *L) {
 }
 
 // e:var(name) — script vars first, then engine system values (s.*), else ""
+std::string LuaEngine::ResolveValue(const std::string& value) const {
+    if(value.empty() || value.front()!='$') return value;
+    std::string result;
+    const auto variable=[this](const std::string& name) {
+        const auto found=vars_.find(name);
+        if(found!=vars_.end()) return found->second;
+        const auto key=name.compare(0,2,"s.")==0 ? name.substr(2) : name;
+        const auto system=sysvals_.find(key);
+        return system!=sysvals_.end() ? system->second : std::string("0");
+    };
+    if(EvaluateExpression(value.substr(1),variable,result)) return result;
+    Log(kLogWarn,"invalid Artemis expression: "+value);
+    return "0";
+}
+
 int LuaEngine::l_var(lua_State *L) {
     LuaEngine *self = Self(L);
     const char *name = luaL_checkstring(L, 2);
@@ -891,7 +910,7 @@ int LuaEngine::l_var(lua_State *L) {
                            (sit == self->sysvals_.end() ? "(miss)" : sit->second));
         lua_pushstring(L, sit == self->sysvals_.end() ? "" : sit->second.c_str());
     } else {
-        lua_pushstring(L, it->second.c_str());
+        lua_pushlstring(L, it->second.data(),it->second.size());
     }
     return 1;
 }

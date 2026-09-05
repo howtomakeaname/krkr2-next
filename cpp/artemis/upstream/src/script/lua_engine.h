@@ -52,6 +52,7 @@ public:
     // Dispatch an engine tag through the e:tag bridge (iet [tag ...] lines).
     bool DispatchTag(const std::string &tag,
                      const std::vector<std::pair<std::string, std::string>> &attrs);
+    std::string ResolveValue(const std::string& value) const;
 
     // ---- input & frame hooks (M2.2) ----
     // The engine feeds normalized input (key ids per official key_id spec:

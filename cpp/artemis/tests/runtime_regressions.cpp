@@ -125,6 +125,17 @@ int main() {
     artc::PackManager packs;
     artc::Ini ini;
     Check(lua.Init(&packs, ini, "android", 1280, 720), "initialize Lua");
+    Check(lua.DoString("e:tag{'var',name='t.cond',data='$1==1'}; assert(tonumber(e:var('t.cond'))==1); "
+        "e:tag{'var',name='t.cond',data='$1==0'}; assert(tonumber(e:var('t.cond'))==0); "
+        "e:tag{'var',name='t.count',data=2}; e:tag{'var',name='t.count',data='$t.count + 1'}; "
+        "assert(e:var('t.count')=='3'); "
+        "local data='a'..string.char(0)..'b'; e:tag{'var',name='save.binary',data=data}; "
+        "assert(e:var('save.binary')==data); e:tag{'var',name='save.binary',system='delete'}; "
+        "assert(e:var('save.binary')=='')", "variable expressions"),
+        "script conditions compute numbers and variable banks retain binary strings");
+    lua.DispatchTag("wait",{{"time","$t.count*1000"},{"input","0"}});
+    Check(lua.IsWaiting(),"tag attributes resolve expressions before their command consumes them");
+    lua.SetWaiting(false);
     lua.PushKeyDown(13);
     Check(lua.DoString("assert(e:isDown(13) and e:isDownEdge(13) and e:isPush(13)); "
         "e:overrideKey{key=13,status=0}; assert(not e:isDown(13)); "
