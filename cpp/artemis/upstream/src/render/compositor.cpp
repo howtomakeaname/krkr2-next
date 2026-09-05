@@ -22,6 +22,7 @@
 #include <cmath>
 #include <set>
 #include <cstdio>
+#include <limits>
 
 namespace artc {
 
@@ -259,8 +260,12 @@ void Compositor::AddTween(const std::string &id,
     Tween tw;
     tw.id = id;
     tw.param = param;
-    tw.time_ms = ToF(get("time"), 0);
-    tw.delay_ms = ToF(get("delay"), 0);
+    tw.time_ms = std::max(0.0f, ToF(get("time"), 0));
+    tw.delay_ms = std::max(0.0f, ToF(get("delay"), 0));
+    const int loop = static_cast<int>(ToF(get("loop"), 0));
+    const int yoyo = static_cast<int>(ToF(get("yoyo"), 0));
+    tw.repeat = std::max(-1, loop != 0 ? loop : yoyo);
+    tw.yoyo = loop == 0 && yoyo != 0;
     tw.ease = ParseEase(get("ease"));
     tw.start_ms = now_ms;
     // from/to: explicit attrs win; else "<param>=a,b"; else current -> to.
@@ -272,22 +277,51 @@ void Compositor::AddTween(const std::string &id,
     else tw.to = ToF(pair);
     if (!from.empty()) { tw.from = ToF(from); tw.from_current = false; }
     else if (comma != std::string::npos) { tw.from = ToF(pair.substr(0, comma)); tw.from_current = false; }
-    // Replace an in-flight tween of the same property on the same layer.
-    for (auto it = tweens_.begin(); it != tweens_.end();) {
-        if (it->id == id && it->param == param) it = tweens_.erase(it); else ++it;
+    if (collecting_tweens_) tween_set_.push_back(tw);
+    else QueueTween(tw, true);
+}
+
+double Compositor::Tween::Duration() const {
+    if (time_ms <= 0) return delay_ms;
+    return repeat < 0 ? std::numeric_limits<double>::infinity() :
+        delay_ms + time_ms * (1.0 + repeat);
+}
+
+float Compositor::Tween::FinalValue() const {
+    return yoyo && repeat >= 0 && (repeat & 1) ? from : to;
+}
+
+void Compositor::QueueTween(Tween tw, bool replace) {
+    if (replace) {
+        tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(), [&](const Tween& old) {
+            return old.id == tw.id && old.param == tw.param;
+        }), tweens_.end());
     }
-    if (tw.time_ms <= 0 && tw.delay_ms <= 0) {
-        // instantaneous: apply and bump
-        for (auto &l : layers_) if (l.id == id) { ApplyParam(l, param, tw.to); ++revision_; }
-        return;
-    }
-    // Materialize the target layer so the tween has something to drive
-    // (the framework sometimes tweens a group id before children exist).
     bool found = false;
-    for (auto &l : layers_) if (l.id == id) { found = true; break; }
-    if (!found) { Layer g; g.id = id; layers_.push_back(g); }
+    for (auto &l : layers_) if (l.id == tw.id) { found = true; break; }
+    if (!found) { Layer g; g.id = tw.id; layers_.push_back(g); }
+    // Even zero-duration segments enter the queue, so a later segment can
+    // resolve its implicit start from the preceding segment's final value.
     tweens_.push_back(tw);
     ++revision_;
+}
+
+void Compositor::BeginTweenSet() {
+    if (!collecting_tweens_) { collecting_tweens_ = true; tween_set_.clear(); }
+}
+
+void Compositor::EndTweenSet(double now_ms) {
+    if (!collecting_tweens_) return;
+    collecting_tweens_ = false;
+    std::map<std::pair<std::string,std::string>, double> ends;
+    for (auto tw : tween_set_) {
+        const auto key = std::make_pair(tw.id, tw.param);
+        const auto previous = ends.find(key);
+        tw.start_ms = previous == ends.end() ? now_ms : previous->second;
+        ends[key] = tw.start_ms + tw.Duration();
+        QueueTween(tw, previous == ends.end());
+    }
+    tween_set_.clear();
 }
 
 void Compositor::DeleteTweens(const std::string &id) {
@@ -296,7 +330,7 @@ void Compositor::DeleteTweens(const std::string &id) {
         if (it->id == id || it->id.compare(0, prefix.size(), prefix) == 0) {
             // cancel = jump to the end value (the framework deletes tweens
             // once their visual purpose is served, e.g. reveal done)
-            for (auto &l : layers_) if (l.id == it->id) ApplyParam(l, it->param, it->to);
+            for (auto &l : layers_) if (l.id == it->id) ApplyParam(l, it->param, it->FinalValue());
             it = tweens_.erase(it);
             ++revision_;
         } else {
@@ -323,10 +357,17 @@ bool Compositor::Update(double now_ms) {
             }
         }
         const double run = since - tw.delay_ms;
-        float t = tw.time_ms > 0 ? static_cast<float>(run / tw.time_ms) : 1.0f;
-        const bool done = t >= 1.0f;
-        if (done) t = 1.0f;
-        const float v = tw.from + (tw.to - tw.from) * ApplyEase(tw.ease, t);
+        const bool done = tw.time_ms <= 0 ||
+            (tw.repeat >= 0 && run >= tw.time_ms * (1.0 + tw.repeat));
+        float v = tw.FinalValue();
+        if (!done) {
+            const double cycle = std::floor(run / tw.time_ms);
+            const float t = static_cast<float>(std::fmod(run, tw.time_ms) / tw.time_ms);
+            const bool reverse = tw.yoyo && std::fmod(cycle, 2.0) >= 1.0;
+            const float from = reverse ? tw.to : tw.from;
+            const float to = reverse ? tw.from : tw.to;
+            v = from + (to - from) * ApplyEase(tw.ease, t);
+        }
         ApplyParam(*target, tw.param, v);
         changed = true;
         if (done) it = tweens_.erase(it); else ++it;
@@ -342,7 +383,7 @@ bool Compositor::Update(double now_ms) {
 double Compositor::PendingAnimationMs(double now_ms) const {
     double remain = 0;
     for (const Tween &tw : tweens_) {
-        const double end = tw.start_ms + tw.delay_ms + tw.time_ms;
+        const double end = tw.start_ms + tw.Duration();
         if (end - now_ms > remain) remain = end - now_ms;
     }
     if (trans_active_) {
@@ -958,6 +999,7 @@ void Compositor::ReleaseGl() {
     }
     layers_.clear();
     tweens_.clear();
+    tween_set_.clear(); collecting_tweens_ = false;
     if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
     if (last_frame_tex_) { glDeleteTextures(1, &last_frame_tex_); last_frame_tex_ = 0; }
     if (scene_fbo_) { glDeleteFramebuffers(1, &scene_fbo_); scene_fbo_ = 0; }
@@ -1254,7 +1296,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     return true;
 }
 void Compositor::Shutdown() { layers_.clear(); present_cb_ = nullptr; }
-void Compositor::ReleaseGl() { ++revision_; layers_.clear(); tweens_.clear(); trans_active_ = false; gl_ready_ = false; }
+void Compositor::ReleaseGl() { ++revision_; layers_.clear(); tweens_.clear(); tween_set_.clear(); collecting_tweens_ = false; trans_active_ = false; gl_ready_ = false; }
 void Compositor::CaptureFrame() {}
 void Compositor::DrawTransitionOverlay() {}
 bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &,

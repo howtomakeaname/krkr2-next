@@ -64,6 +64,44 @@ int main() {
     sounds.Update(2100);
     Check(out.voices.empty() && !sounds.IsPlaying("bgm"), "completed output resources are released");
 
+    artc::Compositor animation;
+    animation.BeginTweenSet();
+    animation.AddTween("1",{{"param","top"},{"from","0"},{"to","10"},{"time","120"}},0);
+    animation.AddTween("1",{{"param","top"},{"from","10"},{"to","5"},{"time","60"}},0);
+    animation.AddTween("1",{{"param","top"},{"from","5"},{"to","0"},{"time","60"}},0);
+    animation.EndTweenSet(0);
+    Check(animation.PendingAnimationMs(0)==240,"nod animation retains all three durations");
+    animation.Update(60);
+    Check(animation.GetLayerInfo("1").top==5,"nod rises in its first segment");
+    animation.Update(150);
+    Check(animation.GetLayerInfo("1").top==7.5,"nod executes its middle segment");
+    animation.Update(240);
+    Check(animation.GetLayerInfo("1").top==0 && animation.PendingAnimationMs(240)==0,
+          "nod returns to its original position");
+    animation.AddTween("1",{{"param","top"},{"from","0"},{"to","-15"},
+                           {"time","100"},{"yoyo","1"}},300);
+    animation.Update(400);
+    Check(animation.GetLayerInfo("1").top==-15,"yoyo reaches the turning point");
+    animation.Update(450);
+    Check(animation.GetLayerInfo("1").top==-7.5,"yoyo traverses back");
+    animation.Update(500);
+    Check(animation.GetLayerInfo("1").top==0,"yoyo finishes at its origin");
+    animation.BeginTweenSet();
+    animation.AddTween("1",{{"param","left"},{"from","0"},{"to","20"},{"time","100"}},600);
+    animation.AddTween("1",{{"param","left"},{"to","40"},{"time","100"}},600);
+    animation.AddTween("1",{{"param","top"},{"from","0"},{"to","30"},{"time","100"}},600);
+    animation.EndTweenSet(600);
+    animation.Update(750);
+    Check(animation.GetLayerInfo("1").left==30 && animation.GetLayerInfo("1").top==30,
+          "sequences resolve implicit starts after earlier segments; independent properties run together");
+    animation.AddTween("2",{{"param","top"},{"from","0"},{"to","20"},
+                           {"time","100"},{"loop","-1"}},800);
+    animation.Update(1050);
+    Check(animation.GetLayerInfo("2").top==10,"infinite loop handles frames spanning several traversals");
+    animation.DeleteTweens("2");
+    animation.Update(1100);
+    Check(animation.PendingAnimationMs(1100)==0,"deleting a loop releases animation wait");
+
     artc::LuaEngine lua;
     artc::PackManager packs;
     artc::Ini ini;

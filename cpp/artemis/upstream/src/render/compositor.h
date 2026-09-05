@@ -127,9 +127,14 @@ public:
     // (LuaEngine hands over its e:now() clock). Tweens animate one layer
     // property (alpha / left / top / xscale / yscale / zoom / w / h) between
     // `from` and `to` over `time` ms after `delay` ms with an easing curve;
-    // [lytweendel id] cancels the tweens of a layer and its subtree.
+    // loop/yoyo count extra traversals (-1 = indefinite). A tweenset queues
+    // successive segments of each layer/property, keeping distinct properties
+    // parallel (e.g. the two components of a zoom).
+    // [lytweendel id] finishes the tweens of a layer and its subtree.
     void AddTween(const std::string &id, const std::map<std::string, std::string> &attrs,
                   double now_ms);
+    void BeginTweenSet();
+    void EndTweenSet(double now_ms);
     void DeleteTweens(const std::string &id);
     // Advance tweens/transition to `now_ms`; returns true when the picture
     // changed (the caller redraws). Call once per frame before Draw().
@@ -166,6 +171,10 @@ private:
         int ease = 0;
         bool from_current = true; // resolve `from` from the layer on first update
         bool started = false;
+        int repeat = 0;          // extra traversals; -1 repeats indefinitely
+        bool yoyo = false;       // alternate traversal direction
+        double Duration() const;
+        float FinalValue() const;
     };
 
     bool InitGl();
@@ -174,6 +183,7 @@ private:
     void CaptureFrame();
     static bool ApplyParam(Layer &l, const std::string &param, float value);
     static bool ReadParam(const Layer &l, const std::string &param, float *value);
+    void QueueTween(Tween tw, bool replace);
 
     int stage_w_ = 1280, stage_h_ = 720;
     GlProgram prog_{};
@@ -181,6 +191,8 @@ private:
     bool gl_ready_ = false;
 
     std::vector<Tween> tweens_;
+    bool collecting_tweens_ = false;
+    std::vector<Tween> tween_set_;
     double now_ms_ = 0;
     // transition state
     bool trans_active_ = false;

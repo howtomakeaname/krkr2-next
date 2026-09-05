@@ -577,6 +577,14 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->compositor_->SetProps(m["id"], m);
             return 0;
         }
+        if (tagname == "tweenset") {
+            inst->compositor_->BeginTweenSet();
+            return 0;
+        }
+        if (tagname == "/tweenset") {
+            inst->compositor_->EndTweenSet(inst->NowMs());
+            return 0;
+        }
         // lytween — timed layer-property animation.
         if (tagname == "lytween" && m.count("id")) {
             // KrKr2-Next: real tween (see Compositor::AddTween).
@@ -590,7 +598,7 @@ int LuaEngine::l_tag(lua_State *L) {
         if (tagname == "wt" && inst->compositor_) {
             // [wt] waits for running tweens/transitions.
             const double pending = inst->compositor_->PendingAnimationMs(inst->NowMs());
-            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(std::min(pending, 2147483647.0)));
             return 0;
         }
         if ((tagname == "setonsoundfinish" || tagname == "delonsoundfinish") && inst) {
