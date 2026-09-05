@@ -232,6 +232,16 @@ int main() {
     { std::ofstream f(path,std::ios::binary); f.write(reinterpret_cast<const char*>(pack.data()),pack.size()); }
     artc::PackManager fixture;
     Check(fixture.OpenChain(path.string(),{0}), "open synthetic script pack");
+    const auto loose=path.string()+".media";
+    { std::ofstream out(loose,std::ios::binary); out<<"loose movie bytes"; }
+    std::vector<uint8_t> loose_bytes;
+    const auto loose_name=std::filesystem::path(loose).filename().string();
+    Check(fixture.Exists(loose_name) && fixture.Read(loose_name,loose_bytes) &&
+        std::string(loose_bytes.begin(),loose_bytes.end())=="loose movie bytes",
+        "resource lookup falls back to loose files beside the PFS");
+    Check(!fixture.Exists("../"+loose_name) && !fixture.Read(loose,loose_bytes),
+        "loose resource lookup stays relative to the game directory");
+    std::filesystem::remove(loose);
     artc::AsbRunner runner;runner.SetPackSource(&fixture);
     artc::LuaEngine script;
     Check(script.Init(&fixture,ini,"android",1280,720), "script engine init");
