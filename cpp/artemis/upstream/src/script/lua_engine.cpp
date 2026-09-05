@@ -1,4 +1,5 @@
 #include "script/lua_engine.h"
+#include "script/asb_parser.h"
 #include "render/compositor.h"
 #include "render/stb_image.h"
 #include "audio/audio.h"
@@ -96,6 +97,7 @@ void LuaEngine::ResumeClock() {
     const auto dt = std::chrono::steady_clock::now() - clock_pause_at_;
     init_time_ += dt;
     wait_until_ += dt;
+    if (script_runner_) script_runner_->ShiftWaitDeadlines(*this, dt);
     clock_paused_ = false;
 }
 void LuaEngine::ResumeAudio() { if (audio_) audio_->ResumeAll(); }
@@ -200,7 +202,7 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
         {"setUseMultiTouch", l_noop},
         {"setUseTouchHold", l_noop},
         {"random", l_random},
-        {"setEventFilter", l_noop},
+        {"setEventFilter", l_setEventFilter},
         {"setEventHandler", l_setEventHandler},
         {"enqueueTag", l_enqueueTag},
         {"bindSurfaceAsync", l_noop},
@@ -413,11 +415,8 @@ int LuaEngine::l_tag(lua_State *L) {
     if (tagname == "wait" && inst) {
         // Official wait semantics (spec/tag/script/wait.md): suspend the
         // script until a user input (input=1/2) and/or the time (ms) elapses.
-        // `scenario` gates on the message/transition tween instead — our
-        // engine has no tween, so those complete immediately (the story
-        // page click is gated by the *click2 `@` tag, not this wait).
-        // A [trans] just began: its wt/trans_flag completion wait must
-        // auto-complete too (no transition animation in this engine).
+        // `scenario` and trans_flag wait for active animation. The story
+        // page's separate click barrier is established by the `@` tag.
         const std::string sc = m["scenario"];
         if (!sc.empty() || inst->transition_wait_) {
             // KrKr2-Next: tweens/transitions now run for real — hold the
@@ -425,7 +424,7 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->transition_wait_ = false;
             const double pending = inst->compositor_
                 ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
-            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending), m["input"] != "0");
             return 0;
         }
         int time = 0;
@@ -441,26 +440,23 @@ int LuaEngine::l_tag(lua_State *L) {
                 inst->wait_se_key_ = se;
                 inst->se_wait_ = true;
                 inst->SetWaiting(true);
-                if (time > 0) inst->SetTimedWait(time);
+                inst->wait_accept_input_ = in == "1" || in == "2";
+                if (time > 0) inst->SetTimedWait(time, inst->wait_accept_input_);
             } else if (time > 0) {
                 inst->SetTimedWait(time);
             }
             return 0;
         }
-        if (in == "1" || in == "2") {
-            if (time > 0) inst->SetTimedWait(time);   // either input or deadline
-            else inst->SetWaiting(true);              // pure click wait
-        } else if (time > 0) {
-            inst->SetTimedWait(time);
+        if (time > 0) {
+            inst->SetTimedWait(time, in == "1" || in == "2");
         } else {
-            // input=0, time=0: eqwait normalized by flg.ui (dialog eqwait /
-            // trans_flag). KrKr2-Next: this is "wait for the running
-            // transition/tween" — hold for the pending animation and fall
-            // through when nothing is animating (it used to block until a tap,
-            // which stalled every scene change on a white/black mask).
+            // `input` permits skipping an existing wait; it does not create
+            // a click barrier. Framework wt() emits {wait,input=1}, sometimes
+            // twice after a transition. The second must complete immediately
+            // when there is no animation left. `@` establishes a click wait.
             const double pending = inst->compositor_
                 ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
-            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending));
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending), in == "1" || in == "2");
         }
         return 0;
     }
@@ -581,10 +577,7 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->compositor_->SetProps(m["id"], m);
             return 0;
         }
-        // lytween — the framework hides title buttons (alpha=0) then reveals
-        // them with 0.4s alpha/left tweens (title_animeset/title_anime). Our
-        // compositor has no animation engine, so apply the tween end value
-        // immediately (instant-reveal approximation; animation comes later).
+        // lytween — timed layer-property animation.
         if (tagname == "lytween" && m.count("id")) {
             // KrKr2-Next: real tween (see Compositor::AddTween).
             inst->compositor_->AddTween(m["id"], m, inst->NowMs());
@@ -646,9 +639,7 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->compositor_->Draw();
             return 0;
         }
-        // [trans] — transition effect. No transition animation in this
-        // engine; mark that the transition's own completion wait (wt /
-        // trans_flag eqwait) must auto-complete.
+        // [trans] — retain the previous scene and start its transition.
         if (tagname == "trans") {
             inst->transition_wait_ = true;
             // KrKr2-Next: crossfade from the last presented frame. type=1 is
@@ -1057,8 +1048,10 @@ bool LuaEngine::FindLayerEvent(const std::string &id, const std::string &type,
 }
 
 void LuaEngine::ClickAt(float x, float y) {
-    SetWaiting(false);   // a tap ends the current click-wait
-    if (!compositor_) return;
+    if (!compositor_) {
+        if (wait_accept_input_) SetWaiting(false);
+        return;
+    }
     // KrKr2-Next: the real engine dispatches a click to the frontmost layer
     // that OWNS a click event (walking up its id chain), not to whatever
     // decorative child happens to be drawn on top of it — the choice-button
@@ -1071,9 +1064,15 @@ void LuaEngine::ClickAt(float x, float y) {
     if (id.empty()) id = compositor_->HitLayer(x, y);
     Log(kLogInfo, "click: hit='" + id + "' registered=" +
                       (FindLayerEvent(id, "click", nullptr) ? "yes" : "no"));
-    if (id.empty()) return;
     std::vector<std::pair<std::string, std::string>> attrs;
-    if (!FindLayerEvent(id, "click", &attrs)) return;
+    if (id.empty() || !FindLayerEvent(id, "click", &attrs)) {
+        if (wait_accept_input_) SetWaiting(false);
+        return;
+    }
+    if (!FilterEvent("lyevent", attrs)) return;
+    // Button events run above the scenario, which keeps its cursor and wait.
+    // A plain click outside an event releases the wait in the branch above.
+    const uint64_t event = script_runner_ ? script_runner_->BeginEvent(*this) : 0;
     // touch model: rollover sets btn.cursor first, then the click fires.
     for (const auto &kv : attrs)     // over
         if (kv.first == "over" && !kv.second.empty())
@@ -1108,6 +1107,7 @@ void LuaEngine::ClickAt(float x, float y) {
                 CallEvent(kv.second, attrs, true);
         FireOnPush(1);                   // CLICK key → setonpush_calllua
     }
+    if (script_runner_) script_runner_->EndEvent(event);
 }
 
 // Key press → registered setonpush handler (framework click routing).
@@ -1115,6 +1115,7 @@ void LuaEngine::FireOnPush(int key) {
     const auto it = onpush_.find(key);
     if (it == onpush_.end()) return;
     const auto attrs = it->second;   // copy: handler may re-enter
+    if (!FilterEvent("setonpush", attrs)) return;
     for (const auto &kv : attrs)
         if (kv.first == "function" && !kv.second.empty()) {
             CallEvent(kv.second, attrs, false);
@@ -1195,7 +1196,10 @@ bool LuaEngine::PushGlobalFn(const std::string &fn, bool quiet) {
         const std::string part = dot == std::string::npos
                                      ? fn.substr(start) : fn.substr(start, dot - start);
         if (first) lua_getglobal(L_, part.c_str());
-        else lua_getfield(L_, -1, part.c_str());
+        else {
+            lua_getfield(L_, -1, part.c_str());
+            lua_remove(L_, -2); // retain the child, not every parent table
+        }
         first = false;
         if (dot == std::string::npos) break;
         if (!lua_istable(L_, -1)) {
@@ -1214,6 +1218,38 @@ bool LuaEngine::PushGlobalFn(const std::string &fn, bool quiet) {
 }
 
 // engine -> Lua event invocation: fn(param_table), param = lyevent attrs
+int LuaEngine::l_setEventFilter(lua_State* L) {
+    auto* self = Self(L);
+    if (!lua_isnoneornil(L, 2) && !lua_isfunction(L, 2))
+        return luaL_error(L, "setEventFilter expects a function or nil");
+    luaL_unref(L, LUA_REGISTRYINDEX, self->event_filter_ref_);
+    if (lua_isnoneornil(L, 2)) lua_pushnil(L);
+    else lua_pushvalue(L, 2);
+    self->event_filter_ref_ = luaL_ref(L, LUA_REGISTRYINDEX);
+    return 0;
+}
+
+bool LuaEngine::FilterEvent(const std::string& kind,
+                           const std::vector<std::pair<std::string, std::string>>& attrs) {
+    if (event_filter_ref_ < 0) return true;
+    lua_rawgeti(L_, LUA_REGISTRYINDEX, event_filter_ref_);
+    lua_getglobal(L_, kBridgeTable);
+    lua_pushlstring(L_, kind.data(), kind.size());
+    lua_newtable(L_);
+    for (const auto& kv : attrs) {
+        lua_pushlstring(L_, kv.second.data(), kv.second.size());
+        lua_setfield(L_, -2, kv.first.c_str());
+    }
+    if (PCallTraceback(L_, 3, 1) != 0) {
+        Log(kLogError, "event filter: " + std::string(lua_tostring(L_, -1)));
+        lua_pop(L_, 1);
+        return false;
+    }
+    const int result = lua_isnumber(L_, -1) ? int(lua_tointeger(L_, -1)) : 0;
+    lua_pop(L_, 1);
+    return result == 0;
+}
+
 void LuaEngine::CallEvent(const std::string &fn,
                           const std::vector<std::pair<std::string, std::string>> &param,
                           bool quiet) {
@@ -1234,19 +1270,40 @@ void LuaEngine::CallEvent(const std::string &fn,
 }
 
 void LuaEngine::SetWaiting(bool w) {
-    if (!w) se_wait_ = false;
-    if (waiting_ == w) return;
+    if (!w) { se_wait_ = false; timed_wait_ = false; }
+    else if (!timed_wait_ && !se_wait_) wait_accept_input_ = true;
     waiting_ = w;
-    if (!w) timed_wait_ = false;   // manual release also clears any timed wait
-    const auto it = event_handlers_.find(w ? "onClickWaitIn" : "onClickWaitOut");
+    const bool click_wait = w && !timed_wait_ && !se_wait_;
+    if (click_wait_announced_ == click_wait) return;
+    click_wait_announced_ = click_wait;
+    const auto it = event_handlers_.find(click_wait ? "onClickWaitIn" : "onClickWaitOut");
     if (it != event_handlers_.end() && !it->second.empty())
         CallGlobalInternal(it->second, true);
 }
 
+LuaEngine::WaitState LuaEngine::SuspendWait() {
+    WaitState state{waiting_, timed_wait_, wait_accept_input_, click_wait_announced_,
+                    se_wait_, transition_wait_, wait_se_key_, wait_until_};
+    waiting_ = timed_wait_ = se_wait_ = transition_wait_ = click_wait_announced_ = false;
+    return state;
+}
+
+void LuaEngine::RestoreWait(const WaitState& state) {
+    waiting_ = state.waiting;
+    timed_wait_ = state.timed;
+    wait_accept_input_ = state.accept_input;
+    click_wait_announced_ = state.announced;
+    se_wait_ = state.sound;
+    transition_wait_ = state.transition;
+    wait_se_key_ = state.sound_key;
+    wait_until_ = state.deadline;
+}
+
 // [wt]/[wait] style time waits: hold the runner until the deadline passes.
-void LuaEngine::SetTimedWait(int ms) {
+void LuaEngine::SetTimedWait(int ms, bool accept_input) {
     wait_until_ = ClockNow() + std::chrono::milliseconds(ms);
     timed_wait_ = true;
+    wait_accept_input_ = accept_input;
     SetWaiting(true);
 }
 
@@ -1343,8 +1400,17 @@ void LuaEngine::LoadSystemData() {
 // click wait is signalled by onClickWaitIn/Out and leaves this table empty,
 // which matches the adv framework's getWaitStatus() gate.
 int LuaEngine::l_getScriptWaitReason(lua_State *L) {
-    (void)Self(L);
+    auto* self = Self(L);
+    self->IsWaiting();
     lua_newtable(L);
+    if (self->timed_wait_) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "time");
+    }
+    if (self->se_wait_) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "sound");
+    }
     return 1;
 }
 
@@ -1360,11 +1426,18 @@ int LuaEngine::l_random(lua_State *L) {
     return 1;
 }
 
-// e:getScriptStack() — the native script stack. The compat runner is flat
-// (no subroutine frames yet), so an empty table is the honest answer; the
-// framework only counts/length-checks it (#ss, table.maxn).
 int LuaEngine::l_getScriptStack(lua_State *L) {
     lua_newtable(L);
+    LuaEngine* self = Self(L);
+    if (self && self->script_runner_) {
+        int i = 1;
+        for (const auto& file : self->script_runner_->StackFiles()) {
+            lua_newtable(L);
+            lua_pushlstring(L, file.data(), file.size());
+            lua_setfield(L, -2, "file");
+            lua_rawseti(L, -2, i++);
+        }
+    }
     return 1;
 }
 
@@ -1526,29 +1599,7 @@ bool LuaEngine::CallGlobal(const std::string &fn) {
 
 bool LuaEngine::CallGlobalInternal(const std::string &fn, bool quiet) {
     if (!L_) return false;
-    // dotted names resolve through tables (sv.autosavecheck → sv["autosavecheck"])
-    size_t start = 0;
-    bool first = true;
-    for (;;) {
-        const size_t dot = fn.find('.', start);
-        const std::string part = dot == std::string::npos
-                                     ? fn.substr(start) : fn.substr(start, dot - start);
-        if (first) lua_getglobal(L_, part.c_str());
-        else lua_getfield(L_, -1, part.c_str());
-        first = false;
-        if (dot == std::string::npos) break;
-        if (!lua_istable(L_, -1)) {
-            if (!quiet) Log(kLogError, "calllua: global not found: " + fn);
-            lua_pop(L_, 1);
-            return false;
-        }
-        start = dot + 1;
-    }
-    if (!lua_isfunction(L_, -1)) {
-        if (!quiet) Log(kLogError, "calllua: global not found: " + fn);
-        lua_pop(L_, 1);
-        return false;
-    }
+    if (!PushGlobalFn(fn, quiet)) return false;
     lua_getglobal(L_, kBridgeTable);   // engine bridge passed as arg 1
     if (PCallTraceback(L_, 1, 0) != 0) {
         if (!quiet)

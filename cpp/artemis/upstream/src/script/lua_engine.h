@@ -30,6 +30,7 @@ namespace artc {
 class Compositor;
 class Audio;
 class AudioChannels;
+class AsbRunner;
 
 class LuaEngine {
 public:
@@ -129,8 +130,18 @@ public:
 
     // Click-wait gating: wait tags pause the native runner until a tap.
     void SetWaiting(bool w);
-    void SetTimedWait(int ms);
+    void SetTimedWait(int ms, bool accept_input = false);
     bool IsWaiting();
+    // A layer/key handler executes above the interrupted script. Suspend its
+    // wait without emitting a click-wait exit; restore it when the handler returns.
+    struct WaitState {
+        bool waiting, timed, accept_input, announced, sound, transition;
+        std::string sound_key;
+        std::chrono::steady_clock::time_point deadline;
+    };
+    WaitState SuspendWait();
+    void RestoreWait(const WaitState& state);
+    void SetScriptRunner(AsbRunner* runner) { script_runner_ = runner; }
 
     // [reset] tag = engine reboot (language-select flow hands off this way).
     // The host loop polls this once per frame and re-runs the boot chain.
@@ -180,6 +191,10 @@ private:
     static int l_getMousePoint(lua_State *L);
     static int l_getTouchCount(lua_State *L);
     static int l_setEventHandler(lua_State *L);
+    static int l_setEventFilter(lua_State *L);
+    bool FilterEvent(const std::string& kind,
+                     const std::vector<std::pair<std::string, std::string>>& attrs);
+    int event_filter_ref_ = -2; // LUA_NOREF
     static int l_overrideKey(lua_State *L);
     static int l_enqueueTag(lua_State *L);
     static int l_random(lua_State *L);
@@ -228,14 +243,14 @@ private:
     float drag_off_x_ = 0, drag_off_y_ = 0;
     bool waiting_ = false;                              // click-wait gating
     bool timed_wait_ = false;
+    bool wait_accept_input_ = true;
+    bool click_wait_announced_ = false;
     // KrKr2-Next: [wait se=N] — released when voice N stops (or by input).
     bool se_wait_ = false;
     std::string wait_se_key_;
     // KrKr2-Next: setonsoundfinish {id, function} — fired once the voice ends.
     std::map<std::string, std::string> onsoundfinish_;
-    // A [trans] tag began a transition; the engine has no transition tween,
-    // so the transition's own completion wait (wt / trans_flag eqwait) must
-    // auto-complete instead of blocking on user input.
+    // A [trans] tag began a transition; its following wait gates on animation.
     bool transition_wait_ = false;
     // audio backend (splay/seplay/voplay) — raw ptr, owned by this engine
     Audio *audio_ = nullptr;
@@ -256,6 +271,7 @@ private:
     std::function<void(const std::string &, const std::string &)> jump_handler_;
     std::function<void(const std::string &, const std::string &)> call_handler_;
     std::function<void(const std::string &)> stop_handler_;
+    AsbRunner* script_runner_ = nullptr; // host owns the runner
     std::deque<std::pair<std::string,
                          std::vector<std::pair<std::string, std::string>>>> tag_queue_;
     bool reset_requested_ = false;
