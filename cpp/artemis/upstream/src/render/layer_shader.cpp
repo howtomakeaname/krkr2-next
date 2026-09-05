@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <sstream>
 #if defined(ARTC_HAS_GLES)
 #include <GLES2/gl2.h>
@@ -167,20 +168,32 @@ bool LayerShaders::End(size_t depth,const LayerEffect& effect,uint32_t parent,bo
         std::string key=name;auto bracket=key.find('[');if(bracket!=std::string::npos)key.resize(bracket);
         GLint location=glGetUniformLocation(p,name);
         if(type==GL_SAMPLER_2D) {
-            if(unit>=max_units)return false;
-            uint32_t texture=white_;
-            if(key=="textureFore")texture=g.fore.texture;
-            else if(key=="textureBack")texture=g.back.texture;
-            else if(auto binding=effect.parameters.find(key);binding!=effect.parameters.end()) {
-                if(auto found=textures.find(binding->second);found!=textures.end())texture=found->second;
+            if(length>max_units-unit) {
+                glBindFramebuffer(GL_FRAMEBUFFER,parent);glViewport(0,0,g.width,g.height);
+                Log(kLogError,"layer shader exceeds texture unit limit");return false;
             }
-            glActiveTexture(GL_TEXTURE0+unit);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(location,unit++);continue;
+            std::vector<GLint> units;
+            for(int n=0;n<length;++n) {
+                uint32_t texture=white_;
+                if(key=="textureFore")texture=g.fore.texture;
+                else if(key=="textureBack")texture=g.back.texture;
+                else {
+                    auto binding=effect.parameters.find(length>1?key+"["+std::to_string(n)+"]":key);
+                    if(binding==effect.parameters.end() && n==0)binding=effect.parameters.find(key);
+                    if(binding!=effect.parameters.end())if(auto found=textures.find(binding->second);found!=textures.end())texture=found->second;
+                }
+                glActiveTexture(GL_TEXTURE0+unit);glBindTexture(GL_TEXTURE_2D,texture);units.push_back(unit++);
+            }
+            glUniform1iv(location,length,units.data());continue;
         }
         // Native standard uniforms are set below, independently of arbitrary parameters.
         if(key=="artc_top_down" || key=="artc_opacity" || key=="alpha" || key=="colorMultiply")continue;
         std::vector<float> v;
         if(auto it=effect.parameters.find(key);it!=effect.parameters.end())v=Numbers(it->second);
-        int width=1;if(type==GL_FLOAT_VEC2)width=2;else if(type==GL_FLOAT_VEC3)width=3;else if(type==GL_FLOAT_VEC4)width=4;
+        int width=1;
+        if(type==GL_FLOAT_VEC2 || type==GL_INT_VEC2 || type==GL_BOOL_VEC2)width=2;
+        else if(type==GL_FLOAT_VEC3 || type==GL_INT_VEC3 || type==GL_BOOL_VEC3)width=3;
+        else if(type==GL_FLOAT_VEC4 || type==GL_INT_VEC4 || type==GL_BOOL_VEC4)width=4;
         else if(type==GL_FLOAT_MAT2)width=4;else if(type==GL_FLOAT_MAT3)width=9;else if(type==GL_FLOAT_MAT4)width=16;
         v.resize(size_t(length)*width,0); // no uniform state leaks from another layer
         switch(type) {
@@ -191,7 +204,14 @@ bool LayerShaders::End(size_t depth,const LayerEffect& effect,uint32_t parent,bo
         case GL_FLOAT_MAT2:glUniformMatrix2fv(location,length,GL_FALSE,v.data());break;
         case GL_FLOAT_MAT3:glUniformMatrix3fv(location,length,GL_FALSE,v.data());break;
         case GL_FLOAT_MAT4:glUniformMatrix4fv(location,length,GL_FALSE,v.data());break;
-        case GL_INT:case GL_BOOL:{std::vector<GLint> n(v.begin(),v.end());glUniform1iv(location,length,n.data());break;}
+        case GL_INT:case GL_BOOL:case GL_INT_VEC2:case GL_BOOL_VEC2:
+        case GL_INT_VEC3:case GL_BOOL_VEC3:case GL_INT_VEC4:case GL_BOOL_VEC4: {
+            const bool boolean=type==GL_BOOL || type==GL_BOOL_VEC2 || type==GL_BOOL_VEC3 || type==GL_BOOL_VEC4;
+            std::vector<GLint> n;n.reserve(v.size());
+            for(float x:v)n.push_back(boolean?x!=0:GLint(std::clamp(double(x),double(std::numeric_limits<GLint>::min()),double(std::numeric_limits<GLint>::max()))));
+            if(width==1)glUniform1iv(location,length,n.data());else if(width==2)glUniform2iv(location,length,n.data());
+            else if(width==3)glUniform3iv(location,length,n.data());else glUniform4iv(location,length,n.data());break;
+        }
         default: break;
         }
     }
