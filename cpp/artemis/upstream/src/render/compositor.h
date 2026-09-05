@@ -10,6 +10,7 @@
 // the render surface by an orthographic transform in the shader.
 #pragma once
 #include "render/layer_shader.h"
+#include "render/snapshot_image.h"
 #include <functional>
 #include <map>
 #include <string>
@@ -76,6 +77,8 @@ public:
     bool LoadImage(const std::string &id, const std::string &file);
     bool LoadShader(const std::string& id, const std::string& file);
     bool SetPixels(const std::string& id, const uint8_t* rgba, int width, int height);
+    // Capture the retained stage without redrawing the save/menu overlays.
+    bool Snapshot(SnapshotImage& output) const;
     void SetProps(const std::string &id, const std::map<std::string, std::string> &attrs);
     void DeleteLayer(const std::string &id);
 

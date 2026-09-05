@@ -1,6 +1,7 @@
 #include "render/compositor.h"
 #include "render/layer_shader.h"
 #include "render/emote_scene.h"
+#include "render/stb_image.h"
 #include "emote_scene_fixture.h"
 #include "pack/pack_manager.h"
 #include "script/lua_engine.h"
@@ -539,6 +540,22 @@ int main() {
     c.ReleaseGl();c.Init(32,32);
     Check(emote_scene.Render(c,"30",5,{{"expression",10}},emote_error),emote_error.c_str());c.Draw();
     Check(At(11,6)[1]==255,"E-mote scene reuploads textures after GL context resources are discarded");
+    artc::SnapshotImage snapshot;
+    Check(c.Snapshot(snapshot) && snapshot.width==32 && snapshot.rgba[(6*32+11)*4+1]==255,
+        "retained scene capture has top-down image coordinates");
+    const auto retained=snapshot.rgba;c.DeleteLayer("30");c.Draw();
+    Check(snapshot.rgba==retained,"captured save image does not change when menus replace the scene");
+    std::vector<uint8_t> png;Check(snapshot.EncodePng(16,16,png),"encode sized PNG snapshot");
+    int png_width=0,png_height=0,channels=0;
+    auto* decoded=stbi_load_from_memory(png.data(),int(png.size()),&png_width,&png_height,&channels,4);
+    Check(decoded && png_width==16 && png_height==16 && decoded[(3*16+6)*4+1]>200,"PNG round-trip preserves the upper scene and size");
+    stbi_image_free(decoded);const auto valid_png=png;
+    Check(!snapshot.EncodePng(0,16,png) && !snapshot.EncodePng(8193,1,png) && png==valid_png,"invalid snapshot dimensions preserve output");
+    artc::SnapshotImage transparent;transparent.width=2;transparent.height=1;
+    transparent.rgba={255,0,0,255,0,0,255,0};Check(transparent.EncodePng(1,1,png),"resize transparent image");
+    decoded=stbi_load_from_memory(png.data(),int(png.size()),&png_width,&png_height,&channels,4);
+    Check(decoded && decoded[0]==255 && decoded[2]==0 && decoded[3]==128,"thumbnail interpolation cannot leak colors from transparent pixels");
+    stbi_image_free(decoded);
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");

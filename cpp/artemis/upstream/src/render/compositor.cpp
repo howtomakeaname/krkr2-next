@@ -1254,6 +1254,21 @@ void Compositor::Shutdown() {
     present_cb_ = nullptr;
 }
 
+bool Compositor::Snapshot(SnapshotImage& output) const {
+    if(!gl_ready_ || !scene_fbo_ || stage_w_<1 || stage_h_<1 || uint64_t(stage_w_)*stage_h_>16777216)return false;
+    SnapshotImage image;image.width=stage_w_;image.height=stage_h_;image.rgba.resize(size_t(stage_w_)*stage_h_*4);
+    GLint framebuffer=0,alignment=0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING,&framebuffer);glGetIntegerv(GL_PACK_ALIGNMENT,&alignment);
+    glBindFramebuffer(GL_FRAMEBUFFER,scene_fbo_);glPixelStorei(GL_PACK_ALIGNMENT,1);
+    glReadPixels(0,0,stage_w_,stage_h_,GL_RGBA,GL_UNSIGNED_BYTE,image.rgba.data());
+    const auto error=glGetError();glPixelStorei(GL_PACK_ALIGNMENT,alignment);glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);
+    if(error!=GL_NO_ERROR)return false;
+    const size_t stride=size_t(stage_w_)*4;
+    for(int y=0;y<stage_h_/2;++y)
+        std::swap_ranges(image.rgba.begin()+y*stride,image.rgba.begin()+(y+1)*stride,image.rgba.begin()+(stage_h_-1-y)*stride);
+    output=std::move(image);return true;
+}
+
 void Compositor::Draw() {
     if (!gl_ready_) return;
 
@@ -1634,6 +1649,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
 void Compositor::Shutdown() { layers_.clear(); present_cb_ = nullptr; }
 void Compositor::ReleaseGl() { ++revision_; layers_.clear(); tweens_.clear(); tween_set_.clear(); collecting_tweens_ = false; trans_active_ = false; gl_ready_ = false; }
 void Compositor::CaptureFrame() {}
+bool Compositor::Snapshot(SnapshotImage&) const {return false;}
 void Compositor::DrawTransitionOverlay() {}
 bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &,
                                  int, int, int) {
