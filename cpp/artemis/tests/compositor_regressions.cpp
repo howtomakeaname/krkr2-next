@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iterator>
 #include <chrono>
+#include <algorithm>
 
 static void Check(bool ok, const char* why) {
     if (!ok) { std::cerr << why << " GL=" << glGetError() << '\n'; std::exit(1); }
@@ -259,6 +260,48 @@ int main() {
           "smaller replacement retains layer position and parent transform");
     Check(!c.LoadImage("3.1","missing.png"),"missing replacement fails");
     Check(c.GetLayerInfo("3.1").width==4,"failed replacement keeps existing surface");
+    c.DeleteLayer("3");
+    Check(c.LoadImage("9.1","small.tga"),"load transform fixture");
+    c.SetProps("9",{{"left","16"},{"top","10"},{"rotate","90"},
+                    {"xscale","200"},{"yscale","100"}});
+    c.SetProps("9.1",{{"left","2"},{"top","1"}}); c.Draw();
+    Check(At(14,18)[0]==255 && At(20,12)[2]==255,
+          "rotated and scaled parent moves the child pixels");
+    Check(c.HitLayer(14,18)=="9.1" && c.HitLayer(20,12)!="9.1",
+          "hit testing follows the same rotated child as rendering");
+    c.SetProps("9",{{"left","16"},{"top","16"},{"rotate","45"},
+                    {"zoom","100"}});
+    c.SetProps("9.1",{{"left","0"},{"top","0"},{"w","8"},{"h","8"}});
+    Check(c.HitLayer(16,20)=="9.1" && c.HitLayer(11,17)!="9.1",
+          "a point in the rotated bounding box but outside the quad does not hit");
+    const auto corner_hits=c.HitLayers(11,17);
+    Check(std::find(corner_hits.begin(),corner_hits.end(),"9.1")==corner_hits.end(),
+          "layer-event hit lists also use the inverse transform");
+    c.DeleteLayer("9");
+    const uint8_t stripes[]={255,0,0,255, 0,255,0,255};
+    Check(c.SetPixels("9.1",stripes,2,1),"load asymmetric mirror fixture");
+    c.SetProps("9",{{"left","10"},{"top","10"},{"anchorx","4"},
+                    {"anchory","2"},{"reversex","1"}});
+    c.SetProps("9.1",{{"w","8"},{"h","4"}}); c.Draw();
+    Check(At(11,11)[1]>220 && At(16,11)[0]>220,
+          "reversex mirrors child pixels around the parent anchor");
+    Check(c.HitLayer(11,11)=="9.1","mirrored content remains clickable");
+    c.SetProps("9",{{"reversex","0"},{"reversey","1"},{"rotate","90"}}); c.Draw();
+    Check(At(13,9)[0]>220 && At(13,15)[1]>220,
+          "vertical reversal composes with anchored clockwise rotation");
+    c.SetProps("9",{{"zoom","150"},{"xscale","200"}});
+    const auto& group=c.Layers().back();
+    Check(group.id=="9" && group.sx==2 && group.sy==1.5,
+          "explicit axis scale takes precedence over uniform zoom");
+    c.SetProps("9",{{"xscale","0"}});
+    Check(c.HitLayer(14,12)!="9.1","collapsed transforms cannot intercept input");
+    c.DeleteLayer("9");
+    Check(c.SetText("9.1","A",10,0xffffff,10),"load rotated text fixture");
+    c.SetProps("9.1",{{"left","0"},{"top","0"}});
+    c.SetProps("9",{{"left","20"},{"top","10"},{"rotate","90"}}); c.Draw();
+    Check(At(16,13)[0]==255 && At(23,14)[2]==255,
+          "glyph batches use the same parent rotation as image quads");
+    c.DeleteLayer("9");
 #if defined(ARTC_TEST_MOVIE)
     c.DeleteLayer("3");
     artc::Audio movie_audio; movie_audio.Init(&packs);

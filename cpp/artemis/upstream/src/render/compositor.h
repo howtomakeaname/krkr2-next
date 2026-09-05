@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <utility>
 
 namespace artc {
 
@@ -49,6 +50,8 @@ struct Layer {
     float u0 = 0, v0 = 0, u1 = 1, v1 = 1;  // clip region (normalized UV)
     float ax = 0, ay = 0;      // anchor point within the image
     float sx = 1.0f, sy = 1.0f; // xscale/yscale (lyprop percent / 100), pivot = anchor
+    float rotate = 0;          // clockwise degrees in the y-down stage
+    bool reverse_x = false, reverse_y = false;
     bool own_pos = false;      // lyprop set an explicit position on this layer
     // [lyprop draggable/dragarea] — the framework's slider pins are
     // draggable within a rect given as {left, top, right, bottom} offsets
@@ -108,10 +111,20 @@ public:
     // Topmost visible textured layer whose rect contains the stage point.
     void EffectiveRect(const Layer &l, float *ex, float *ey,
                        float *ea, bool *ev) const;
-    // KrKr2-Next: full effective transform — origin AND displayed size after
-    // the ancestor chain's translations and anchored scales are composed.
+    // Signed origin/size for axis-aligned transforms; bounding rectangle
+    // otherwise. Drawing and hit tests use EffectiveTransform directly.
     void EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
                        float *eh, float *ea, bool *ev) const;
+    struct Transform {
+        float a=1, b=0, c=0, d=1, tx=0, ty=0;
+        float alpha=1;
+        bool visible=true;
+        std::pair<float,float> Point(float x, float y) const {
+            return {a*x+c*y+tx, b*x+d*y+ty};
+        }
+    };
+    // Local content coordinates -> stage; used by rendering and inverse hit tests.
+    Transform EffectiveTransform(const Layer& layer) const;
     std::string HitLayer(float x, float y) const;
     // KrKr2-Next: every visible textured layer containing the stage point,
     // topmost first. Lets the input layer pick the frontmost *event-bearing*
@@ -203,6 +216,7 @@ private:
     };
 
     bool InitGl();
+    bool ContainsPoint(const Layer& layer, float x, float y) const;
     uint32_t CreateTexture(const uint8_t *pixels, int w, int h);
     void DrawTransitionOverlay();
     void CaptureFrame();

@@ -82,69 +82,74 @@ void Compositor::EffectiveRect(const Layer &l, float *ex, float *ey,
     EffectiveRect(l, ex, ey, &w, &h, ea, ev);
 }
 
-// KrKr2-Next: layer transform model, replacing the upstream absolute/inherit
-// heuristic. Each layer contributes
-//     T = translate(x, y) . translate(ax, ay) . scale(sx, sy) . translate(-ax, -ay)
-// i.e. an offset RELATIVE to its parent plus a scale about its own anchor,
-// and a layer's world transform is the composition of every ancestor's T
-// (root first). For axis-aligned scale+translate this collapses to
-//     origin' = origin + scale * (x + ax * (1 - sx)),   scale' = scale * sx
-// which reproduces the framework's layouts observed on device:
-//   * `1.0 {left=0 top=0 anchor=640,360 xscale=100}` covers the stage
-//     (the old `x - ax` rule pushed it to -640,-360 and dragged every BG
-//     with it);
-//   * face parts `<char>.<part> {x=f.x-z.x ...}` land on the head of a
-//     positioned character container; choice buttons `1.80.120.N.0
-//     {left=360}` stack under `1.80.120.N {top=284/368}`;
-//   * the pull-out toolbar `1.80.tb.tb {left=1240}` keeps its buttons
-//     off-screen except the 40px tab, as the real engine does;
-//   * the title character `500.b.1 {left=120 top=150 anchor=592,160
-//     xscale=200}` doubles around its anchor (top-left -472,-10 — the case
-//     the old `x - ax` rule was fitted to, valid only for scale 2).
-// Anchors without scale/rotation therefore never move a layer; a layer
-// without an explicit position simply inherits its parent's origin.
-void Compositor::EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
-                               float *eh, float *ea, bool *ev) const {
-    // Collect the ancestor chain root-first ("a.b.c" -> "a", "a.b").
-    std::vector<const Layer *> chain;
-    {
-        std::string id = l.id;
-        size_t dot;
-        while ((dot = id.rfind('.')) != std::string::npos) {
-            id = id.substr(0, dot);
-            for (const auto &p : layers_) {
-                if (p.id == id) { chain.push_back(&p); break; }
-            }
-        }
+// The reference CDisplayObject::ApplyPropertyToMatrix composes
+// T(position) T(anchor) R(clockwise degrees) S(scale) S(reverse) T(-anchor).
+// Compose the complete ancestor chain, so rotation and mirroring move face
+// parts, glyphs and hit regions together, including nonuniform parent scales.
+Compositor::Transform Compositor::EffectiveTransform(const Layer& l) const {
+    std::vector<const Layer*> chain;
+    std::string id=l.id;
+    size_t dot;
+    while ((dot=id.rfind('.'))!=std::string::npos) {
+        id.resize(dot);
+        for (const auto& parent:layers_)
+            if (parent.id==id) { chain.push_back(&parent); break; }
     }
-    float ox = 0, oy = 0, sx = 1, sy = 1;
-    float a = 1.0f;
-    bool vis = true;
-    auto apply = [&](const Layer &n) {
-        a *= n.alpha;
-        vis = vis && n.visible;
-        // n.x/n.y stay 0 for plain group layers; SetText's default message
-        // placement and draggable pins store relative offsets here too.
-        ox += sx * (n.x + n.ax * (1.0f - n.sx));
-        oy += sy * (n.y + n.ay * (1.0f - n.sy));
-        sx *= n.sx;
-        sy *= n.sy;
+    Transform m;
+    auto apply=[&](const Layer& n) {
+        const float radians=std::remainder(n.rotate,360.f)*3.14159265358979323846f/180.f;
+        float co=std::cos(radians), si=std::sin(radians);
+        // Exact quadrants should not produce cracks or fail edge hit tests.
+        if (std::abs(co)<1e-7f) co=0;
+        if (std::abs(si)<1e-7f) si=0;
+        const float sx=n.sx*(n.reverse_x ? -1.f : 1.f);
+        const float sy=n.sy*(n.reverse_y ? -1.f : 1.f);
+        const float a=co*sx, b=si*sx, c=-si*sy, d=co*sy;
+        const float tx=n.x+n.ax-a*n.ax-c*n.ay;
+        const float ty=n.y+n.ay-b*n.ax-d*n.ay;
+        const auto origin=m.Point(tx,ty);
+        const float ma=m.a*a+m.c*b, mb=m.b*a+m.d*b;
+        const float mc=m.a*c+m.c*d, md=m.b*c+m.d*d;
+        m.a=ma; m.b=mb; m.c=mc; m.d=md; m.tx=origin.first; m.ty=origin.second;
+        m.alpha*=n.alpha; m.visible=m.visible && n.visible;
     };
-    for (auto it = chain.rbegin(); it != chain.rend(); ++it) apply(**it);
+    for (auto it=chain.rbegin();it!=chain.rend();++it) apply(**it);
     apply(l);
-    *ex = ox + l.content_x * sx; *ey = oy + l.content_y * sy;
-    *ew = l.w * sx; *eh = l.h * sy;
-    *ea = a; *ev = vis;
+    const auto origin=m.Point(l.content_x,l.content_y);
+    m.tx=origin.first; m.ty=origin.second;
+    return m;
+}
+
+void Compositor::EffectiveRect(const Layer& l, float* ex, float* ey, float* ew,
+                               float* eh, float* ea, bool* ev) const {
+    const auto m=EffectiveTransform(l);
+    *ea=m.alpha; *ev=m.visible;
+    if (m.b==0 && m.c==0) {
+        // Preserve the signed dimensions exposed by the scale-only API.
+        *ex=m.tx; *ey=m.ty; *ew=m.a*l.w; *eh=m.d*l.h;
+        return;
+    }
+    const auto p0=m.Point(0,0), p1=m.Point(l.w,0);
+    const auto p2=m.Point(0,l.h), p3=m.Point(l.w,l.h);
+    *ex=std::min({p0.first,p1.first,p2.first,p3.first});
+    *ey=std::min({p0.second,p1.second,p2.second,p3.second});
+    *ew=std::max({p0.first,p1.first,p2.first,p3.first})-*ex;
+    *eh=std::max({p0.second,p1.second,p2.second,p3.second})-*ey;
+}
+
+bool Compositor::ContainsPoint(const Layer& l, float x, float y) const {
+    const auto m=EffectiveTransform(l);
+    const float det=m.a*m.d-m.b*m.c;
+    if (!m.visible || !l.texture || !std::isfinite(det) || std::abs(det)<1e-8f) return false;
+    x-=m.tx; y-=m.ty;
+    const float local_x=(m.d*x-m.c*y)/det, local_y=(m.a*y-m.b*x)/det;
+    return local_x>=0 && local_y>=0 && local_x<l.w && local_y<l.h;
 }
 
 std::string Compositor::HitLayer(float x, float y) const {
     const Layer *best = nullptr;
     for (const auto &l : layers_) {
-        float ex, ey, ew, eh, ea; bool ev;
-        EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
-        if (!ev || !l.texture) continue;
-        if (x < std::min(ex, ex + ew) || y < std::min(ey, ey + eh) ||
-            x >= std::max(ex, ex + ew) || y >= std::max(ey, ey + eh)) continue;
+        if (!ContainsPoint(l,x,y)) continue;
         if (!best) best = &l;
         else {
             const int c = ZCmp(l.id, best->id);
@@ -487,11 +492,7 @@ std::string Compositor::DescribeDrawList(size_t max_layers) const {
 std::vector<std::string> Compositor::HitLayers(float x, float y) const {
     std::vector<const Layer *> hits;
     for (const auto &l : layers_) {
-        float ex, ey, ew, eh, ea; bool ev;
-        EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
-        if (!ev || !l.texture) continue;
-        if (x < std::min(ex, ex + ew) || y < std::min(ey, ey + eh) ||
-            x >= std::max(ex, ex + ew) || y >= std::max(ey, ey + eh)) continue;
+        if (!ContainsPoint(l,x,y)) continue;
         hits.push_back(&l);
     }
     // topmost first: higher z (ZCmp) then deeper id wins
@@ -1103,6 +1104,8 @@ void Compositor::SetProps(const std::string &id,
     ++revision_;
     for (auto &l : layers_) {
         if (l.id != id) continue;
+        if (const auto zoom=attrs.find("zoom"); zoom!=attrs.end())
+            l.sx=l.sy=ToF(zoom->second,100)/100.f;
         for (const auto &kv : attrs) {
             if (kv.first == "x" || kv.first == "left") { l.x = std::stof(kv.second); l.own_pos = true; }
             else if (kv.first == "y" || kv.first == "top") { l.y = std::stof(kv.second); l.own_pos = true; }
@@ -1112,6 +1115,9 @@ void Compositor::SetProps(const std::string &id,
                 const float a = std::stof(kv.second);
                 l.alpha = std::clamp(a / 255.0f, 0.0f, 1.0f);   // script uses 0-255
             }
+            else if (kv.first == "rotate") l.rotate = ToF(kv.second);
+            else if (kv.first == "reversex") l.reverse_x = ToF(kv.second)!=0;
+            else if (kv.first == "reversey") l.reverse_y = ToF(kv.second)!=0;
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
             else if (kv.first == "xscale") { const float v = std::stof(kv.second); l.sx = v / 100.0f; }
             else if (kv.first == "yscale") { const float v = std::stof(kv.second); l.sy = v / 100.0f; }
@@ -1248,12 +1254,11 @@ void Compositor::Draw() {
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     for (const Layer *l : sorted) {
-        float ex, ey, ew, eh, ea; bool ev;
-        EffectiveRect(*l, &ex, &ey, &ew, &eh, &ea, &ev);
-        if (!ev || !l->texture) continue;
+        const auto transform=EffectiveTransform(*l);
+        const float ea=transform.alpha;
+        if (!transform.visible || !l->texture) continue;
         glBindTexture(GL_TEXTURE_2D, l->texture);
         if (!l->glyphs.empty()) {
-            const float sx=l->w!=0 ? ew/l->w : 0, sy=l->h!=0 ? eh/l->h : 0;
             std::vector<float> vertices;
             vertices.reserve(l->glyphs.size()*30);
             for (const auto& g:l->glyphs) {
@@ -1267,10 +1272,12 @@ void Compositor::Draw() {
                     else if(tw.param=="top") gy+=diff;
                 }
                 if (alpha<=0 || g.w<=0 || g.h<=0) continue;
-                const float x0=ex+gx*sx, y0=ey+gy*sy, x1=x0+g.w*sx, y1=y0+g.h*sy;
-                vertices.insert(vertices.end(),{x0,y0,g.u0,g.v0,alpha, x1,y0,g.u1,g.v0,alpha,
-                    x0,y1,g.u0,g.v1,alpha, x0,y1,g.u0,g.v1,alpha,
-                    x1,y0,g.u1,g.v0,alpha, x1,y1,g.u1,g.v1,alpha});
+                const auto p0=transform.Point(gx,gy), p1=transform.Point(gx+g.w,gy);
+                const auto p2=transform.Point(gx,gy+g.h), p3=transform.Point(gx+g.w,gy+g.h);
+                vertices.insert(vertices.end(),{p0.first,p0.second,g.u0,g.v0,alpha,
+                    p1.first,p1.second,g.u1,g.v0,alpha, p2.first,p2.second,g.u0,g.v1,alpha,
+                    p2.first,p2.second,g.u0,g.v1,alpha, p1.first,p1.second,g.u1,g.v0,alpha,
+                    p3.first,p3.second,g.u1,g.v1,alpha});
             }
             if(!vertices.empty()) {
                 glUniform1f(prog_.u_alpha,ea);
@@ -1287,11 +1294,12 @@ void Compositor::Draw() {
             continue;
         }
         glUniform1f(prog_.u_alpha, ea);
-        float x0 = ex, y0 = ey, x1 = ex + ew, y1 = ey + eh;
+        const auto p0=transform.Point(0,0), p1=transform.Point(l->w,0);
+        const auto p2=transform.Point(0,l->h), p3=transform.Point(l->w,l->h);
         // interleaved: x, y, u, v per vertex (triangle strip)
         float verts[16] = {
-            x0, y0, l->u0, l->v0,   x1, y0, l->u1, l->v0,
-            x0, y1, l->u0, l->v1,   x1, y1, l->u1, l->v1,
+            p0.first,p0.second,l->u0,l->v0, p1.first,p1.second,l->u1,l->v0,
+            p2.first,p2.second,l->u0,l->v1, p3.first,p3.second,l->u1,l->v1,
         };
         glVertexAttribPointer(prog_.a_pos, 2, GL_FLOAT, GL_FALSE, 16, verts);
         glEnableVertexAttribArray(prog_.a_pos);
@@ -1422,6 +1430,8 @@ void Compositor::SetProps(const std::string &id,
     ++revision_;
     for (auto &l : layers_) {
         if (l.id != id) continue;
+        if (const auto zoom=attrs.find("zoom"); zoom!=attrs.end())
+            l.sx=l.sy=ToF(zoom->second,100)/100.f;
         for (const auto &kv : attrs) {
             if (kv.first == "x" || kv.first == "left") { l.x = std::stof(kv.second); l.own_pos = true; }
             else if (kv.first == "y" || kv.first == "top") { l.y = std::stof(kv.second); l.own_pos = true; }
@@ -1431,6 +1441,9 @@ void Compositor::SetProps(const std::string &id,
                 const float a = std::stof(kv.second);
                 l.alpha = std::clamp(a / 255.0f, 0.0f, 1.0f);
             }
+            else if (kv.first == "rotate") l.rotate = ToF(kv.second);
+            else if (kv.first == "reversex") l.reverse_x = ToF(kv.second)!=0;
+            else if (kv.first == "reversey") l.reverse_y = ToF(kv.second)!=0;
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
             else if (kv.first == "xscale") { const float v = std::stof(kv.second); l.sx = v / 100.0f; }
             else if (kv.first == "yscale") { const float v = std::stof(kv.second); l.sy = v / 100.0f; }
