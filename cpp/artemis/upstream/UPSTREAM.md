@@ -135,8 +135,36 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   displacement back into the parent coordinate space before applying local drag
   bounds, and updates both axes. Singular transforms ignore pointer movement.
 
-Current save persistence and the Lua-source Pluto subset are **not** compatible
-with original `BOWS` engine snapshots. Full key roles/skip, shader semantics,
-E-mote, complex typography and native snapshot restoration remain incomplete.
+- `src/script/pluto_codec.*` — native Pluto value graphs (32/64-bit string
+  lengths, cycles, shared tables, binary strings and permanent references), with
+  legacy Lua-source-bank reading retained. VM closures, threads, userdata and
+  special persistence are explicitly unsupported.
+- `src/script/native_save.*`, `src/script/save_storage.*`, `lua_engine.*`,
+  `asb_parser.*` — validated BOWS/1003 zlib and indexed object directories;
+  native variable/layer journals restore through the game's `onLoad` callback.
+  Discard stale runner call frames before restoration. `save file=...` now writes
+  an independent ARCV compatibility checkpoint after `onSave`; checksums and
+  atomic file replacement prevent partial bank/slot writes. ARCV is NOT native
+  BOWS export; original-engine round-trip and complete VM snapshots are pending.
+- `lua_engine.cpp`, `src/script/save_metadata.*` — `var system=date` writes
+  local year/month/day/hour/minute/second for save captions. Recover empty dates
+  in early compatibility slot metadata from the matching ARCV file's mtime;
+  retain existing dates and leave absent/non-ARCV files alone.
+- `src/render/layer_shader.*`, `compositor.*`, `lua_engine.*` — load game-authored
+  mobile GLSL via `lyshader`; compose parent/child effect groups and intermediate
+  framebuffers with straight/premultiplied alpha conversion. Bind native
+  foreground/background/mask/user textures, float/int/bool vectors, matrices
+  and arrays independently per layer. Includes negative/gray/multiply and
+  add/screen blending. HLSL and full intermediate-mode caching semantics remain
+  unsupported; shader source retention allows reload after GL resource loss.
+- `src/pack/psb.*`, `src/render/emote_model.*` — platform-neutral, bounded plain
+  PSB v2–v4/MDF resource decoding, RL/raw RGBA/CI8 images, original sprite origins,
+  variable/timeline metadata and offline keyframe sampling. Public model data
+  exposed duplicate tracks and numeric-string values, both retained/accepted.
+  This is an E-mote data foundation, NOT a working SDK/player: no Lua surface
+  integration, mesh/stencil renderer, child-motion evaluation or physics yet.
+
+Full key roles/skip, all shader semantics, E-mote playback, complex typography
+and complete native snapshot interchange remain incomplete.
 See `doc/artemis-compatibility-audit.md` at the repository root for validation
 scope and the distinction between host and signed HarmonyOS device tests.
