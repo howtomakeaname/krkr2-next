@@ -113,9 +113,12 @@ int main(int argc, char** argv) {
         ("artemis-native-slot-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(slot_dir);
     {std::ofstream f(slot_dir/"slot.dat",std::ios::binary);f.write(reinterpret_cast<const char*>(native.data()),native.size());}
+    Check(artc::WriteSaveFile((slot_dir/"saveg.dat").string(),global),"prepare native globals");
     artc::PackManager slot_packs;
     artc::LuaEngine slot_engine;slot_engine.SetSaveDir(slot_dir.string());
     Check(slot_engine.Init(&slot_packs,artc::Ini{},"android",32,32,nullptr),"initialize slot importer");
+    Check(slot_engine.DoString("assert(e:var('g.config')=='x\\0y')","native globals available before boot"),
+          "first boot imports BOWG globals");
     Check(!slot_engine.LoadSnapshot("slot.dat"),"native import requires an onLoad restorer");
     Check(slot_engine.DoString(R"(
         restored=0
@@ -146,11 +149,15 @@ int main(int argc, char** argv) {
             restored=restored+1
         end
         e:setEventHandler{onSave="checkpoint_save",onLoad="checkpoint_load"}
+        e:tag{'var',name='g.config',data='new settings'}
         e:tag{"save",file="one.dat"};e:tag{"save",file="two.dat"}
         assert(e:isFileExists(e:var('s.savepath')..'/one.dat'))
         assert(e:isFileExists(e:var('s.savepath')..'/two.dat'))
     )","checkpoint slots"),"save honors distinct slot filenames and onSave preparation");
     Check(slot_engine.LoadSnapshot("one.dat") && slot_engine.LoadSnapshot("two.dat"),"each checkpoint reloads its own graph");
+    Check(!slot_engine.SaveSnapshot("system.dat") && !slot_engine.SaveSnapshot("saveg.dat"),"scenario saves cannot overwrite global banks");
+    std::vector<uint8_t> original_global;
+    Check(artc::ReadSaveFile((slot_dir/"saveg.dat").string(),original_global) && original_global==global,"native bank is left byte-for-byte intact");
     Check(slot_engine.DoString("assert(restored==3)","checkpoint callbacks"),"checkpoint load callbacks complete");
     Check(slot_engine.DoString(R"(
         local slots={[1]={file='one',date={}},[2]={file='two',date={2000,1,2,3,4,5}},[3]={file='missing',date={}}}
@@ -159,6 +166,7 @@ int main(int argc, char** argv) {
     artc::LuaEngine recovered;recovered.SetSaveDir(slot_dir.string());
     Check(recovered.Init(&slot_packs,artc::Ini{},"android",1280,720),"reload bank with missing dates");
     Check(recovered.DoString(R"(
+        assert(e:var('g.config')=='new settings')
         local slots=pluto.unpersist({},e:var('g.system')).saveslot
         assert(#slots[1].date==6 and slots[1].date[1]>=1970)
         assert(slots[2].date[1]==2000 and #slots[3].date==0)
@@ -171,6 +179,21 @@ int main(int argc, char** argv) {
         if(bytes.size()>=4 && std::string(bytes.begin(),bytes.begin()+4)=="BOWG") {
             Check(artc::DecodeNativeGlobals(bytes,globals,save_error),save_error.c_str());
             std::cout<<"native globals: "<<globals.variables.size()<<" variables, "<<globals.read_lines.size()<<" read-line sets\n";
+            const auto directory=slot_dir/"private-global";
+            std::filesystem::create_directories(directory);
+            Check(artc::WriteSaveFile((directory/"saveg.dat").string(),bytes),"copy private global bank into isolated test directory");
+            artc::LuaEngine imported;imported.SetSaveDir(directory.string());
+            Check(imported.Init(&slot_packs,artc::Ini{},"android",1280,720),"initialize original global bank");
+            Check(imported.DoString(R"(
+                for _,name in ipairs{'g.system','g.config','g.script'} do
+                    assert(type(pluto.unpersist({},e:var(name)))=='table')
+                end
+                local slots=pluto.unpersist({},e:var('g.system')).saveslot
+                local count=0
+                for n,slot in pairs(slots) do if type(n)=='number' and type(slot)=='table' then count=count+1 end end
+                assert(count>0)
+            )","original global graphs"),"original settings and save slots deserialize before game boot");
+            std::filesystem::remove_all(slot_dir);
             continue;
         }
         Check(artc::DecodeNativeSave(bytes,decoded,save_error),save_error.c_str());

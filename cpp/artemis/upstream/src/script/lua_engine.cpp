@@ -54,6 +54,17 @@ int PCallTraceback(lua_State *L, int nargs, int nresults) {
     lua_remove(L, base);
     return rc;
 }
+bool ValidateBankGraphs(lua_State* L,const VariableBank& bank,std::string& error) {
+    for(const auto& v:bank) {
+        if(v.second.size()<4 || v.second.compare(0,4,std::string("\1\0\0\0",4)))continue;
+        const int top=lua_gettop(L);lua_getglobal(L,"pluto");lua_getfield(L,-1,"unpersist");
+        lua_newtable(L);lua_pushlstring(L,v.second.data(),v.second.size());
+        const int rc=lua_pcall(L,2,1,0);
+        if(rc) {const char* message=lua_tostring(L,-1);error=v.first+": "+(message?message:"invalid Pluto graph");}
+        lua_settop(L,top);if(rc)return false;
+    }
+    return true;
+}
 } // namespace
 
 
@@ -1640,17 +1651,33 @@ bool LuaEngine::SaveSystemData() {
 }
 void LuaEngine::LoadSystemData() {
     VariableBank next;std::vector<uint8_t> bytes;const auto path=SavePath(save_dir_,"system.dat");
-    if(!ReadSaveFile(path,bytes))return;
-    if(!DecodeVariableBank(bytes,false,next)) {Log(kLogError,"save: invalid system bank "+path);return;}
+    std::string error,source=path;
+    if(ReadSaveFile(path,bytes)) {
+        if(!DecodeVariableBank(bytes,false,next)) {Log(kLogError,"save: invalid system bank "+path);return;}
+    } else {
+        // Existing compatibility banks are authoritative, including cleared
+        // slots/settings. Never merge an old BOWG back over newer progress.
+        std::error_code ec;
+        if(std::filesystem::exists(path,ec) || ec) {Log(kLogError,"save: cannot read system bank "+path);return;}
+        source=SavePath(save_dir_,"saveg.dat");
+        if(!ReadSaveFile(source,bytes))return;
+        NativeGlobals globals;
+        if(!DecodeNativeGlobals(bytes,globals,error)) {Log(kLogError,"save: invalid native globals: "+error);return;}
+        next=std::move(globals.variables);
+        // Read-line sets are decoded but not applied until native read/skip
+        // tracking is implemented. The original BOWG remains untouched.
+    }
+    if(!ValidateBankGraphs(L_,next,error)) {Log(kLogError,"save: invalid global graph: "+error);return;}
     const bool repaired=RepairCompatibilitySaveDates(L_,next,save_dir_);
     for(auto& kv:next)vars_[kv.first]=std::move(kv.second);
     if(repaired) {Log(kLogInfo,"save: recovered empty compatibility-slot dates from file times");SaveSystemData();}
-    Log(kLogInfo,"save: restored variables from "+path);
+    Log(kLogInfo,"save: restored variables from "+source);
 }
 bool LuaEngine::SaveSnapshot(const std::string& file) {
     const auto path=SavePath(save_dir_,file);
     const auto handler=event_handlers_.find("onSave");
-    if(path.empty() || saving_ || handler==event_handlers_.end() || handler->second.empty()) {
+    if(path.empty() || path==SavePath(save_dir_,"system.dat") || path==SavePath(save_dir_,"saveg.dat") ||
+       saving_ || handler==event_handlers_.end() || handler->second.empty()) {
         Log(kLogError,"save: checkpoint needs a valid slot and onSave callback");return false;
     }
     saving_=true;const bool ready=CallEvent(handler->second,{{"file",file}},false);saving_=false;
@@ -1683,15 +1710,7 @@ bool LuaEngine::LoadSnapshot(const std::string& file) {
     if(!decoded) {Log(kLogError,"load: invalid snapshot "+file+": "+error);return false;}
     // Validate native Pluto blobs before touching the running state. Raw scalar
     // variables remain strings; closures/VM pointers fail explicitly.
-    for(const auto& v:snapshot.variables) {
-        if(v.second.size()<4 || v.second.compare(0,4,std::string("\1\0\0\0",4)))continue;
-        const int top=lua_gettop(L_);lua_getglobal(L_,"pluto");lua_getfield(L_,-1,"unpersist");
-        lua_newtable(L_);lua_pushlstring(L_,v.second.data(),v.second.size());
-        const int rc=lua_pcall(L_,2,1,0);
-        if(rc)error=lua_tostring(L_,-1);
-        lua_settop(L_,top);
-        if(rc){Log(kLogError,"load: "+v.first+": "+error);return false;}
-    }
+    if(!ValidateBankGraphs(L_,snapshot.variables,error)) {Log(kLogError,"load: "+error);return false;}
     for(const auto& c:snapshot.layers)
         if(c.name!="lyc" && c.name!="lyprop" && c.name!="lyevent" && c.name!="lytween" && c.name!="anime") {
             Log(kLogError,"load: unsupported saved layer command "+c.name);return false;
