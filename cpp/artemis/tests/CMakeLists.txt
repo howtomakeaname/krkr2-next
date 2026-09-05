@@ -6,3 +6,8 @@ add_subdirectory(.. engine)
 add_executable(runtime_regressions runtime_regressions.cpp)
 target_link_libraries(runtime_regressions PRIVATE artemis_core)
 add_test(NAME runtime_regressions COMMAND runtime_regressions)
+add_executable(audio_stream_regressions audio_stream_regressions.cpp)
+target_compile_definitions(audio_stream_regressions PRIVATE ARTC_TEST_DATA="${ARTC_TEST_DATA_DIR}")
+target_link_libraries(audio_stream_regressions PRIVATE artemis_core)
+add_test(NAME audio_stream_regressions COMMAND audio_stream_regressions)
+
