@@ -286,20 +286,13 @@ bool ArtemisRuntime::Impl::Boot(std::string* error) {
 
   runner = artc::AsbRunner();
   runner.SetPackSource(&packs);
+  lua->SetScriptRunner(&runner);
   artc::AsbRunner* r = &runner;
   artc::LuaEngine* l = lua.get();
   lua->SetJumpHandler([this, r](const std::string& file, const std::string& label) {
-    if (r->Returning()) {
-      Log("asb: skip jump while returning: " + label);
-      return;
-    }
     r->Jump(file, label);
   });
   lua->SetCallHandler([this, r](const std::string& file, const std::string& label) {
-    if (r->Returning()) {
-      Log("asb: skip call while returning: " + label);
-      return;
-    }
     r->Call(file, label);
   });
   lua->SetStopHandler([this, r](const std::string& tag) {
@@ -398,11 +391,8 @@ void ArtemisRuntime::Impl::DrainQueuedTags() {
         if (kv.first == "file") file = kv.second;
         else if (kv.first == "label") label = kv.second;
       }
-      if (runner.Returning()) {
-        Log("asb: skip queued [" + name + "] while returning");
-      } else {
-        runner.Jump(file, label);
-      }
+      if (name == "call") runner.Call(file, label);
+      else runner.Jump(file, label);
     } else {
       lua->DispatchTag(name, attrs);
     }
@@ -478,41 +468,7 @@ void ArtemisRuntime::Impl::StepScript() {
   if (!lua) return;
   if (runner.Loaded() && !runner.Halted() && !lua->IsWaiting()) {
     for (int steps = 0; steps < 4 && runner.Loaded() && !runner.Halted(); ++steps) {
-      runner.ClearReturning();  // a return was resolved last line
-      const artc::AsbLine& ln = runner.Current();
-      if (ln.is_label) {
-        runner.Advance();
-      } else if (ln.command == "\x02LUA") {
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "code") lua->DoString(kv.second, "asb:lua");
-        runner.Advance();
-      } else if (ln.command == "calllua") {
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "function") lua->CallGlobal(kv.second);
-        runner.Advance();
-      } else if (ln.command == "jump") {
-        std::string lbl;
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "label") lbl = kv.second;
-        runner.JumpTo(lbl);
-      } else if (ln.command == "stop" && ln.attrs.empty()) {
-        // Halt in place; the call frame (if any) stays for the [return]
-        // that the resuming flow issues later (select_exit / dialog).
-        runner.Halt();
-        Log("asb: [stop] reached (halt)");
-      } else if (ln.command == "stop") {
-        // `[stop exskip]` (script.asb *movie_play) stops the fast-forward
-        // mode, not the script — nothing to do natively.
-        runner.Advance();
-      } else if (ln.command == "return") {
-        if (!runner.Return()) {
-          runner.Halt();
-          Log("asb: [return] reached (halt)");
-        }
-      } else {
-        lua->DispatchTag(ln.command, ln.attrs);
-        runner.Advance();
-      }
+      runner.ExecuteLine(*lua);
       // command-boundary queue processing (estag chains)
       DrainQueuedTags();
       if (lua->IsWaiting()) break;

@@ -48,7 +48,9 @@ else()
     list(APPEND ARTC_CORE_SOURCES ${ARTC_UPSTREAM}/src/audio/audio.cpp)
 endif()
 
-add_library(artemis_core STATIC ${ARTC_CORE_SOURCES})
+add_library(artemis_core STATIC ${ARTC_CORE_SOURCES}
+    ${ARTC_UPSTREAM}/src/audio/audio_channels.cpp
+    ${ARTC_UPSTREAM}/src/audio/vorbis_stream.cpp)
 target_compile_features(artemis_core PUBLIC cxx_std_17)
 target_include_directories(artemis_core
     PUBLIC
@@ -56,7 +58,29 @@ target_include_directories(artemis_core
     PRIVATE
         ${ARTC_UPSTREAM}/src/render
         ${ARTC_UPSTREAM}/third_party)
-target_link_libraries(artemis_core PUBLIC artemis_lua51)
+find_package(ZLIB REQUIRED)
+target_link_libraries(artemis_core PUBLIC artemis_lua51 ZLIB::ZLIB)
+
+# The application already supplies FFmpeg through vcpkg. Standalone host
+# regressions can use the system libraries without changing the app manifest.
+option(ARTC_ENABLE_FFMPEG "Decode Artemis movies with FFmpeg" ON)
+if(ARTC_ENABLE_FFMPEG)
+    if(FFMPEG_FOUND)
+        target_include_directories(artemis_core PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(artemis_core PUBLIC ${FFMPEG_LIBRARIES})
+        target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+    elseif(NOT CMAKE_CROSSCOMPILING)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(ARTC_FFMPEG QUIET IMPORTED_TARGET
+                libavformat libavcodec libavutil libswresample libswscale)
+            if(ARTC_FFMPEG_FOUND)
+                target_link_libraries(artemis_core PUBLIC PkgConfig::ARTC_FFMPEG)
+                target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+            endif()
+        endif()
+    endif()
+endif()
 # The upstream code is -Wall -Wextra clean modulo a few unused-variable
 # nits; silence those so the OHOS build log stays readable.
 target_compile_options(artemis_core PRIVATE

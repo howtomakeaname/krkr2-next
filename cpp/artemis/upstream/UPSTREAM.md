@@ -47,8 +47,8 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   script.asb) instead of halting.
 - `src/render/compositor.{h,cpp}` — real `[lytween]` tweens (alpha / left /
   top / xscale / yscale / zoom / w / h, delay + easing curves, `lytweendel`
-  cancels a subtree) and `[trans]` crossfades (last composited frame is
-  captured with glCopyTexImage2D and faded out over the new state; `rule=`
+  cancels a subtree) and `[trans]` crossfades (the retained composited scene is
+  captured and faded out over the new state; `rule=`
   images drive a thresholded wipe with `vague` softness). `Update(now)` /
   `PendingAnimationMs()` let the host advance animations and make `[wt]` /
   `wait scenario` hold the script for their duration.
@@ -63,3 +63,133 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   voice ends (polled per frame), and a bare `[wait]` (time=0, input=0 — the
   framework's eqwait/trans_flag) waits for the running transition/tween
   instead of blocking until a tap.
+
+- `src/audio/audio_channels.*` — shared logical BGM/SE/voice channels with
+  timed gain/pan ramps, overlap for crossfades, and completed-track retirement.
+- `src/audio/vorbis_stream.*` — shared block decoder with `_a` intro / `_b`
+  continuation support (also for non-looping playback). Android OpenSL ES and
+  the HarmonyOS OHAudio backend consume stereo blocks instead of whole-file PCM.
+- `src/script/lua_engine.*` — wait input permissions no longer create an
+  unconditional wait; mandatory waits survive taps; event filters, wait reasons,
+  and dotted callbacks retain balanced Lua stacks. Layer events preserve the
+  interrupted runner cursor and wait across script jumps/calls/returns.
+- `src/script/asb_parser.*` — common reentrant instruction execution, event
+  return frames, and script-stack file enumeration. The host calls `ExecuteLine`
+  instead of holding script references across Lua callbacks. App resume shifts
+  both active wait deadlines and waits suspended below a menu event.
+- `src/render/compositor.*` — retained scene framebuffer for transition
+  captures, consistent 0–255 alpha, zero/mirrored scale; em-based text with
+  typographic metrics, reserved ruby line spacing, alignment, outline, explicit newlines, and font selection
+  per message layer. Text rectangle origins compose with layer translations;
+  empty text clears old pixels. `rt` appends a line break.
+- Regression fixtures under `../tests` are synthetic scripts/audio and an
+  original rectangle-glyph font; no commercial game content is included.
+- HarmonyOS-only `../ohos/audio_ohos.cpp` — retire finished voices after the
+  submitted frames have been presented; mute and release renderers on a worker
+  so OHAudio's blocking Stop does not stall rendering. Log submitted frames and
+  renderer underflows when retiring a voice.
+- `src/render/compositor.*` — reloading a layer surface adopts the new natural
+  dimensions and resets crop UVs, retaining the layer transform. This fixes PNG
+  face-expression changes with different bounding boxes; it is not E-mote.
+  Tween sets retain sequential segments per property; loop/yoyo counts and
+  infinite animation waits no longer lose segments or overflow the wait timer.
+- `src/script/input_state.h`, `src/script/lua_engine.*` — key overrides implement
+  push/down/down-edge/up-edge/decide bits and -1 restoration. Input is dispatched
+  after the frame callback so scripts can suppress a key in that frame. Confirm
+  and movie-cancel roles respect overrides. Auto-read waits for text and selected
+  voice channels, then the configured reading interval; click/stop can end it.
+- `src/render/compositor.*`, `src/render/line_break.h`, `src/script/lua_engine.*`
+  — retained pages per message layer, glyph atlases and batched draws, per-glyph
+  in-tween timing, click-to-complete before advancing, and ruby ranges/tags.
+  Ruby reserves its measured width and wraps with its base. Basic horizontal
+  CJK prohibit/hung rules keep brackets and punctuation on suitable lines.
+  Mixed style runs, vertical text, full shaping and full ruby semantics remain
+  incomplete; do not remove that distinction during an upstream sync.
+- `src/audio/pcm_stream.h`, `src/audio/audio.*`, `../ohos/audio_ohos.cpp` — shared
+  PCM source interface and playback clocks for movie sound. Platform backends
+  supply the presentation position; the common player uses it for frame timing.
+- `src/render/video_decoder.*`, `src/render/video_player.*`,
+  `src/script/lua_engine.*` — FFmpeg demux/decode from immutable compressed bytes,
+  RGBA video and resampled stereo PCM, full-screen/layer playback and loops,
+  wait reasons and cancel roles. A shorter sound track does not freeze the video
+  at its last audio timestamp. Decoder failures log the failing operation.
+- `src/pack/pack_manager.*` — after searching the patch/PFS chain, resolve loose
+  files below the directory containing the archive, including `movie/*.mp4`.
+  Relative paths are normalized; absolute and parent traversal paths are rejected.
+- `src/script/expression.*`, `src/script/lua_engine.*` — evaluate `$` expressions
+  and references before tag dispatch, with 32-bit integer operations, logical
+  short-circuit, comparisons, strings and variable lookup. Preserve embedded NUL
+  bytes in variable values. This fixes the game's video condition checks.
+- Outside the vendor tree, `vcpkg/ports/ffmpeg/0002-aarch64-swscale-output-height.patch`
+  fixes FFmpeg 3.3.9 NEON conversion wrappers returning zero after writing valid
+  rows. The fix belongs to FFmpeg and applies to ARM64, without disabling NEON.
+  `../tests/video_decoder_regressions.cpp` and GLES tests use generated movies;
+  no commercial movie is committed.
+
+- `src/render/compositor.*` — anchored rotation and independent reverse flags
+  compose through the full layer ancestry, including nonuniform scales. Images
+  and glyph batches transform their corners; inverse hit tests reject empty
+  regions of a rotated bounding box. Uniform zoom respects explicit axis scales.
+  Rotation is also a tween property, retaining sequence/loop/yoyo behavior.
+- `src/script/lua_engine.cpp`, `src/render/compositor.*` — dragging maps stage
+  displacement back into the parent coordinate space before applying local drag
+  bounds, and updates both axes. Singular transforms ignore pointer movement.
+
+- `src/script/pluto_codec.*` — native Pluto value graphs (32/64-bit string
+  lengths, cycles, shared tables, binary strings and permanent references), with
+  legacy Lua-source-bank reading retained. VM closures, threads, userdata and
+  special persistence are explicitly unsupported.
+- `src/script/native_save.*`, `src/script/save_storage.*`, `lua_engine.*`,
+  `asb_parser.*` — validated BOWS/1003 zlib and indexed object directories;
+  native variable/layer journals restore through the game's `onLoad` callback.
+  Discard stale runner call frames before restoration. `save file=...` now writes
+  an independent ARCV compatibility checkpoint after `onSave`; checksums and
+  atomic file replacement prevent partial bank/slot writes. ARCV is NOT native
+  BOWS export; original-engine round-trip and complete VM snapshots are pending.
+- `lua_engine.cpp`, `src/script/save_metadata.*` — `var system=date` writes
+  local year/month/day/hour/minute/second for save captions. Recover empty dates
+  in early compatibility slot metadata from the matching ARCV file's mtime;
+  retain existing dates and leave absent/non-ARCV files alone.
+- `src/render/layer_shader.*`, `compositor.*`, `lua_engine.*` — load game-authored
+  mobile GLSL via `lyshader`; compose parent/child effect groups and intermediate
+  framebuffers with straight/premultiplied alpha conversion. Bind native
+  foreground/background/mask/user textures, float/int/bool vectors, matrices
+  and arrays independently per layer. Includes negative/gray/multiply and
+  add/screen blending. HLSL and full intermediate-mode caching semantics remain
+  unsupported; shader source retention allows reload after GL resource loss.
+- `src/pack/psb.*`, `src/render/emote_model.*` — platform-neutral, bounded plain
+  PSB v2–v4/MDF resource decoding, RL/raw RGBA/CI8 images, original sprite origins,
+  variable/timeline metadata and offline keyframe sampling. Public model data
+  exposed duplicate tracks and numeric-string values, both retained/accepted.
+  This is an E-mote data foundation; the bounded scene renderer added below
+  does not turn it into a complete SDK/player.
+
+- `src/script/native_save.*`, `lua_engine.cpp` — decode BOWG/1003 global banks
+  and read-line sets. Import native globals only when compatibility `system.dat`
+  is absent, validating every Pluto graph before application. Existing banks
+  remain authoritative; never merge older native metadata over current progress.
+  Native files stay read-only. Read-line sets are not yet applied to skip state.
+- `src/render/layer_shader.*`, `compositor.*`, `lua_engine.cpp` — intermediate
+  group masks use red times alpha, with transparent coverage outside the image;
+  clipping and masks sample inverse-transformed group-local coordinates. Resolve
+  native path aliases and reload mask textures after GL resource loss. This does
+  not implement every intermediate caching mode, ordinary image masks or masked
+  hit testing.
+- `src/render/emote_scene.*` — bounded image/layout/child-motion evaluation and
+  GLES rendering, including held/linear frames, loop timing, parameterized image
+  changes, sprite origins and hierarchical transforms. Validate all reachable
+  frames before accepting a model; reject unsupported blend/depth, inheritance,
+  mesh/stencil and control semantics. Synthetic GPU fixtures exercise body/face
+  alignment and resource recreation. Lua player integration, SDK timeline
+  controllers, physics and encrypted PSB remain absent; complex public models
+  still require unsupported rendering features.
+- `src/render/snapshot_image.*`, `compositor.*`, `lua_engine.*` — `takess` retains
+  a top-down scene framebuffer snapshot; `savess` writes an atomically replaced
+  PNG with alpha-correct resizing. Saved images can be read through script file
+  APIs and layer creation within the authorized save directory. Captures survive
+  subsequent menu drawing; original embedded-thumbnail import is not implemented.
+
+Full key roles/skip, all shader semantics, E-mote playback, complex typography
+and complete native snapshot interchange remain incomplete.
+See `doc/artemis-compatibility-audit.md` at the repository root for validation
+scope and the distinction between host and signed HarmonyOS device tests.

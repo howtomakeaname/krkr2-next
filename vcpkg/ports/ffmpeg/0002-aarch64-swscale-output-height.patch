@@ -1,0 +1,21 @@
+diff --git a/libswscale/aarch64/swscale_unscaled.c b/libswscale/aarch64/swscale_unscaled.c
+--- a/libswscale/aarch64/swscale_unscaled.c
++++ b/libswscale/aarch64/swscale_unscaled.c
+@@ -54,7 +54,7 @@ static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],
+                                  yuv2rgb_table,                                             \
+                                  c->yuv2rgb_y_offset >> 6,                                  \
+                                  c->yuv2rgb_y_coeff);                                       \
+-    return 0;                                                                               \
++    return srcSliceH;                                                                       \
+ }                                                                                           \
+ 
+ #define DECLARE_FF_YUVX_TO_ALL_RGBX_FUNCS(yuvx)                                             \
+@@ -82,7 +82,7 @@ static int ifmt##_to_##ofmt##_neon_wrapper(SwsContext *c, const uint8_t *src[],
+                                  c->yuv2rgb_y_offset >> 6,                                  \
+                                  c->yuv2rgb_y_coeff);                                       \
+                                                                                             \
+-    return 0;                                                                               \
++    return srcSliceH;                                                                       \
+ }                                                                                           \
+ 
+ #define DECLARE_FF_NVX_TO_ALL_RGBX_FUNCS(nvx)                                               \
