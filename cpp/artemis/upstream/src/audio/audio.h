@@ -5,6 +5,8 @@
 #define ARTC_AUDIO_H
 
 #include <string>
+#include <memory>
+#include "audio/pcm_stream.h"
 
 namespace artc {
 
@@ -25,6 +27,10 @@ public:
     // loop lets the voice repeat until stopped.
     virtual bool Play(const std::string &key, const std::string &file,
               bool loop, int vol1000);
+    virtual bool PlayStream(const std::string& key, std::unique_ptr<PcmStream> source, int vol1000);
+    // Presented position, excluding PCM buffered ahead of the speaker.
+    // Negative means the backend has no presentation clock (silent hosts).
+    virtual double PlaybackMs(const std::string& key) const;
 
     virtual void Stop(const std::string &key);
     void StopAll();

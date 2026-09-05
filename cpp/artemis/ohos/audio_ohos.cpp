@@ -34,7 +34,7 @@ namespace {
 
 struct Voice {
     OH_AudioRenderer *renderer = nullptr;
-    VorbisStream source;
+    std::unique_ptr<PcmStream> source;
     uint64_t total_frames = 0;
     std::string key;
     std::atomic<uint64_t> submitted_frames{0};
@@ -54,11 +54,11 @@ OH_AudioData_Callback_Result OnWriteData(OH_AudioRenderer *, void *user_data,
     std::lock_guard<std::mutex> lk(v->mutex);
     const size_t want = static_cast<size_t>(size);
     const size_t frames = want / (sizeof(int16_t) * 2);
-    const size_t written = v->source.ReadStereo(reinterpret_cast<int16_t*>(out), frames);
+    const size_t written = v->source->ReadStereo(reinterpret_cast<int16_t*>(out), frames);
     const size_t bytes = written * sizeof(int16_t) * 2;
     v->submitted_frames.fetch_add(written, std::memory_order_relaxed);
     if (bytes < want) std::memset(out + bytes, 0, want - bytes);
-    if (v->source.Ended()) v->finished = true;
+    if (v->source->Ended()) v->finished = true;
     ApplyStereoPan(reinterpret_cast<int16_t*>(out), written,
                    v->pan1000.load(std::memory_order_relaxed));
     return AUDIO_DATA_CALLBACK_RESULT_VALID;
@@ -148,17 +148,24 @@ void Audio::Shutdown() {
 }
 
 bool Audio::Play(const std::string &key, const std::string &file, bool loop, int vol) {
-    auto voice = std::make_unique<Voice>();
-    if (!impl_->packs || !voice->source.Open(
+    auto source=std::make_unique<VorbisStream>();
+    if (!impl_->packs || !source->Open(
             [this](const std::string& name, std::vector<uint8_t>& bytes) {
                 return impl_->packs->Read(name, bytes);
             }, file, loop)) {
         Log(kLogWarn, "audio: cannot open Vorbis stream: " + file);
         return false;
     }
-    const int sample_rate = voice->source.SampleRate();
+    return PlayStream(key,std::move(source),vol);
+}
+
+bool Audio::PlayStream(const std::string& key, std::unique_ptr<PcmStream> source, int vol) {
+    if(!source) return false;
+    auto voice=std::make_unique<Voice>();
+    voice->source=std::move(source);
+    const int sample_rate = voice->source->SampleRate();
     const int channels = 2;
-    voice->total_frames = voice->source.FrameCount();
+    voice->total_frames = voice->source->FrameCount();
     voice->key = key;
     voice->channels = channels;
     voice->sample_rate = sample_rate;
@@ -167,7 +174,7 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
     OH_AudioStreamBuilder *builder = nullptr;
     if (OH_AudioStreamBuilder_Create(&builder, AUDIOSTREAM_TYPE_RENDERER) != AUDIOSTREAM_SUCCESS ||
         !builder) {
-        Log(kLogError, "audio: OH_AudioStreamBuilder_Create failed: " + file);
+        Log(kLogError, "audio: OH_AudioStreamBuilder_Create failed: " + key);
         return false;
     }
     OH_AudioStreamBuilder_SetSamplingRate(builder, sample_rate);
@@ -182,7 +189,7 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
     OH_AudioStreamBuilder_Destroy(builder);
     if (gen != AUDIOSTREAM_SUCCESS || !renderer) {
         Log(kLogError, "audio: GenerateRenderer failed (" + std::to_string(static_cast<int>(gen)) +
-                           "): " + file);
+                           "): " + key);
         return false;
     }
     voice->renderer = renderer;
@@ -197,18 +204,28 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
             impl_->voices.erase(it);
         }
         if (!impl_->paused && OH_AudioRenderer_Start(renderer) != AUDIOSTREAM_SUCCESS) {
-            Log(kLogError, "audio: renderer start failed: " + file);
+            Log(kLogError, "audio: renderer start failed: " + key);
             impl_->Retire(voice);
             return false;
         }
         impl_->voices[key] = std::move(voice);
     }
 
-    Log(kLogInfo, "audio: play " + key + " " + file + " [" + std::to_string(channels) +
+    Log(kLogInfo, "audio: play " + key + " " + key + " [" + std::to_string(channels) +
                       "ch " + std::to_string(sample_rate) + "Hz " +
-                      std::to_string(voice_frames) + " frames] loop=" + std::to_string(loop) +
+                      std::to_string(voice_frames) + " frames]" +
                       " vol=" + std::to_string(vol));
     return true;
+}
+
+double Audio::PlaybackMs(const std::string& key) const {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    const auto it=impl_->voices.find(key);
+    if(it==impl_->voices.end()) return -1;
+    const auto& v=*it->second;
+    int64_t frames=0, timestamp=0;
+    if(OH_AudioRenderer_GetTimestamp(v.renderer,CLOCK_MONOTONIC,&frames,&timestamp)!=AUDIOSTREAM_SUCCESS) return -1;
+    return 1000.0*frames/v.sample_rate;
 }
 
 void Audio::Stop(const std::string &key) {

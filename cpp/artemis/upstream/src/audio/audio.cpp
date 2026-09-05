@@ -40,6 +40,8 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
                       std::to_string(loop));
     return impl_->packs != nullptr;
 }
+bool Audio::PlayStream(const std::string&, std::unique_ptr<PcmStream>, int) { return false; }
+double Audio::PlaybackMs(const std::string&) const { return -1; }
 void Audio::Stop(const std::string &) {}
 void Audio::StopAll() {}
 bool Audio::IsPlaying(const std::string &) const { return false; }
@@ -60,7 +62,7 @@ struct Audio::Impl {
         SLObjectItf obj = nullptr;
         SLPlayItf play = nullptr;
         SLAndroidSimpleBufferQueueItf bq = nullptr;
-        VorbisStream source;
+        std::unique_ptr<PcmStream> source;
         std::array<std::array<int16_t, 4096>, 2> buffers{};
         size_t next_buffer = 0;
         std::atomic<int> pan{0};
@@ -72,7 +74,7 @@ struct Audio::Impl {
         }
         bool Queue() {
             auto& pcm = buffers[next_buffer];
-            const size_t count = source.ReadStereo(pcm.data(), pcm.size() / 2);
+            const size_t count = source->ReadStereo(pcm.data(), pcm.size() / 2);
             if (!count) return false;
             ApplyStereoPan(pcm.data(), count, pan.load(std::memory_order_relaxed));
             if ((*bq)->Enqueue(bq, pcm.data(), static_cast<SLuint32>(count * 4)) != SL_RESULT_SUCCESS)
@@ -119,12 +121,19 @@ void Audio::Shutdown() {
 
 bool Audio::Play(const std::string& key, const std::string& file, bool loop, int vol) {
     if (!impl_->engine || !impl_->output_mix || !impl_->packs) return false;
-    auto v = std::make_unique<Impl::Voice>();
-    if (!v->source.Open([this](const std::string& name, std::vector<uint8_t>& bytes) {
+    auto source=std::make_unique<VorbisStream>();
+    if (!source->Open([this](const std::string& name, std::vector<uint8_t>& bytes) {
             return impl_->packs->Read(name, bytes);
         }, file, loop)) return false;
+    return PlayStream(key,std::move(source),vol);
+}
+
+bool Audio::PlayStream(const std::string& key, std::unique_ptr<PcmStream> pcm, int vol) {
+    if (!impl_->engine || !impl_->output_mix || !pcm) return false;
+    auto v=std::make_unique<Impl::Voice>();
+    v->source=std::move(pcm);
     SLDataLocator_AndroidSimpleBufferQueue loc = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
-    SLDataFormat_PCM format = {SL_DATAFORMAT_PCM, 2, static_cast<SLuint32>(v->source.SampleRate()) * 1000,
+    SLDataFormat_PCM format = {SL_DATAFORMAT_PCM, 2, static_cast<SLuint32>(v->source->SampleRate()) * 1000,
         SL_PCMSAMPLEFORMAT_FIXED_16, SL_PCMSAMPLEFORMAT_FIXED_16,
         SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT, SL_BYTEORDER_LITTLEENDIAN};
     SLDataSource source = {&loc, &format};
@@ -146,8 +155,15 @@ bool Audio::Play(const std::string& key, const std::string& file, bool loop, int
     if (!impl_->paused && (*v->play)->SetPlayState(v->play, SL_PLAYSTATE_PLAYING) != SL_RESULT_SUCCESS)
         return false;
     impl_->voices[key] = std::move(v);
-    Log(kLogInfo, "audio: play " + key + " " + file + " loop=" + std::to_string(loop));
+    Log(kLogInfo, "audio: play stream " + key);
     return true;
+}
+
+double Audio::PlaybackMs(const std::string& key) const {
+    const auto it=impl_->voices.find(key);
+    if(it==impl_->voices.end()) return -1;
+    SLmillisecond ms=0;
+    return (*it->second->play)->GetPosition(it->second->play,&ms)==SL_RESULT_SUCCESS ? ms : -1;
 }
 
 void Audio::Stop(const std::string& key) { impl_->voices.erase(key); }
