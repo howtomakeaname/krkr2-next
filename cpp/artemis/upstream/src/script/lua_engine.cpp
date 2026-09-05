@@ -526,13 +526,26 @@ int LuaEngine::l_tag(lua_State *L) {
         // `scenario` and trans_flag wait for active animation. The story
         // page's separate click barrier is established by the `@` tag.
         const std::string sc = m["scenario"];
-        if (!sc.empty() || inst->transition_wait_) {
+        const bool after_trans = inst->transition_wait_;
+        if (!sc.empty() || after_trans) {
             // KrKr2-Next: tweens/transitions now run for real — hold the
             // runner for their remaining time (a tap still skips it).
             inst->transition_wait_ = false;
-            const double pending = inst->compositor_ ? std::max(
-                inst->compositor_->PendingAnimationMs(inst->NowMs()),
-                inst->compositor_->PendingTextMs(inst->NowMs())) : 0;
+            // A wait that follows [trans] is the kernel's wt: it holds the
+            // script for the TRANSITION's remaining time, not for every
+            // pending tween. Slow decorative tweens started under the trans
+            // (e.g. a 150s background pan at a route intro) are meant to keep
+            // running beneath the dialogue — waiting on max pending animation
+            // serialized the whole intro behind the pan and locked input.
+            double pending = 0;
+            if (inst->compositor_) {
+                if (after_trans)
+                    pending = inst->compositor_->TransitionRemainingMs(inst->NowMs());
+                else
+                    pending = std::max(
+                        inst->compositor_->PendingAnimationMs(inst->NowMs()),
+                        inst->compositor_->PendingTextMs(inst->NowMs()));
+            }
             if (pending > 1) inst->SetTimedWait(static_cast<int>(std::min(pending, 2147483647.0)), m["input"] != "0");
             return 0;
         }
@@ -1576,15 +1589,40 @@ void LuaEngine::SetAutoMode(bool enabled) {
 
 void LuaEngine::SetWaiting(bool w) {
     if (waiting_ != w) auto_timer_.Reset();
+    // Kernel announce protocol for onClickWaitIn/Out. keyClickStart records
+    // flg.waitflag = getWaitStatus() when a wait begins, and keyClickEnd
+    // drops it only while getScriptWaitReason() still reports a reason
+    // (vsync.lua: "if getWaitStatus() then flg.waitflag = nil end"). OUT is
+    // therefore announced before the wait state is cleared, IN after it is
+    // set (every start path sets its reason flag first and calls here
+    // last). IN covers all waits; a plain click wait carries no reason, so
+    // flg.waitflag stays nil and dialogue clicks keep routing through
+    // flg.click. Announcing after the state was gone left a stale
+    // flg.waitflag — the framework stayed in "wait" mode forever and every
+    // later click was consumed as a dummy exclick (title buttons dead).
+    if (waiting_ && !w) AnnounceWaitState(false);
     if (!w) { se_wait_ = false; timed_wait_ = false; }
     else if (!timed_wait_ && !se_wait_) wait_accept_input_ = true;
     waiting_ = w;
-    const bool click_wait = w && !timed_wait_ && !se_wait_ && video_wait_.empty();
-    if (click_wait_announced_ == click_wait) return;
-    click_wait_announced_ = click_wait;
-    const auto it = event_handlers_.find(click_wait ? "onClickWaitIn" : "onClickWaitOut");
-    if (it != event_handlers_.end() && !it->second.empty())
+    if (w) AnnounceWaitState(true);
+}
+
+void LuaEngine::AnnounceWaitState(bool in_wait) {
+    if (click_wait_announced_ == in_wait) return;
+    click_wait_announced_ = in_wait;
+    const auto it = event_handlers_.find(in_wait ? "onClickWaitIn" : "onClickWaitOut");
+    if (it != event_handlers_.end() && !it->second.empty()) {
+        // The handler calls e:getScriptWaitReason() to decide whether to drop
+        // flg.waitflag. That call must observe the pre-transition reason, so
+        // its lazy IsWaiting() poll (l_getScriptWaitReason line 1) is
+        // suppressed: re-entering IsWaiting() here would run SetWaiting(false)
+        // again and clear timed_wait_/se_wait_/waiting_ mid-announce, leaving
+        // an empty reason and the stale flg.waitflag this protocol exists to
+        // clear. The poll's caller (the outer IsWaiting) already runs it.
+        announcing_ = true;
         CallGlobalInternal(it->second, true);
+        announcing_ = false;
+    }
 }
 
 LuaEngine::WaitState LuaEngine::SuspendWait() {
@@ -1622,14 +1660,19 @@ void LuaEngine::SetTimedWait(int ms, bool accept_input) {
 bool LuaEngine::IsWaiting() {
     if(!video_wait_.empty()) {
         if(videos_.count(video_wait_)) return true;
-        video_wait_.clear(); SetWaiting(false);
+        // SetWaiting(false) announces onClickWaitOut first; video_wait_ must
+        // still name the movie at that moment or keyClickEnd sees no reason
+        // and leaves a stale flg.waitflag.
+        SetWaiting(false);
+        video_wait_.clear();
     }
     if (timed_wait_ && ClockNow() >= wait_until_) {
-        timed_wait_ = false;
+        // SetWaiting(false) announces OUT (reason {time} still readable),
+        // then clears timed_wait_ itself.
         SetWaiting(false);
     }
     if (se_wait_ && (!sounds_ || !sounds_->IsPlaying(wait_se_key_))) {
-        se_wait_ = false;
+        // Same ordering: announce OUT with the {sound} reason intact.
         SetWaiting(false);
     }
     if (waiting_ && !timed_wait_ && !se_wait_ && auto_enabled_) {
@@ -1770,29 +1813,35 @@ bool LuaEngine::LoadSnapshot(const std::string& file) {
 }
 
 // e:getScriptWaitReason() — table whose keys name active non-click waits.
-// Official wait reasons are time/textTween/textClearTween/sound/video. A plain
-// click wait is signalled by onClickWaitIn/Out and leaves this table empty,
-// which matches the adv framework's getWaitStatus() gate.
+// Official wait reasons are time/textTween/textClearTween/sound/video; values
+// are deadlines on the e:now() timeline: keyevent.lua's event_setonpush does
+// `w[2] - w[3] <= 0` (remaining ms at wait start) to decide whether a click
+// may skip the wait, so a boolean value would raise a Lua arithmetic error.
+// A plain click wait is signalled by onClickWaitIn/Out and leaves this table
+// empty, which matches the adv framework's getWaitStatus() gate.
 int LuaEngine::l_getScriptWaitReason(lua_State *L) {
     auto* self = Self(L);
-    self->IsWaiting();
+    // Lazy expiry poll — skipped inside an onClickWaitIn/Out announce, where
+    // the flags are mid-transition and the caller must still see the reason
+    // (see AnnounceWaitState).
+    if (!self->announcing_) self->IsWaiting();
+    const double now = self->NowMs();
     lua_newtable(L);
-    if (!self->video_wait_.empty()) {
-        lua_pushboolean(L, 1);
-        lua_setfield(L, -2, "video");
-    }
-    if (self->compositor_ && self->compositor_->PendingTextMs(self->NowMs()) > 0) {
-        lua_pushboolean(L, 1);
-        lua_setfield(L, -2, "textTween");
-    }
+    // sound: delay-guarded in event_setonpush (value unused); video: skip is
+    // decided engine-side from video_skip_, so report 0 remaining.
+    auto field = [&](const char *name, double deadline) {
+        lua_pushnumber(L, deadline);
+        lua_setfield(L, -2, name);
+    };
+    if (!self->video_wait_.empty()) field("video", now);
+    if (self->compositor_ && self->compositor_->PendingTextMs(now) > 0)
+        field("textTween", now + self->compositor_->PendingTextMs(now));
     if (self->timed_wait_) {
-        lua_pushboolean(L, 1);
-        lua_setfield(L, -2, "time");
+        const double remain = std::chrono::duration<double, std::milli>(
+            self->wait_until_ - self->ClockNow()).count();
+        field("time", now + (remain > 0 ? remain : 0));
     }
-    if (self->se_wait_) {
-        lua_pushboolean(L, 1);
-        lua_setfield(L, -2, "sound");
-    }
+    if (self->se_wait_) field("sound", now);
     return 1;
 }
 

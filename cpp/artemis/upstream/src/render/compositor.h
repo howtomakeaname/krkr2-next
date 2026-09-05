@@ -196,6 +196,14 @@ public:
     bool BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &rule,
                          int rule_w, int rule_h, int vague);
     bool TransitionActive() const { return trans_active_; }
+    // Remaining transition time (ms). The kernel's wt holds the script for the
+    // transition only — unrelated long tweens (a slow background pan started
+    // under the trans) keep running while the dialogue continues.
+    double TransitionRemainingMs(double now_ms) const {
+        if (!trans_active_) return 0;
+        const double remain = trans_start_ms_ + trans_time_ms_ - now_ms;
+        return remain > 0 ? remain : 0;
+    }
 
 private:
     uint64_t revision_ = 0;

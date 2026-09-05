@@ -135,6 +135,9 @@ public:
 
     // Click-wait gating: wait tags pause the native runner until a tap.
     void SetWaiting(bool w);
+    // Fire onClickWaitIn/Out on wait-state transitions. Guarded by
+    // click_wait_announced_ so only actual transitions announce.
+    void AnnounceWaitState(bool in_wait);
     void SetTimedWait(int ms, bool accept_input = false);
     bool IsWaiting();
     void NotifyScriptStop() { if (auto_stop_stop_) SetAutoMode(false); }
@@ -264,6 +267,10 @@ private:
     bool timed_wait_ = false;
     bool wait_accept_input_ = true;
     bool click_wait_announced_ = false;
+    // True while an onClickWaitIn/Out handler runs (AnnounceWaitState): the
+    // wait flags are mid-transition, so the lazy poll inside
+    // l_getScriptWaitReason must not re-enter IsWaiting()/SetWaiting().
+    bool announcing_ = false;
     bool auto_allowed_ = true, auto_enabled_ = false;
     bool auto_stop_click_ = true, auto_stop_stop_ = true;
     std::vector<std::string> auto_sync_se_;
