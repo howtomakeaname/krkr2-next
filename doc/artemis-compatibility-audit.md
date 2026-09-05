@@ -23,7 +23,7 @@
 - `EmoteScene` 新增图片/布局/子动作的有限场景求值与实际 GLES 渲染：帧保持/线性插值、循环、参数范围、图片原点、位置/旋转/缩放/透明度和表情换图。合成身体和不同宽度表情通过 GPU 像素验证，子动作移动时头脸跟随，GL 资源释放后能重传纹理。加载时检查所有可达关键帧，拒绝未支持的语义。公开复杂参考模型仍因 `unsupported E-mote blend/depth` 被拒绝；Lua `createEmoteLayer/getEmoteLayer`、完整时间轴控制器、网格/stencil、物理和加密 PSB 均未接通，不能把此基础渲染器当成完整播放器。本测试游戏没有 E-mote 模型。
 - `takess` 捕获保留的场景 FBO；`savess` 使用 alpha 正确的双线性缩放写出指定尺寸 PNG，并原子替换文件；菜单后续重绘不改变已捕获图片。`lyc` 和 `e:file` 能从已有授权的 SaveDir 读取截图，绝对路径仍限制在该目录内。宿主真实 SAVE 页的新 `No.001-12` 显示目标线角色场景的 `save0003.png`（192×109），不是菜单画面。未导入原版内嵌截图，也未穷举转场中捕获的原版时序；日期/编号和标题/正文挤压仍存在。
 - 最新 GLES/FFmpeg 回归 **5/5**，无 GLES/无 FFmpeg 回归 **3/3** 通过；SDK 20 原生库和签名 Release HAP 构建成功并覆盖安装 Mate80。真机从新包 CONTINUE 成功恢复已有 `save0001.dat` 兼容槽位；本次采集会话 19 个移动端 GLSL 加载成功，没有 Lua traceback 或引擎 ERROR，8 条音轨回收记录 `underflows=0`。缩略图的真机保存/回读验证仍待补充，不以宿主结果代替。
-- 安装包对应代码 `a73d5d4`。HAP SHA-256：`d14cfbf7af79bf4cca0c602330b3861eab5a9bd78558541b76dabe53f1b0f265`；包内原生库 SHA-256：`2ad7707e8a75aebc1ab989fe16a791dd2073e317b5cf06fefed985cc28e9f807`；build ID：`7cf05ff5ce926cb1039ebecbc46c55f68260b624`。去掉 `.comment` 后与 staged 库一致；证据和清单留在未提交的 `agent-artifacts/artemis-audit/`，不提交商业模型/图片/存档。
+- 安装包对应代码 `a73d5d4`。HAP SHA-256：`d14cfbf7af79bf4cca0c602330b3861eab5a9bd78558541b76dabe53f1b0f265`；包内原生库 SHA-256：`2ad7707e8a75aebc1ab989fe16a791dd2073e317b5cf06fefed985cc28e9f807`；build ID：`7cf05ff5ce926cb1039ebecbc46c55f68260b624`。去掉 `.comment` 后与 staged 库一致；证据和清单留在未提交的 `agent-artifacts/artemis-audit/`，不提交第三方模型/图片/存档。
 
 ### 原版快照、GLSL 与 E-mote 数据基础（上一轮记录）
 
@@ -31,7 +31,7 @@
 
 - 小提交：`a61582c` Pluto 值图、`4dad167` BOWS 字段目录、`c024fd5` 空值兼容、`e243037` 原版读档回调、`a34abd2` GLSL pass、`1029d5a` 图层组接入、`a463701` 安全槽位存储、`fb28a1f` 槽位存读、`16f2c44` PSB/MDF、`5376d6d` GLSL 向量/数组、`d72412d` E-mote 贴图与时间轴、`8d5c9fb` 矩阵/独立 sampler 回归，以及下述两个日期修补。共 14 个代码/测试提交，每个 1–5 个文件；公共实现均在 Artemis 层。
 - 对照原 Android 库 `CLua::Load`、`CSerializer`、`CArtemisVariables` 和 [Pluto 原实现](https://github.com/hoelzro/pluto)。原包 5 个 BOWS 均成功解码：每个含 5 个变量图，图层指令数依次为 642、633、643、268、268。先完整校验压缩数据、字段范围和 Pluto 值图，再修改活跃变量。
-- 宿主真实游戏从原 `autosave.dat` 恢复到目标线角色剧本段（原版标签略，游标 `00011`），显示原对白；点击后进入下一段。再保存独立 ARCV 槽位、推进、加载、退出并重新启动进程加载，均回到保存的同一段。此过程通过游戏框架的 `onSave/onLoad` 和 quickjump 重建，不能等同于恢复原版任意 VM 指令中间态。宿主原包的存档与商业资源均未改写或提交。
+- 宿主真实游戏从原 `autosave.dat` 恢复到目标线角色剧本段（原版标签略，游标 `00011`），显示原对白；点击后进入下一段。再保存独立 ARCV 槽位、推进、加载、退出并重新启动进程加载，均回到保存的同一段。此过程通过游戏框架的 `onSave/onLoad` 和 quickjump 重建，不能等同于恢复原版任意 VM 指令中间态。宿主原包的存档与第三方资源均未改写或提交。
 - 原版图层日志含 4 条 `anime` 图集指令，当前仍无对应执行实现；BOWG 全局配置/槽位元数据、缩略图尚未导入。新 ARCV 文件明确使用自己的魔数，未伪装成原版 BOWS；原版引擎读回新槽位尚未实现。
 - 游戏 `system/shader/mb` 的 19 个 GLSL 全部加载成功。宿主真实目标线角色场景受控调用 `shader_lyprop('1.0',{style='gray',blur=5})`，人物与背景一起灰度及横纵模糊，消息文字和按钮不受影响；这是受控效果验证，并非宣称已遍历全部剧情特效。像素回归覆盖父子组 alpha、嵌套效果、透明边缘、采样方向、隐藏用户纹理、向量/矩阵/数组和 GL 资源重建。
 - E-mote 是 [M2 的二维角色动画系统](https://emote.mtwo.co.jp/about/)，用于表情、眨眼、口型、呼吸和部件动作。原 Android 库实际提供 `createEmoteLayer/getEmoteLayer` 与变量/时间轴接口；当前 KrKr 插件中的 `EmotePlayer` 是空实现，不能直接视为可移植播放器。本游戏包没有 E-mote 模型，角色B/目标线角色场景仍是 PNG 差分。
@@ -49,7 +49,7 @@
 - `d899ffc`（2 文件）：旋转角度接入 tween 参数读写，支持连续片段的隐式起点、往返及已有的循环机制。
 - `9fad736`（4 文件）：拖拽位移先还原到父级坐标，再限制到 `dragarea`；同步写回横纵坐标。零缩放时忽略不可逆的拖拽位移。
 - 合并后 Flutter **48 项测试通过**；GLES/视频配置 **4/4** 回归通过，无 GLES/无 FFmpeg 配置 **2/2** 通过；SDK 20 `engine_api` 与签名 Release HAP 构建成功。`flutter analyze` 返回 14 条 info、无 error/warning；七个被提示的文件与合并前逐字节一致，未在本轮改动。
-- 宿主真实游戏到达角色B课堂剧情，额外施加 15° 旋转及水平翻转后，身体与表情保持对齐；这是受控变换验证，未声称该角度来自原剧情。无商业图片加入测试或提交。
+- 宿主真实游戏到达角色B课堂剧情，额外施加 15° 旋转及水平翻转后，身体与表情保持对齐；这是受控变换验证，未声称该角度来自原剧情。无第三方图片加入测试或提交。
 - Mate80 上 `movie/dcpyzcv3t.mp4`（23359303 字节，约 84.93 秒）显示连续剧情画面，播完回到角色B课堂正文；音轨提交 4078592 帧，与宿主完整解码一致，`underflows=0`。本轮未录制扬声器声音，不能以此声称已量化声画同步精度。
 - 新包已覆盖安装 Mate80；新首页和玻璃导航可显示，启动视频、标题及剧情可进入。新签名 HAP SHA-256：`3d88d2a46cd8221924a6dd9a2044744d0f569732ac49566f02e2bf22c36d5b78`；包内原生库 SHA-256：`b971019c1294b90b43985ea0e31df8b3705eba2bf2bd122914fb2b17eb234dc1`；build ID：`92451ab1dbfb47650f72b972baf3896971e286d5`。移除 `.comment` 后与 staged 库逐字节一致。
 
@@ -78,7 +78,7 @@
 - 原库与 Android 接入：[Tyranor-Next](https://github.com/Weiss-UltimateSavior/Tyranor-Next)，检出提交 `2f28e0c`，目录 `engine/src/main/nativeplugins/artemis/arm64-v8a`。
 - 兼容引擎：[artemis-compat](https://github.com/Weiss-UltimateSavior/artemis-compat)，本项目 vendor 固定提交 `d23ca4d6df0abd5d305da683971b55a1ae6bd2c0`，附加修补见 `cpp/artemis/upstream/UPSTREAM.md`。
 - 方法：ELF 动态依赖、导出符号、字符串和 ARM64 函数定点反汇编，再与实际游戏 Lua 调用及兼容引擎实现对照。没有恢复完整原版 C++ 源码；符号存在本身也不能证明某游戏在该版本中的实际行为。
-- 实际游戏包：用户提供的官中商业游戏及 patch 链（名称略）。游戏资源和提取脚本仅用于本地验证，不纳入回归测试或源码。
+- 实际游戏包：本地私有测试包（来源与名称略）。游戏资源和提取脚本仅用于本地验证，不纳入回归测试或源码。
 
 | Android 库 | 字节数 | SHA-256 |
 | --- | ---: | --- |
@@ -122,7 +122,7 @@
 - 完整 SDK 20 构建：vcpkg 依赖重建、`engine_api` 编译链接、OHOS Flutter Release HAP 打包及签名全部成功；使用 `hdc install -r` 覆盖安装到 HUAWEI Mate 80，保留原有应用数据与游戏包。
 - 真机真实游戏：启动流程无需额外点击即可到达标题；灰色“继续游戏”点击后仍停留标题；开始游戏、路线选择、剧情与选项均可进入。设置页打开后按 Home，后台停留约 10 秒，再恢复并返回，仍显示原来的两项剧情选择及同一句正文。
 - 真机音频：采集范围内 29 个已回收 renderer 的 `underflows` 均为 0；标题语音完整提交 152245 帧，短音效和多条角色语音也有播放/回收记录。`bgm06_a → bgm06_b`、`bgm28_a → bgm28_b` 配对均成功。点击跳过会主动终止语音，因此部分回收帧数短于源长度是跳过行为；这些数据不能代替扬声器实际听感评价。
-- 真机日志采集范围内未发现 `ERROR / failed / Exception / UNIMPLEMENTED` 记录；这不代表所有标签都已实现。截图、会话日志和构建 manifest 留在本地 `agent-artifacts/artemis-audit`，不将商业游戏资源纳入源码。
+- 真机日志采集范围内未发现 `ERROR / failed / Exception / UNIMPLEMENTED` 记录；这不代表所有标签都已实现。截图、会话日志和构建 manifest 留在本地 `agent-artifacts/artemis-audit`，不将第三方游戏资源纳入源码。
 
 初轮安装的签名 HAP SHA-256：`9dbfde223ae7056534531269afd3b2b36eb9fc1f442c5426b2f8e2958b3460e2`。包内 `libengine_api.so` SHA-256：`cb9d9a388dc5b73514061cc901c09500d3d1bc81834efb7d2802376c866a599a`；ELF build ID：`2369e1267f16afdbdd6881f401edfc94ef5f6d59`。
 

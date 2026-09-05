@@ -6,7 +6,7 @@
 
 KrKr2-Next 已通过 Flutter 的 HarmonyOS 分支在 SDK 20 跑通。Artemis 使用开源兼容实现，不是 Android 原版引擎；用户要求对照原版二进制，持续修复画面、交互、音频、视频、排版、shader、存档和 E-mote。引擎共有问题修在 Artemis，只有鸿蒙特有问题才修在鸿蒙层；不要向 Flutter 塞兼容绕过。外部 UI 改动复用现有组件，遵循用户要求的 iOS 26 风格。
 
-**最新缺陷：**目标商业游戏（用户提供的官中包）进入 **开始游戏 → 目标角色线** 后，有时画面仍在移动，但操作完全无效。用户称特定场景会一直停在那里。这是新报告，尚未完成复现，也没有确定根因。优先走新游戏目标角色线，不要把此前 CONTINUE / 原版存档成功当成这条路径通过。建议同时采集脚本文件/标签/游标、等待原因、输入状态及 override、游戏 UI/模式、图层事件过滤和音视频/tween 状态，区分脚本无限等待、输入被屏蔽和真正渲染卡死。不要用定时解除所有 wait、关闭 override、乱改游戏脚本等方式掩盖问题。
+**最新缺陷：**目标游戏（本地私有测试包）进入 **开始游戏 → 目标角色线** 后，有时画面仍在移动，但操作完全无效。用户称特定场景会一直停在那里。这是新报告，尚未完成复现，也没有确定根因。优先走新游戏目标角色线，不要把此前 CONTINUE / 原版存档成功当成这条路径通过。建议同时采集脚本文件/标签/游标、等待原因、输入状态及 override、游戏 UI/模式、图层事件过滤和音视频/tween 状态，区分脚本无限等待、输入被屏蔽和真正渲染卡死。不要用定时解除所有 wait、关闭 override、乱改游戏脚本等方式掩盖问题。
 
 本次先完成此缺陷的复现、根因、合理修复、回归和小提交；再按文末清单推进。若工作跨上下文，更新本文件/状态文件，不能把“基础支持”写成“完整兼容”。
 
@@ -43,7 +43,7 @@ upstream https://github.com/reAAAq/KrKr2-Next.git
 ?? agent-artifacts/
 ```
 
-`build-profile.json5` 含本机签名配置，不输出全文/diff、不提交。六项原状态的哈希在 `/tmp/artemis-pre-merge-local-files.json`，前轮构建安装后逐项确认不变。`agent-artifacts` 含私有截图、日志、模型和游戏分析证据，不整个 add。商业游戏资源和存档不提交到仓库。
+`build-profile.json5` 含本机签名配置，不输出全文/diff、不提交。六项原状态的哈希在 `/tmp/artemis-pre-merge-local-files.json`，前轮构建安装后逐项确认不变。`agent-artifacts` 含私有截图、日志、模型和游戏分析证据，不整个 add。第三方游戏资源和存档不提交到仓库。
 
 ## 先读哪些文件
 
@@ -52,7 +52,7 @@ upstream https://github.com/reAAAq/KrKr2-Next.git
 3. `cpp/artemis/upstream/src/script/lua_engine.{h,cpp}`、`input_state.h`、`asb_parser.{h,cpp}`：本次交互挂起优先查看。
 4. `cpp/artemis/upstream/src/render/compositor.*`、`layer_shader.*`、`video_player.*`：画面仍变化时的 tween/视频/渲染和等待衔接。
 5. `bridge/engine_api/src/artemis_runtime.*`、`cpp/artemis/ohos/`：实际鸿蒙宿主循环、触控、音频和生命周期；按证据再决定是否涉及平台。
-6. `cpp/artemis/tests/`：现有合成回归。不要用商业素材写公共测试。
+6. `cpp/artemis/tests/`：现有合成回归。不要用第三方素材写公共测试。
 
 ## 已实现与验证边界
 
@@ -87,7 +87,7 @@ upstream https://github.com/reAAAq/KrKr2-Next.git
 ## 资料与本机游戏
 
 ```text
-真实原包 /Users/bytedance/Downloads/<游戏目录>/root.pfs
+测试游戏包 /Users/bytedance/Downloads/<游戏目录>/root.pfs
 原存档同目录 saveg.dat autosave.dat save0001.dat save0002.dat save1201.dat save1202.dat
 视频同目录 movie/（3 段 MP4）
 Android 对照仓库 /Users/bytedance/Documents/projects/kr-oh-test/ref/Tyranor-Next
@@ -126,7 +126,7 @@ ctest --test-dir /tmp/artemis-headless-regressions --output-on-failure
  '/Users/bytedance/Downloads/<游戏目录>/save1202.dat'
 ```
 
-真实游戏离屏探针在 `agent-artifacts/artemis-probe/{main.cpp,CMakeLists.txt}`，可改成更好诊断；它未提交，别把商业脚本/图片一起提交。**新建独立 save dir** 复现开始游戏目标角色线；不要用 `/tmp/artemis-native-global-game` 覆盖已留证据。
+真实游戏离屏探针在 `agent-artifacts/artemis-probe/{main.cpp,CMakeLists.txt}`，可改成更好诊断；它未提交，别把第三方脚本/图片一起提交。**新建独立 save dir** 复现开始游戏目标角色线；不要用 `/tmp/artemis-native-global-game` 覆盖已留证据。
 
 ```sh
 cmake --build /tmp/artemis-probe-build --target game_probe -j6
