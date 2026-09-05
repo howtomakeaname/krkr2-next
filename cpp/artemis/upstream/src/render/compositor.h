@@ -23,6 +23,11 @@ struct TextGlyph {
     float x = 0, y = 0, w = 0, h = 0;
     float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
     double start_ms = 0;
+    size_t order = 0;
+};
+struct TextRuby {
+    size_t start = 0, length = 0; // UTF-8 byte range in the base text
+    std::string text;
 };
 struct TextTween {
     std::string param;
@@ -76,7 +81,8 @@ public:
     // font is loaded. An empty string clears the existing text texture.
     bool SetText(const std::string &id, const std::string &text, float size,
                  uint32_t color, float wrapWidth = 0,
-                 const std::map<std::string, std::string>& style = {});
+                 const std::map<std::string, std::string>& style = {},
+                 const std::vector<TextRuby>& ruby = {});
     void SetTextTween(const std::string& id, const std::map<std::string, std::string>& attrs);
     double PendingTextMs(double now_ms) const;
     bool FinishText(double now_ms);

@@ -177,6 +177,21 @@ int main() {
     c.FinishText(messages.NowMs());
     Check(!messages.IsWaiting(),"auto continues after the complete page is visible");
     c.DeleteLayer("2");
+    Check(c.SetText("2","AAAAA",10,0xffffff,30,{{"rubysize","6"}},{{3,2,"AAAA"}}),
+          "layout longer ruby as an unbreakable block"); c.Draw();
+    const auto& ruby_layer=c.Layers().back();
+    Check(ruby_layer.glyphs.size()==9,"ruby adds glyphs without replacing its base");
+    const auto& rg=ruby_layer.glyphs;
+    Check(rg[3].y>rg[2].y && rg[4].y==rg[3].y,
+          "base text and its longer reading wrap together");
+    Check(rg[5].y<rg[3].y && rg[5].start_ms==rg[3].start_ms,
+          "ruby is placed above the base and shares its character timing");
+    Check(At(int(rg[5].x+1),int(rg[5].y+1))[0]>200,"ruby actually produces visible pixels");
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"Aé",10,0xffffff,30,{{"rubysize","6"}},{{1,2,"A"}}),
+          "ruby range uses UTF-8 byte boundaries");
+    Check(c.Layers().back().glyphs.size()==3,"multibyte base character occupies one glyph");
+    c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
     c.SetProps("3.1",{{"left","5"},{"top","4"}});

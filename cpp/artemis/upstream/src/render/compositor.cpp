@@ -236,13 +236,16 @@ void Compositor::SetTextTween(const std::string& id, const std::map<std::string,
 }
 
 void Compositor::SetGlyphTimes(Layer& l, std::vector<TextGlyph>& glyphs, const std::string& text) {
-    const size_t keep = text.compare(0,l.text.size(),l.text)==0 ? std::min(l.glyphs.size(),glyphs.size()) : 0;
+    const bool append=text.compare(0,l.text.size(),l.text)==0;
+    std::map<size_t,double> old_times;
+    if(append) for(const auto& g:l.glyphs) old_times[g.order]=g.start_ms;
     double delay=0;
-    for (const auto& t:l.text_in) delay=std::max(delay,t.delay_ms);
-    double next=now_ms_;
-    for(size_t i=0;i<glyphs.size();++i) {
-        glyphs[i].start_ms=i<keep ? l.glyphs[i].start_ms : next;
-        next=std::max(now_ms_,glyphs[i].start_ms+delay);
+    for(const auto& t:l.text_in) delay=std::max(delay,t.delay_ms);
+    const size_t first_new=old_times.empty() ? 0 : old_times.rbegin()->first+1;
+    const double next=old_times.empty() ? now_ms_ : std::max(now_ms_,old_times.rbegin()->second+delay);
+    for(auto& g:glyphs) {
+        const auto old=old_times.find(g.order);
+        g.start_ms=old!=old_times.end() ? old->second : next+(g.order-first_new)*delay;
     }
     l.glyphs=std::move(glyphs); l.text=text;
 }
@@ -251,7 +254,9 @@ double Compositor::TextEnd(const Layer& l) {
     if (l.text_in.empty() || l.glyphs.empty()) return 0;
     double duration=0;
     for(const auto& tw:l.text_in) duration=std::max(duration,tw.time_ms);
-    return l.glyphs.back().start_ms+duration;
+    double end=0;
+    for(const auto& g:l.glyphs) end=std::max(end,g.start_ms+duration);
+    return end;
 }
 
 double Compositor::PendingTextMs(double now_ms) const {
@@ -809,7 +814,8 @@ bool Compositor::LoadFont(const std::string &file) {
 
 bool Compositor::SetText(const std::string &id, const std::string &text,
                          float size, uint32_t color, float wrapWidth,
-                         const std::map<std::string, std::string>& style) {
+                         const std::map<std::string, std::string>& style,
+                         const std::vector<TextRuby>& ruby) {
     ++revision_;
     if (text.empty()) {
         for (auto& l : layers_) if (l.id == id) {
@@ -846,7 +852,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     const float sdescent = descent * scale;
     // spacemiddle separates the reserved ruby row from the main glyph row.
     // It is often negative; omitting rubysize makes adjacent lines overlap.
-    const float ruby_row = std::max(0.0, number("rubysize", 0));
+    const float ruby_row = std::max(0.0, number("rubysize", ruby.empty() ? 0 : size/2));
     const float row_top = number("spacetop", 0) + ruby_row + number("spacemiddle", 0);
     const int baseline = static_cast<int>(std::ceil(sascent + row_top)) + outline;
     const float advance_h = sascent - sdescent + linegap * scale +
@@ -856,6 +862,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     //   pass 1 measures every glyph's advance;
     //   pass 2 places them into lines, wrapping whenever pen_x would exceed
     //   wrapWidth (>0). Line width = max over the line; total height = #lines.
+    const auto decode = [](const std::string& text) {
     std::vector<uint32_t> cps;
     for (size_t i = 0; i < text.size();) {
         const unsigned char c = text[i];
@@ -865,6 +872,10 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
         else if ((c & 0xF8) == 0xF0 && i + 3 < text.size()) { cp = c & 0x07; len = 4; cp = (cp << 6) | (text[i + 1] & 0x3F); cp = (cp << 6) | (text[i + 2] & 0x3F); cp = (cp << 6) | (text[i + 3] & 0x3F); }
         i += len; cps.push_back(cp);
     }
+    return cps;
+    };
+    auto cps=decode(text);
+    const size_t base_count=cps.size();
     std::vector<int> glyphs;
     std::vector<int> advances;
     glyphs.reserve(cps.size()); advances.reserve(cps.size());
@@ -876,14 +887,59 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
         advances.push_back(static_cast<int>(std::lround(adv * scale + tracking)));
     }
     if (glyphs.empty()) return false;
+    struct RubyGroup { size_t first, last, glyph_first, glyph_last; int base_width, width; };
+    std::vector<RubyGroup> ruby_groups;
+    const float ruby_size=std::clamp(number("rubysize",size/2),1.0,256.0);
+    const float ruby_scale=stbtt_ScaleForMappingEmToPixels(info,ruby_size);
+    for(const auto& r:ruby) {
+        if(r.start>text.size() || r.length>text.size()-r.start || r.text.empty()) continue;
+        const size_t first=decode(text.substr(0,r.start)).size();
+        const size_t last=first+decode(text.substr(r.start,r.length)).size();
+        if(first>=last || last>base_count) continue;
+        if(!ruby_groups.empty() && first<ruby_groups.back().last) continue;
+        if(std::find(cps.begin()+first,cps.begin()+last,'\n')!=cps.begin()+last) continue;
+        int base_width=0, ruby_width=0;
+        for(size_t k=first;k<last;++k) base_width+=advances[k];
+        const size_t glyph_first=glyphs.size();
+        for(uint32_t cp:decode(r.text)) {
+            int gi=stbtt_FindGlyphIndex(info,static_cast<int>(cp)),adv=0,lsb=0;
+            stbtt_GetGlyphHMetrics(info,gi,&adv,&lsb);
+            cps.push_back(cp); glyphs.push_back(gi);
+            advances.push_back(static_cast<int>(std::lround(adv*ruby_scale)));
+            ruby_width+=advances.back();
+        }
+        const int width=std::max(base_width,ruby_width);
+        // Ruby and its base occupy one unbreakable block. A longer reading
+        // reserves room in the line, so it cannot collide with adjacent text.
+        ruby_groups.push_back({first,last,glyph_first,glyphs.size(),base_width,width});
+    }
 
     // layout: (line, pen_x_in_line)
     std::vector<int> lx(glyphs.size()), ly(glyphs.size());
     std::vector<int> line_w(1, 0);
     int pen = 0, line = 0;
-    for (size_t k = 0; k < glyphs.size(); ++k) {
+    for (size_t k = 0; k < base_count; ++k) {
         if (cps[k] == '\r') { lx[k] = -1; continue; }
         if (cps[k] == '\n') { lx[k] = -1; pen = 0; ++line; line_w.push_back(0); continue; }
+        const RubyGroup* group=nullptr;
+        for(const auto& r:ruby_groups) if(r.first==k) { group=&r; break; }
+        if(group) {
+            if(pen>0 && wrapWidth>0 && pen+group->width>wrapWidth) {
+                pen=0; ++line; line_w.push_back(0);
+            }
+            int base_pen=pen+(group->width-group->base_width)/2;
+            for(size_t j=group->first;j<group->last;++j) {
+                lx[j]=base_pen; ly[j]=line; base_pen+=advances[j];
+            }
+            int reading_width=0;
+            for(size_t j=group->glyph_first;j<group->glyph_last;++j) reading_width+=advances[j];
+            int ruby_pen=pen+(group->width-reading_width)/2;
+            for(size_t j=group->glyph_first;j<group->glyph_last;++j) {
+                lx[j]=ruby_pen; ly[j]=line; ruby_pen+=advances[j];
+            }
+            pen+=group->width; line_w[line]=std::max(line_w[line],pen);
+            k=group->last-1; continue;
+        }
         if (pen > 0 && wrapWidth > 0 && pen + advances[k] > wrapWidth) {
             pen = 0; ++line; line_w.push_back(0);
         }
@@ -905,7 +961,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     for (size_t k = 0; k < glyphs.size(); ++k) {
         if (lx[k] < 0) continue;
         int x0, y0, x1, y1;
-        stbtt_GetGlyphBitmapBox(info, glyphs[k], scale, scale, &x0, &y0, &x1, &y1);
+        const float gs=k<base_count ? scale : ruby_scale;
+        stbtt_GetGlyphBitmapBox(info, glyphs[k], gs, gs, &x0, &y0, &x1, &y1);
         bottom = std::max(bottom, baseline + ly[k] * line_h + y1 + outline);
     }
     const int tex_h = bottom;
@@ -922,7 +979,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     for (size_t k=0;k<glyphs.size();++k) {
         if (lx[k]<0) continue;
         int gw=0,gh=0,xoff=0,yoff=0;
-        uint8_t* bmp=stbtt_GetGlyphBitmap(info,scale,scale,glyphs[k],&gw,&gh,&xoff,&yoff);
+        const float gs=k<base_count ? scale : ruby_scale;
+        uint8_t* bmp=stbtt_GetGlyphBitmap(info,gs,gs,glyphs[k],&gw,&gh,&xoff,&yoff);
         const int cw=gw+2*outline, ch=gh+2*outline;
         if (atlas_x+cw+1>atlas_w) { atlas_x=1; atlas_y+=atlas_row+2; atlas_row=0; }
         if (cw+2>atlas_w || atlas_y+ch+1>4096) { stbtt_FreeBitmap(bmp,nullptr); return false; }
@@ -951,7 +1009,10 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
         const int free_width=tex_w-2*outline-line_w[ly[k]];
         const int shift=align=="center" ? free_width/2 : (align=="right" ? free_width : 0);
         TextGlyph g;
-        g.x=lx[k]+xoff+shift; g.y=baseline+ly[k]*line_h+yoff-outline;
+        g.order=k;
+        for(const auto& r:ruby_groups) if(k>=r.glyph_first && k<r.glyph_last) g.order=r.first;
+        const float glyph_baseline=k<base_count ? baseline : outline+number("spacetop",0)+ascent*ruby_scale;
+        g.x=lx[k]+xoff+shift; g.y=glyph_baseline+ly[k]*line_h+yoff-outline;
         g.w=cw; g.h=ch;
         g.u0=float(atlas_x)/atlas_w; g.u1=float(atlas_x+cw)/atlas_w;
         g.v0=atlas_y; g.v1=atlas_y+ch; // normalize after the final atlas height is known
@@ -1379,7 +1440,8 @@ bool Compositor::LoadFont(const std::string &file) {
 }
 bool Compositor::SetText(const std::string &id, const std::string &text,
                          float size, uint32_t color, float wrapWidth,
-                         const std::map<std::string, std::string>& style) {
+                         const std::map<std::string, std::string>& style,
+                         const std::vector<TextRuby>& ruby) {
     ++revision_;
     if (text.empty()) return false;
     (void)color;   // host mock ignores the baked-in color (no rasterization)
