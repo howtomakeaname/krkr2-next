@@ -539,22 +539,26 @@ void Compositor::DumpRects() {
 namespace {
 const char *kVs = R"(attribute vec2 a_pos;
 attribute vec2 a_uv;
+attribute float a_opacity;
 uniform vec2 u_screen;
 varying vec2 v_uv;
+varying float v_opacity;
 void main() {
     vec2 clip = vec2(a_pos.x / u_screen.x * 2.0 - 1.0,
                      1.0 - a_pos.y / u_screen.y * 2.0);
     gl_Position = vec4(clip, 0.0, 1.0);
     v_uv = a_uv;
+    v_opacity = a_opacity;
 })";
 
 const char *kFs = R"(precision mediump float;
 varying vec2 v_uv;
+varying float v_opacity;
 uniform sampler2D u_tex;
 uniform float u_alpha;
 void main() {
     vec4 c = texture2D(u_tex, v_uv);
-    gl_FragColor = vec4(c.rgb, c.a * u_alpha);
+    gl_FragColor = vec4(c.rgb, c.a * u_alpha * v_opacity);
 })";
 
 // KrKr2-Next: [trans] overlay — the previous frame fades out over the new
@@ -602,6 +606,7 @@ bool Compositor::InitGl() {
     glDeleteShader(fs);
     prog_.a_pos = glGetAttribLocation(prog_.program, "a_pos");
     prog_.a_uv = glGetAttribLocation(prog_.program, "a_uv");
+    prog_.a_opacity = glGetAttribLocation(prog_.program, "a_opacity");
     prog_.u_screen = glGetUniformLocation(prog_.program, "u_screen");
     prog_.u_tex = glGetUniformLocation(prog_.program, "u_tex");
     prog_.u_alpha = glGetUniformLocation(prog_.program, "u_alpha");
@@ -1137,6 +1142,8 @@ void Compositor::Draw() {
                      });
 
     glUseProgram(prog_.program);
+    glDisableVertexAttribArray(prog_.a_opacity);
+    glVertexAttrib1f(prog_.a_opacity,1);
     glUniform2f(prog_.u_screen, (float)stage_w_, (float)stage_h_);
     glUniform1i(prog_.u_tex, 0);
     glActiveTexture(GL_TEXTURE0);
@@ -1150,6 +1157,8 @@ void Compositor::Draw() {
         glBindTexture(GL_TEXTURE_2D, l->texture);
         if (!l->glyphs.empty()) {
             const float sx=l->w!=0 ? ew/l->w : 0, sy=l->h!=0 ? eh/l->h : 0;
+            std::vector<float> vertices;
+            vertices.reserve(l->glyphs.size()*30);
             for (const auto& g:l->glyphs) {
                 float gx=g.x, gy=g.y, alpha=1;
                 for (const auto& tw:l->text_in) {
@@ -1161,15 +1170,22 @@ void Compositor::Draw() {
                     else if(tw.param=="top") gy+=diff;
                 }
                 if (alpha<=0 || g.w<=0 || g.h<=0) continue;
-                glUniform1f(prog_.u_alpha,ea*alpha);
                 const float x0=ex+gx*sx, y0=ey+gy*sy, x1=x0+g.w*sx, y1=y0+g.h*sy;
-                const float verts[16]={x0,y0,g.u0,g.v0, x1,y0,g.u1,g.v0,
-                                       x0,y1,g.u0,g.v1, x1,y1,g.u1,g.v1};
-                glVertexAttribPointer(prog_.a_pos,2,GL_FLOAT,GL_FALSE,16,verts);
+                vertices.insert(vertices.end(),{x0,y0,g.u0,g.v0,alpha, x1,y0,g.u1,g.v0,alpha,
+                    x0,y1,g.u0,g.v1,alpha, x0,y1,g.u0,g.v1,alpha,
+                    x1,y0,g.u1,g.v0,alpha, x1,y1,g.u1,g.v1,alpha});
+            }
+            if(!vertices.empty()) {
+                glUniform1f(prog_.u_alpha,ea);
+                glVertexAttribPointer(prog_.a_pos,2,GL_FLOAT,GL_FALSE,20,vertices.data());
                 glEnableVertexAttribArray(prog_.a_pos);
-                glVertexAttribPointer(prog_.a_uv,2,GL_FLOAT,GL_FALSE,16,verts+2);
+                glVertexAttribPointer(prog_.a_uv,2,GL_FLOAT,GL_FALSE,20,vertices.data()+2);
                 glEnableVertexAttribArray(prog_.a_uv);
-                glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+                glVertexAttribPointer(prog_.a_opacity,1,GL_FLOAT,GL_FALSE,20,vertices.data()+4);
+                glEnableVertexAttribArray(prog_.a_opacity);
+                glDrawArrays(GL_TRIANGLES,0,vertices.size()/5);
+                glDisableVertexAttribArray(prog_.a_opacity);
+                glVertexAttrib1f(prog_.a_opacity,1);
             }
             continue;
         }

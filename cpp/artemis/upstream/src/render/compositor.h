@@ -172,7 +172,7 @@ private:
     uint64_t revision_ = 0;
     struct GlProgram {
         uint32_t program = 0;
-        int a_pos = -1, a_uv = -1;
+        int a_pos = -1, a_uv = -1, a_opacity = -1;
         int u_screen = -1, u_tex = -1, u_alpha = -1;
     };
     struct TransProgram {
