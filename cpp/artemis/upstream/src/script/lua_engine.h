@@ -177,6 +177,7 @@ public:
     // the [save] tag / a [reset] reboot.
     void SaveSystemData();
     void LoadSystemData();
+    bool LoadNativeSnapshot(const std::string& file);
 
     lua_State *state() const { return L_; }
     // KrKr2-Next: engine clock in ms (same base as e:now()).
@@ -216,7 +217,7 @@ private:
     static int l_getScriptWaitReason(lua_State *L);
     static int l_lyevent(lua_State *L);
     bool PushGlobalFn(const std::string &fn, bool quiet);
-    void CallEvent(const std::string &fn,
+    bool CallEvent(const std::string &fn,
                    const std::vector<std::pair<std::string, std::string>> &param,
                    bool quiet);
     void FireOnPush(int key);   // press dispatch → registered setonpush handler

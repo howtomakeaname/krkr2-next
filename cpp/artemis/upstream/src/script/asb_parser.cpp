@@ -172,6 +172,14 @@ uint64_t AsbRunner::BeginEvent(LuaEngine& lua) {
     return event_entry_;
 }
 
+void AsbRunner::DiscardFlow() {
+    callstack_.clear();
+    event_entry_=0;
+    ++flow_revision_;
+    loaded_=false;
+    halted_=true;
+}
+
 void AsbRunner::EndEvent(uint64_t token) {
     if (!token || token != event_entry_) return;
     if (flow_revision_ == event_revision_ && !callstack_.empty() &&

@@ -73,6 +73,35 @@ int main(int argc, char** argv) {
     Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"native compressed trailing data rejected");
     corrupt=native;corrupt[4]=0;
     Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"unsupported native version rejected");
+    const auto slot_dir=std::filesystem::temp_directory_path()/
+        ("artemis-native-slot-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(slot_dir);
+    {std::ofstream f(slot_dir/"slot.dat",std::ios::binary);f.write(reinterpret_cast<const char*>(native.data()),native.size());}
+    artc::PackManager slot_packs;
+    artc::LuaEngine slot_engine;slot_engine.SetSaveDir(slot_dir.string());
+    Check(slot_engine.Init(&slot_packs,artc::Ini{},"android",32,32,nullptr),"initialize slot importer");
+    Check(!slot_engine.LoadNativeSnapshot("slot.dat"),"native import requires an onLoad restorer");
+    Check(slot_engine.DoString(R"(
+        restored=0
+        function restore_slot(e,p)
+            assert(p.file=="slot.dat" and e:var("scr")=="a\0b")
+            assert(e:var("g.keep")=="7" and e:var("s.keep")=="9")
+            restored=restored+1
+        end
+        e:setEventHandler{onLoad="restore_slot"}
+        e:tag{"var",name="g.keep",data="7"};e:tag{"var",name="s.keep",data="9"}
+        e:enqueueTag{"exit"}
+    )","slot callback"),"configure native restorer");
+    slot_engine.SetTimedWait(60000);
+    Check(slot_engine.LoadNativeSnapshot("slot.dat"),"import native slot with onLoad");
+    Check(slot_engine.DoString("assert(restored==1)","restored"),"onLoad fires once after variables");
+    Check(!slot_engine.HasQueuedTag() && !slot_engine.IsWaiting(),
+          "load discards the previous queue and wait");
+    Check(!slot_engine.LoadNativeSnapshot("../slot.dat"),"slot cannot escape save directory");
+    {std::ofstream f(slot_dir/"slot.dat",std::ios::binary);f.write(reinterpret_cast<const char*>(native.data()),12);}
+    Check(!slot_engine.LoadNativeSnapshot("slot.dat"),"broken snapshot rejected before mutation");
+    Check(slot_engine.DoString("assert(restored==1 and e:var('scr')=='a\\0b')","failed load"),"failed load leaves variables and callback untouched");
+    std::filesystem::remove_all(slot_dir);
     // Optional private, read-only original snapshots; never included in fixtures.
     for(int i=1;i<argc;++i) {
         std::ifstream file(argv[i],std::ios::binary);
@@ -356,6 +385,7 @@ int main(int argc, char** argv) {
     Check(script.IsWaiting(), "app pause also freezes the wait suspended below a menu event");
     std::filesystem::remove(path);
     Check(script.DoString(R"(
+        assert(pluto.unpersist({},"")==nil)
         local t={x=2, s="a\0b", empty={}, yes=true}
         t.self=t; t.same=t.empty; t[t.empty]="key"
         local data=pluto.persist({},t)

@@ -64,6 +64,8 @@ public:
     bool ExecuteLine(LuaEngine& lua);
     void JumpTo(const std::string &label);
     void Halt() { halted_ = true; }
+    // A load replaces the old scenario and any suspended menu/event frames.
+    void DiscardFlow();
     // External events may yield into native script commands. A handler with
     // no control transfer is completed synchronously by EndEvent.
     uint64_t BeginEvent(LuaEngine& lua);

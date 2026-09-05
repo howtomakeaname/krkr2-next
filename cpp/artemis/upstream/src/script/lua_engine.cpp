@@ -8,6 +8,8 @@
 #include "pack/pack_manager.h"
 #include "script/pluto_lua.h"
 #include "script/pluto_codec.h"
+#include "script/native_save.h"
+#include <filesystem>
 #include "log/logger.h"
 
 #include <cstring>
@@ -573,6 +575,10 @@ int LuaEngine::l_tag(lua_State *L) {
     // reboot can restore them (language config, system data, …).
     if (tagname == "save" && inst) {
         inst->SaveSystemData();
+        return 0;
+    }
+    if (tagname == "load" && inst) {
+        if (m.count("file")) inst->LoadNativeSnapshot(m.at("file"));
         return 0;
     }
     // BGM uses one logical channel; SE/voice use numbered channels. The
@@ -1462,11 +1468,11 @@ bool LuaEngine::FilterEvent(const std::string& kind,
     return result == 0;
 }
 
-void LuaEngine::CallEvent(const std::string &fn,
+bool LuaEngine::CallEvent(const std::string &fn,
                           const std::vector<std::pair<std::string, std::string>> &param,
                           bool quiet) {
-    if (!L_) return;
-    if (!PushGlobalFn(fn, quiet)) return;
+    if (!L_) return false;
+    if (!PushGlobalFn(fn, quiet)) return false;
     lua_getglobal(L_, kBridgeTable);
     lua_newtable(L_);
     for (const auto &kv : param) {
@@ -1478,7 +1484,9 @@ void LuaEngine::CallEvent(const std::string &fn,
         if (!quiet)
             Log(kLogError, "event " + fn + ": " + lua_tostring(L_, -1));
         lua_pop(L_, 1);
+        return false;
     }
+    return true;
 }
 
 void LuaEngine::SetAutoMode(bool enabled) {
@@ -1645,6 +1653,65 @@ void LuaEngine::LoadSystemData() {
         vars_[std::move(k)] = std::move(v);
     }
     Log(kLogInfo, "save: restored variables from " + path);
+}
+
+bool LuaEngine::LoadNativeSnapshot(const std::string& file) {
+    auto handler=event_handlers_.find("onLoad");
+    if(handler==event_handlers_.end() || handler->second.empty()) {
+        Log(kLogError,"load: native snapshot requires the game's onLoad restorer");return false;
+    }
+    namespace fs=std::filesystem;
+    const auto base=fs::path(save_dir_).lexically_normal();
+    const auto path=(base/fs::path(file)).lexically_normal();
+    const auto relative=path.lexically_relative(base);
+    if(save_dir_.empty() || relative.empty() || *relative.begin()=="..") {
+        Log(kLogError,"load: file outside save directory");return false;
+    }
+    std::ifstream in(path,std::ios::binary|std::ios::ate);
+    if(!in || in.tellg()<0 || in.tellg()>64*1024*1024) {
+        Log(kLogError,"load: cannot read "+path.string());return false;
+    }
+    std::vector<uint8_t> bytes(static_cast<size_t>(in.tellg()));in.seekg(0);
+    if(!in.read(reinterpret_cast<char*>(bytes.data()),bytes.size()))return false;
+    NativeSave snapshot;std::string error;
+    if(!DecodeNativeSave(bytes,snapshot,error)) {Log(kLogError,"load: "+error);return false;}
+    // Validate native Pluto blobs before touching the running state. Raw scalar
+    // variables remain strings; closures/VM pointers fail explicitly.
+    for(const auto& v:snapshot.variables) {
+        if(v.second.size()<4 || v.second.compare(0,4,std::string("\1\0\0\0",4)))continue;
+        const int top=lua_gettop(L_);lua_getglobal(L_,"pluto");lua_getfield(L_,-1,"unpersist");
+        lua_newtable(L_);lua_pushlstring(L_,v.second.data(),v.second.size());
+        const int rc=lua_pcall(L_,2,1,0);
+        if(rc)error=lua_tostring(L_,-1);
+        lua_settop(L_,top);
+        if(rc){Log(kLogError,"load: "+v.first+": "+error);return false;}
+    }
+    for(const auto& c:snapshot.layers)
+        if(c.name!="lyc" && c.name!="lyprop" && c.name!="lyevent" && c.name!="lytween" && c.name!="anime") {
+            Log(kLogError,"load: unsupported saved layer command "+c.name);return false;
+        }
+    // Global/system banks belong to this installation, not to a scenario slot.
+    for(auto it=vars_.begin();it!=vars_.end();) {
+        const auto prefix=it->first.substr(0,2);
+        if(prefix!="g." && prefix!="s.")it=vars_.erase(it);else ++it;
+    }
+    for(auto& v:snapshot.variables)vars_[v.first]=std::move(v.second);
+    tag_queue_.clear();SuspendWait();SetAutoMode(false);
+    videos_.clear();audio_->StopAll();delete sounds_;sounds_=new AudioChannels(*audio_);
+    onsoundfinish_.clear();pending_click_=false;drag_id_.clear();lyevents_.clear();
+    if(script_runner_)script_runner_->DiscardFlow();
+    if(compositor_) {
+        const int w=compositor_->StageWidth(),h=compositor_->StageHeight();
+        compositor_->ReleaseGl();compositor_->Init(w,h);
+        for(const auto& c:snapshot.layers)
+            DispatchTag(c.name,{c.attrs.begin(),c.attrs.end()});
+    }
+    // The registered framework callback reconstructs message pages, audio and
+    // the scenario cursor from its restored scr/log/btn graph (quickjump).
+    if(!CallEvent(handler->second,{{"file",file}},false)) return false;
+    Log(kLogInfo,"load: native snapshot restored via onLoad: "+file+
+        " layers="+std::to_string(snapshot.layers.size()));
+    return true;
 }
 
 // e:getScriptWaitReason() — table whose keys name active non-click waits.
