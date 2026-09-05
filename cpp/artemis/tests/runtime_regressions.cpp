@@ -350,7 +350,8 @@ int main(int argc, char** argv) {
     //   if getWaitStatus() then flg.waitflag = nil end
     // A stale waitflag pins getGameMode("all") at "wait" and keyevent.lua
     // converts every later click into a dummy exclick — title/route buttons
-    // dead (常轨脱离 START→妃爱 input loss). The lazy IsWaiting() poll that
+    // dead (observed as START→character-route input loss on the target
+    // title). The lazy IsWaiting() poll that
     // used to open l_getScriptWaitReason re-entered the expiry transition
     // mid-announce and wiped the reason before the handler could read it.
     artc::LuaEngine announce;

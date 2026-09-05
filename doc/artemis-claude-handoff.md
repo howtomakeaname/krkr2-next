@@ -6,7 +6,7 @@
 
 KrKr2-Next 已通过 Flutter 的 HarmonyOS 分支在 SDK 20 跑通。Artemis 使用开源兼容实现，不是 Android 原版引擎；用户要求对照原版二进制，持续修复画面、交互、音频、视频、排版、shader、存档和 E-mote。引擎共有问题修在 Artemis，只有鸿蒙特有问题才修在鸿蒙层；不要向 Flutter 塞兼容绕过。外部 UI 改动复用现有组件，遵循用户要求的 iOS 26 风格。
 
-**最新缺陷：**《常轨脱离 Creative 凸（官中）》进入 **开始游戏 → 妃爱线** 后，有时画面仍在移动，但操作完全无效。用户称特定场景会一直停在那里。这是新报告，尚未完成复现，也没有确定根因。优先走新游戏妃爱线，不要把此前 CONTINUE / 原版存档成功当成这条路径通过。建议同时采集脚本文件/标签/游标、等待原因、输入状态及 override、游戏 UI/模式、图层事件过滤和音视频/tween 状态，区分脚本无限等待、输入被屏蔽和真正渲染卡死。不要用定时解除所有 wait、关闭 override、乱改游戏脚本等方式掩盖问题。
+**最新缺陷：**目标商业游戏（用户提供的官中包）进入 **开始游戏 → 目标角色线** 后，有时画面仍在移动，但操作完全无效。用户称特定场景会一直停在那里。这是新报告，尚未完成复现，也没有确定根因。优先走新游戏目标角色线，不要把此前 CONTINUE / 原版存档成功当成这条路径通过。建议同时采集脚本文件/标签/游标、等待原因、输入状态及 override、游戏 UI/模式、图层事件过滤和音视频/tween 状态，区分脚本无限等待、输入被屏蔽和真正渲染卡死。不要用定时解除所有 wait、关闭 override、乱改游戏脚本等方式掩盖问题。
 
 本次先完成此缺陷的复现、根因、合理修复、回归和小提交；再按文末清单推进。若工作跨上下文，更新本文件/状态文件，不能把“基础支持”写成“完整兼容”。
 
@@ -62,32 +62,32 @@ upstream https://github.com/reAAAq/KrKr2-Next.git
 - 每帧先跑 Lua frame callback，再派发输入，让游戏能在同帧 override。push/down/down-edge/up-edge/decide 与 `-1` 恢复已实现。自动阅读等逐字和指定语音结束再计时。**完整 key role、快进/已读策略、脚本状态 get/set 尚未完成。**
 - BGM `_a → _b` 配对连续流、编号 SE、淡化/交叉淡化、声像、分块音频。鸿蒙 OHAudio 按已呈现时间收尾，后台线程回收，避免音频 Stop 阻塞渲染线程。`underflows=0` 不能代替扬声器听感或声画同步测量。
 - 视频支持 PFS 与包旁散装文件、FFmpeg 解码/PCM、全屏或指定图层、循环/等待/取消/结束恢复；表达式求值修补解决脚本跳过视频。FFmpeg 3.3.9 ARM64 NEON 实际写像素但返回 0 的问题修在 `vcpkg/ports/ffmpeg/0002-aarch64-swscale-output-height.patch`。
-- Mate80 已看见原 `movie/logo.mp4` 和 84.93 秒 `movie/dcpyzcv3t.mp4`，后者完整播完回到天梨剧情；第三段长视频只在宿主完整解码。不要声称所有视频语义都通过。
-- 天梨脸部错位是 PNG 表情差分换图未更新自然宽高/UV；`0f7f0cb` 修复，保留位置、锚点、父级变换。不同尺寸 a0054/a0051/a0002 已在宿主和 Mate80 对齐。此游戏未发现 E-mote 模型，不能把 PNG 修补写成 E-mote 修复。
+- Mate80 已看见原 `movie/logo.mp4` 和 84.93 秒 `movie/dcpyzcv3t.mp4`，后者完整播完回到角色B剧情；第三段长视频只在宿主完整解码。不要声称所有视频语义都通过。
+- 角色B脸部错位是 PNG 表情差分换图未更新自然宽高/UV；`0f7f0cb` 修复，保留位置、锚点、父级变换。不同尺寸 a0054/a0051/a0002 已在宿主和 Mate80 对齐。此游戏未发现 E-mote 模型，不能把 PNG 修补写成 E-mote 修复。
 - 锚点旋转、翻转、父级缩放、逆矩阵命中和父坐标拖拽已补；文字支持逐字、glyph atlas、首次补全/再次推进、独立文字页、基本 ruby/禁则/悬挂。复杂排版仍不完整。
 
 ### 原版快照与最近 BOWG 补充
 
 - BOWS/1003 字段目录、zlib 检查、Pluto 二进制值图（32/64 位长度、共享/循环 table、binary string/permanents）已导入。通过游戏 `onLoad` 和 quickjump 重建场景与游标；不是恢复任意 VM/线程/闭包/userdata。
-- 原包 5 个 BOWS 均解码：图层日志 642、633、643、268、268；每个 5 个变量图。原 autosave 在宿主恢复妃爱对白并继续下一句；新 ARCV 保存、推进、读回、重启读回已通过。
+- 原包 5 个 BOWS 均解码：图层日志 642、633、643、268、268；每个 5 个变量图。原 autosave 在宿主恢复目标线角色对白并继续下一句；新 ARCV 保存、推进、读回、重启读回已通过。
 - 最近 `bc0bdf7`/`184315b` 增加 BOWG/1003 `saveg.dat`：3 个 globals（g.script/g.system/g.config）和 1 份已读集合。仅兼容 `system.dat` **不存在**时导入，先验证所有 Pluto 图。已有兼容银行优先，损坏时记录错误，不拿旧 BOWG 覆盖当前进度。原 BOWG 只读；已读集合尚未接入 skip。
-- 宿主隔离副本 `/tmp/artemis-native-global-game` 的 LOAD 页显示原逻辑 No.001-01（诗樱）和 No.001-05（妃爱）；前者从 save0001.dat 恢复 633 条 layer 命令，点击进入下一句。新 No.001-12 分配 save0003.dat，未覆盖原下载目录。
+- 宿主隔离副本 `/tmp/artemis-native-global-game` 的 LOAD 页显示原逻辑 No.001-01（角色A）和 No.001-05（目标线角色）；前者从 save0001.dat 恢复 633 条 layer 命令，点击进入下一句。新 No.001-12 分配 save0003.dat，未覆盖原下载目录。
 - 写出格式是有校验/原子替换的 **ARCV**，不是原版 BOWS。原版引擎读取新存档/原格式 BOWG 写出仍未完成。保留旧 system.dat 读取和空日期迁移（43aaf0a/a7dc71b）。
 
 ### 最近 shader、E-mote 和截图
 
 - `917b9c0`/`1cd1a3a`：intermediate_render_mask 从空实现变成 red×alpha 覆盖，蒙版区域外透明；clip 与 mask 在逆父变换的组局部坐标采样，支持 `:alias`。像素测试涵盖部分 alpha/裁剪交集/旋转/空裁剪/禁用/GL 重建。普通 `lyc mask=`、蒙版命中测试、中间缓冲 mode1/2 全部缓存差异仍未实现。
-- 前轮已接原生移动 GLSL、递归 effect group、中间 FBO、texture/uniform vector/matrix/array；本游戏 19 个移动 GLSL 全部编译。妃爱实际场景受控施加 gray 和双向 blur 成功；这不是所有剧情特效已经遍历。HLSL、原版 `anime` 图集指令仍缺。
+- 前轮已接原生移动 GLSL、递归 effect group、中间 FBO、texture/uniform vector/matrix/array；本游戏 19 个移动 GLSL 全部编译。目标线角色实际场景受控施加 gray 和双向 blur 成功；这不是所有剧情特效已经遍历。HLSL、原版 `anime` 图集指令仍缺。
 - E-mote 是 M2 的二维角色部件动画，处理眨眼、口型、呼吸、表情和动作。当前数据层 PSB/MDF v2–v4、RL/raw/CI8、sprite origin、变量/时间轴元数据和离线采样已实现；公开参考的 114 图/23 变量/18 时间轴验证通过。
 - `39f5e30` 的 EmoteScene 是 C++ 有限 renderer：图片/layout/child motion、held/linear frames、loop、参数范围、差分、origin、层级位置/旋转/缩放/alpha。自制身体/表情 GPU 像素验证跟随移动和不同尺寸换脸，GL release 后重传。加载前检查所有可达帧，拒绝未实现语义。
 - **没有接到 Lua createEmoteLayer/getEmoteLayer；没有完整 timeline controller、mesh/stencil、复杂 blend/depth/inheritance、物理或 encrypted PSB。** 公开复杂模型仍因 `unsupported E-mote blend/depth` 被拒绝。不能把这个基础说成“动态立绘可游玩”。
-- `bdf2c34`/`a73d5d4`：takess 捕获 retained scene FBO；savess 按尺寸 alpha-correct resize 并原子写 PNG；lyc/e:file 可读取授权 SaveDir 下 PNG（包括目录内绝对路径）。宿主新 save0003.png 192×109 在 No.001-12 显示妃爱场景，不是 SAVE 菜单。转场中 capture 的全部原版语义、原版内嵌缩略图导入未完成；日期/编号和标题/正文挤压仍存在。
+- `bdf2c34`/`a73d5d4`：takess 捕获 retained scene FBO；savess 按尺寸 alpha-correct resize 并原子写 PNG；lyc/e:file 可读取授权 SaveDir 下 PNG（包括目录内绝对路径）。宿主新 save0003.png 192×109 在 No.001-12 显示目标线角色场景，不是 SAVE 菜单。转场中 capture 的全部原版语义、原版内嵌缩略图导入未完成；日期/编号和标题/正文挤压仍存在。
 - 最后一次 Mate80 安装 a73d5d4：CONTINUE 能读旧 ARCV save0001.dat 回到房间里的第二段；19 shader 加载、无 Lua traceback/ERROR，8 条音轨回收 underflows=0。**新增缩略图真机 save/load/restart 待测**，因用户后来在手机上用其他应用暂停了 UI 自动化。
 
 ## 资料与本机游戏
 
 ```text
-真实原包 /Users/bytedance/Downloads/常轨脱离Creative凸（官中）/root.pfs
+真实原包 /Users/bytedance/Downloads/<游戏目录>/root.pfs
 原存档同目录 saveg.dat autosave.dat save0001.dat save0002.dat save1201.dat save1202.dat
 视频同目录 movie/（3 段 MP4）
 Android 对照仓库 /Users/bytedance/Documents/projects/kr-oh-test/ref/Tyranor-Next
@@ -118,20 +118,20 @@ ctest --test-dir /tmp/artemis-headless-regressions --output-on-failure
 
 ```sh
 /tmp/artemis-headless-regressions/runtime_regressions \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/saveg.dat' \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/autosave.dat' \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/save0001.dat' \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/save0002.dat' \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/save1201.dat' \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/save1202.dat'
+ '/Users/bytedance/Downloads/<游戏目录>/saveg.dat' \
+ '/Users/bytedance/Downloads/<游戏目录>/autosave.dat' \
+ '/Users/bytedance/Downloads/<游戏目录>/save0001.dat' \
+ '/Users/bytedance/Downloads/<游戏目录>/save0002.dat' \
+ '/Users/bytedance/Downloads/<游戏目录>/save1201.dat' \
+ '/Users/bytedance/Downloads/<游戏目录>/save1202.dat'
 ```
 
-真实游戏离屏探针在 `agent-artifacts/artemis-probe/{main.cpp,CMakeLists.txt}`，可改成更好诊断；它未提交，别把商业脚本/图片一起提交。**新建独立 save dir** 复现开始游戏妃爱线；不要用 `/tmp/artemis-native-global-game` 覆盖已留证据。
+真实游戏离屏探针在 `agent-artifacts/artemis-probe/{main.cpp,CMakeLists.txt}`，可改成更好诊断；它未提交，别把商业脚本/图片一起提交。**新建独立 save dir** 复现开始游戏目标角色线；不要用 `/tmp/artemis-native-global-game` 覆盖已留证据。
 
 ```sh
 cmake --build /tmp/artemis-probe-build --target game_probe -j6
 /tmp/artemis-probe-build/game_probe \
- '/Users/bytedance/Downloads/常轨脱离Creative凸（官中）/root.pfs' \
+ '/Users/bytedance/Downloads/<游戏目录>/root.pfs' \
  /tmp/artemis-hiai-input-repro
 ```
 
@@ -167,7 +167,7 @@ device 6XE0226203054251 / HUAWEI Mate80
 bundle org.github.krkr2.flutter_app / EntryAbility
 hdc /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc
 devecocli /Users/bytedance/.nvm/versions/node/v22.22.3/bin/devecocli
-phone game /storage/Users/currentUser/Download/org.github.krkr2.flutter_app/games/常轨脱离Creative凸（官中）/root.pfs
+phone game /storage/Users/currentUser/Download/org.github.krkr2.flutter_app/games/<游戏目录>/root.pfs
 ```
 
 用户已授权真机测试，连接在线。不过上一轮结束时手机正在用别的应用，本轮未重新确认屏幕；操作前截图，若用户正在别的应用则停止点击、报告，先继续宿主排查，避免抢手机。没有必要重复索要整个测试授权。
@@ -192,11 +192,11 @@ phone game /storage/Users/currentUser/Download/org.github.krkr2.flutter_app/game
 
 下列是旧画面的参考坐标，必须核对新截图后再点击：横屏原始 2832×1280，stage 到屏幕 `(278+1.7778*x,1.7778*y)`；SAVE `(2000,1250)`，LOAD `(2105,1250)`，RETURN `(2380,1230)`，No.001-12 `(2180,1030)`，确认 YES `(1205,690)`，正文推进 `(2230,800)`。标题 CONTINUE `(450,385)`，LOAD `(440,550)`。竖屏图库游戏左卡 `(330,720)`，详情开始 `(1050,230)`。截图工具不覆盖已有文件，每次用唯一名字。
 
-旧兼容测试槽 No.001-12（手机分配 save0001.dat）是我们前轮专门创建的回归槽，曾保存房间背景的第二段“我今天依旧处于夜战结束后愉悦的疲惫状态。就在这时，通知栏弹出了新活动的公告。”；CONTINUE 已能恢复。不要覆盖用户其他槽位。缩略图待测：在该句 SAVE/确认覆盖，检查 192×109 PNG 是剧情画面；返回推进一段，LOAD 回该句，再重启读取/打开菜单检验 PNG 持久化；记下实际日志和截图。
+旧兼容测试槽 No.001-12（手机分配 save0001.dat）是我们前轮专门创建的回归槽，曾保存房间背景的第二段（对白原文略）；CONTINUE 已能恢复。不要覆盖用户其他槽位。缩略图待测：在该句 SAVE/确认覆盖，检查 192×109 PNG 是剧情画面；返回推进一段，LOAD 回该句，再重启读取/打开菜单检验 PNG 持久化；记下实际日志和截图。
 
 ## 剩余工作优先顺序与验收
 
-1. **新游戏妃爱线操作无效**：复現路径、停住时的脚本/等待/输入证据、确定共有或 OHOS 根因；小修补加能失败再变绿的回归；重走同路径，确认不仅画面继续、点击/菜单/剧情推进也恢复。必要时验证返回标题后重进，避免残余 override 或事件帧泄漏。
+1. **新游戏目标角色线操作无效**：复現路径、停住时的脚本/等待/输入证据、确定共有或 OHOS 根因；小修补加能失败再变绿的回归；重走同路径，确认不仅画面继续、点击/菜单/剧情推进也恢复。必要时验证返回标题后重进，避免残余 override 或事件帧泄漏。
 2. 新截图能力真机闭环（上述流程），排查存档 UI 文本重叠；原 BOWG 在已有 system.dat 时当前不自动合并，需明确迁移策略才能增加，不能无条件覆盖新进度。
 3. 原版快照：完整 VM/closures/threads/userdata、原版 BOWS/BOWG 写出、内嵌缩略图、已读集合接入均缺；先用真实二进制确认范围，再分模块推进，保持 ARCV 标识真实。
 4. Shader/动画：普通 image mask、mask hit test、intermediate mode 1/2 缓存、原 `anime` 图集、更多组合和 HLSL 仍缺；优先实际游戏触发的语义，GPU 像素和真实场景双验证。
