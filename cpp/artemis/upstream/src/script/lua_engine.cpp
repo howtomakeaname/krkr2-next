@@ -777,9 +777,27 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->compositor_->SetText(inst->msg_layer_, "", 40, 0xffffff);
             return 0;
         }
+        if (tagname == "ruby" && !inst->msg_layer_.empty()) {
+            auto& page=inst->msg_text_[inst->msg_layer_];
+            if (!page.ruby_active) {
+                page.ruby_active=true; page.ruby_start=page.text.size(); page.ruby_text=m["text"];
+            }
+            return 0;
+        }
+        if (tagname == "/ruby" && !inst->msg_layer_.empty()) {
+            auto& page=inst->msg_text_[inst->msg_layer_];
+            if (page.ruby_active) {
+                page.ruby_active=false;
+                page.ruby.push_back({page.ruby_start,page.text.size()-page.ruby_start,page.ruby_text});
+                inst->DispatchTag("print",{{"data",""}});
+            }
+            return 0;
+        }
         if (tagname == "print" && inst && !inst->msg_layer_.empty()) {
-            auto& text = inst->msg_text_[inst->msg_layer_];
+            auto& page = inst->msg_text_[inst->msg_layer_];
+            auto& text = page.text;
             text += m["data"];
+            if (page.ruby_active) return 0;
             // font resolution: the rect registered for THIS layer via
             // chgmsg+font pairing wins; otherwise the last visible-area font.
             static const std::map<std::string, std::string> kEmpty;
@@ -816,11 +834,11 @@ int LuaEngine::l_tag(lua_State *L) {
                                   std::to_string((int)size));
             }
             inst->compositor_->SetText(
-                    inst->msg_layer_, text, size, color, wrap, fr);
+                    inst->msg_layer_, text, size, color, wrap, fr, page.ruby);
             return 0;
         }
         if (tagname == "rt" && !inst->msg_layer_.empty()) {
-            auto& text = inst->msg_text_[inst->msg_layer_];
+            auto& text = inst->msg_text_[inst->msg_layer_].text;
             if (m["omitblankline"] != "1" || (!text.empty() && text.back() != '\n')) text += '\n';
             return 0;
         }

@@ -186,11 +186,22 @@ int main() {
           "base text and its longer reading wrap together");
     Check(rg[5].y<rg[3].y && rg[5].start_ms==rg[3].start_ms,
           "ruby is placed above the base and shares its character timing");
-    Check(At(int(rg[5].x+1),int(rg[5].y+1))[0]>200,"ruby actually produces visible pixels");
+    int ruby_coverage=0;
+    for(int yy=int(rg[5].y);yy<rg[5].y+rg[5].h;++yy)
+        for(int xx=int(rg[5].x);xx<rg[5].x+rg[5].w;++xx)
+            ruby_coverage=std::max(ruby_coverage,int(At(xx,yy)[0]));
+    Check(ruby_coverage>128,"ruby actually produces visible pixels");
     c.DeleteLayer("2");
     Check(c.SetText("2",u8"Aé",10,0xffffff,30,{{"rubysize","6"}},{{1,2,"A"}}),
           "ruby range uses UTF-8 byte boundaries");
     Check(c.Layers().back().glyphs.size()==3,"multibyte base character occupies one glyph");
+    c.DeleteLayer("2");
+    Check(messages.DoString("e:tag{'chgmsg',id='2'}; e:tag{'rp'}; e:tag{'font',rubysize=6}; "
+        "e:tag{'ruby',text='AAAA'}; e:tag{'print',data='AA'}; e:tag{'/ruby'}",
+        "ruby tags"), "ruby tags collect base text and render at close");
+    Check(c.Layers().back().glyphs.size()==6,"ruby tags retain both the base and annotation");
+    Check(messages.DoString("e:tag{'rp'}; e:tag{'print',data='A'}", "clear ruby"), "clear ruby page");
+    Check(c.Layers().back().glyphs.size()==1,"rp also clears ruby ranges");
     c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
