@@ -345,6 +345,44 @@ int main(int argc, char** argv) {
     lua.ClickAt(20, 20); lua.RunEnterFrame();
     Check(!lua.IsWaiting(), "click wait ends");
 
+    // Kernel announce protocol. vsync.lua's keyClickEnd drops flg.waitflag
+    // only while getScriptWaitReason() still reports a reason at OUT time:
+    //   if getWaitStatus() then flg.waitflag = nil end
+    // A stale waitflag pins getGameMode("all") at "wait" and keyevent.lua
+    // converts every later click into a dummy exclick — title/route buttons
+    // dead (常轨脱离 START→妃爱 input loss). The lazy IsWaiting() poll that
+    // used to open l_getScriptWaitReason re-entered the expiry transition
+    // mid-announce and wiped the reason before the handler could read it.
+    artc::LuaEngine announce;
+    Check(announce.Init(&packs, ini, "android", 1280, 720), "announce engine init");
+    Check(announce.DoString(R"(
+        in_reasons = nil; out_reasons = nil
+        local function keys() local t, n = e:getScriptWaitReason(), {}
+            for k in pairs(t) do n[#n+1] = k end return #n end
+        function probe_wait_in(e, p) in_reasons = keys() end
+        function probe_wait_out(e) out_reasons = keys() end
+        e:setEventHandler{onClickWaitIn='probe_wait_in',
+                          onClickWaitOut='probe_wait_out'}
+    )", "announce handlers"), "install wait announce handlers");
+    announce.DispatchTag("wait", {{"time", "30"}, {"input", "0"}});
+    Check(announce.IsWaiting(), "timed wait holds the runner");
+    Check(announce.DoString("assert(in_reasons and in_reasons >= 1)",
+                            "in reason readable"),
+          "onClickWaitIn reads the timed-wait reason");
+    std::this_thread::sleep_for(std::chrono::milliseconds(90));
+    Check(!announce.IsWaiting(), "expired timed wait releases the runner");
+    Check(announce.DoString("assert(out_reasons and out_reasons >= 1)",
+                            "out reason readable"),
+          "onClickWaitOut still reads the reason so keyClickEnd clears waitflag");
+    announce.DispatchTag("@", {});
+    Check(announce.IsWaiting(), "plain click wait holds the runner");
+    Check(announce.DoString("assert(in_reasons == 0)", "plain in reason"),
+          "plain click wait announces with no reason (flg.click routing)");
+    announce.ClickAt(20, 20); announce.RunEnterFrame();
+    Check(!announce.IsWaiting(), "plain click wait ends");
+    Check(announce.DoString("assert(out_reasons == 0)", "plain out reason"),
+          "plain click wait OUT also reports no reason");
+
     Check(lua.DoString("function mask(e) e:overrideKey{status=0} end; "
         "e:setEventHandler{onEnterFrame='mask'}", "mask input"),"install frame input filter");
     lua.SetWaiting(true);lua.ClickAt(20,20);lua.RunEnterFrame();
