@@ -29,6 +29,7 @@ namespace artc {
 
 class Compositor;
 class Audio;
+class AudioChannels;
 
 class LuaEngine {
 public:
@@ -238,6 +239,7 @@ private:
     bool transition_wait_ = false;
     // audio backend (splay/seplay/voplay) — raw ptr, owned by this engine
     Audio *audio_ = nullptr;
+    AudioChannels *sounds_ = nullptr;
     // message pipeline: chgmsg-selected layer + accumulated print text
     std::string msg_layer_;
     std::string msg_text_;

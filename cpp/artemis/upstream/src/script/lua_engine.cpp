@@ -2,6 +2,7 @@
 #include "render/compositor.h"
 #include "render/stb_image.h"
 #include "audio/audio.h"
+#include "audio/audio_channels.h"
 #include "pack/pack_manager.h"
 #include "script/pluto_lua.h"
 #include "log/logger.h"
@@ -73,6 +74,8 @@ LuaEngine *LuaEngine::Self(lua_State *L) {
 }
 
 LuaEngine::~LuaEngine() {
+    delete sounds_;
+    sounds_ = nullptr;
     if (audio_) { delete audio_; audio_ = nullptr; }
     if (L_) lua_close(L_);
 }
@@ -120,6 +123,7 @@ void LuaEngine::EndFrame() {
 }
 
 bool LuaEngine::RunEnterFrame() {
+    if (sounds_) sounds_->Update(NowMs());
     PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
     if (it == event_handlers_.end() || it->second.empty()) return false;
@@ -138,6 +142,7 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
     compositor_ = compositor;
     audio_ = new Audio();
     audio_->Init(packs);
+    sounds_ = new AudioChannels(*audio_);
     L_ = luaL_newstate();
     if (!L_) return false;
     init_time_ = std::chrono::steady_clock::now();
@@ -432,7 +437,7 @@ int LuaEngine::l_tag(lua_State *L) {
         // KrKr2-Next: se=N waits for that voice to end (input may still skip).
         const std::string se = m["se"];
         if (!se.empty()) {
-            if (inst->audio_ && inst->audio_->IsPlaying(se)) {
+            if (inst->sounds_ && inst->sounds_->IsPlaying(se)) {
                 inst->wait_se_key_ = se;
                 inst->se_wait_ = true;
                 inst->SetWaiting(true);
@@ -499,6 +504,40 @@ int LuaEngine::l_tag(lua_State *L) {
     if (tagname == "save" && inst) {
         inst->SaveSystemData();
         return 0;
+    }
+    // BGM uses one logical channel; SE/voice use numbered channels. The
+    // engine owns fades and crossfades; backends only output individual tracks.
+    if (inst && inst->sounds_) {
+        const bool bgm = tagname == "splay" || tagname == "sxfade" ||
+                         tagname == "sstop" || tagname == "sfade" || tagname == "span";
+        const bool play = tagname == "splay" || tagname == "sxfade" ||
+                          tagname == "seplay" || tagname == "voplay" ||
+                          tagname == "vbplay" || tagname == "bplay" || tagname == "s2play";
+        const std::string channel = bgm ? "bgm" : (m.count("id") ? m.at("id") : "0");
+        const int time = m.count("time") ? std::max(0, std::atoi(m.at("time").c_str())) : 0;
+        const int gain = m.count("gain") ? std::atoi(m.at("gain").c_str()) :
+                         (m.count("volume") ? std::atoi(m.at("volume").c_str()) : 1000);
+        const double now = inst->NowMs();
+        if (play) {
+            if (m.count("file") && !m.at("file").empty()) {
+                const bool loop = m.count("loop") ? m.at("loop") == "1" : bgm;
+                inst->sounds_->Play(channel, inst->ResolvePackPath(m.at("file")),
+                                    loop, gain, time, now, tagname == "sxfade");
+            }
+            return 0;
+        }
+        if (tagname == "sstop" || tagname == "sestop") {
+            inst->sounds_->Stop(channel, time, now);
+            return 0;
+        }
+        if (tagname == "sfade" || tagname == "sefade") {
+            inst->sounds_->Fade(channel, gain, time, now);
+            return 0;
+        }
+        if (tagname == "span" || tagname == "sepan") {
+            inst->sounds_->Pan(channel, std::atoi(m["pan"].c_str()), time, now);
+            return 0;
+        }
     }
     if (inst && inst->compositor_) {
         // calllua (framework call_lua()): button exec / p4 callbacks arrive
@@ -733,33 +772,7 @@ int LuaEngine::l_tag(lua_State *L) {
         if (tagname == "rt" && inst) {
             return 0;   // line break folded into the single-line raster
         }
-        // ---- audio: splay(loop BGM) / seplay(SE) / voplay(voice) / sstop ----
-        // Official tags: splay{ id=, file=, loop=, volume=, gain= }; seeking
-        // silence with no unit is fine — volume/gain 0-1000 map to our player.
-        if (inst && (tagname == "splay" || tagname == "seplay" ||
-                     tagname == "voplay" || tagname == "vbplay" ||
-                     tagname == "bplay" || tagname == "s2play")) {
-            if (inst->audio_) {
-                auto fit = m.find("file");
-                if (fit != m.end()) {
-                    const std::string key = m.count("id") && !m.at("id").empty()
-                                                ? m.at("id") : fit->second;
-                    const bool loop = m.count("loop") && m.at("loop") == "1";
-                    int vol = 1000;
-                    auto vit = m.find("volume");
-                    if (vit != m.end()) vol = std::atoi(vit->second.c_str());
-                    else { auto git = m.find("gain"); if (git != m.end()) vol = std::atoi(git->second.c_str()); }
-                    inst->audio_->Play(key, inst->ResolvePackPath(fit->second), loop, vol);
-                }
-            }
-            return 0;
-        }
-        if (inst && tagname == "sstop" && inst->audio_) {
-            auto it = m.find("id");
-            if (it != m.end()) inst->audio_->Stop(m.at("id"));
-            else inst->audio_->StopAll();
-            return 0;
-        }
+
     }
     return 0;
 }
@@ -1247,7 +1260,7 @@ bool LuaEngine::IsWaiting() {
         timed_wait_ = false;
         SetWaiting(false);
     }
-    if (se_wait_ && (!audio_ || !audio_->IsPlaying(wait_se_key_))) {
+    if (se_wait_ && (!sounds_ || !sounds_->IsPlaying(wait_se_key_))) {
         se_wait_ = false;
         SetWaiting(false);
     }
@@ -1260,7 +1273,7 @@ void LuaEngine::PollSoundFinish() {
     if (onsoundfinish_.empty()) return;
     std::vector<std::pair<std::string, std::string>> due;
     for (const auto &kv : onsoundfinish_) {
-        if (!audio_ || !audio_->IsPlaying(kv.first)) due.push_back(kv);
+        if (!sounds_ || !sounds_->IsPlaying(kv.first)) due.push_back(kv);
     }
     for (const auto &kv : due) {
         onsoundfinish_.erase(kv.first);
