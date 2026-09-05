@@ -218,6 +218,66 @@ float ToF(const std::string &s, float def = 0) {
 }
 } // namespace
 
+void Compositor::SetTextTween(const std::string& id, const std::map<std::string, std::string>& attrs) {
+    if (id.empty()) return;
+    const auto get = [&](const char* key) { const auto it=attrs.find(key); return it==attrs.end() ? std::string() : it->second; };
+    if (get("type") != "in") return;
+    SetProps(id, {});
+    for (auto& l : layers_) if (l.id == id) {
+        if (get("mode") == "init") l.text_in.clear();
+        else if (get("mode") == "add") {
+            const auto param=get("param");
+            if (param=="alpha" || param=="left" || param=="top")
+                l.text_in.push_back({param, std::max(0.f,ToF(get("delay"))),
+                    std::max(0.f,ToF(get("time"))), ToF(get("diff")), ParseEase(get("ease"))});
+        }
+        return;
+    }
+}
+
+void Compositor::SetGlyphTimes(Layer& l, std::vector<TextGlyph>& glyphs, const std::string& text) {
+    const size_t keep = text.compare(0,l.text.size(),l.text)==0 ? std::min(l.glyphs.size(),glyphs.size()) : 0;
+    double delay=0;
+    for (const auto& t:l.text_in) delay=std::max(delay,t.delay_ms);
+    double next=now_ms_;
+    for(size_t i=0;i<glyphs.size();++i) {
+        glyphs[i].start_ms=i<keep ? l.glyphs[i].start_ms : next;
+        next=std::max(now_ms_,glyphs[i].start_ms+delay);
+    }
+    l.glyphs=std::move(glyphs); l.text=text;
+}
+
+double Compositor::TextEnd(const Layer& l) {
+    if (l.text_in.empty() || l.glyphs.empty()) return 0;
+    double duration=0;
+    for(const auto& tw:l.text_in) duration=std::max(duration,tw.time_ms);
+    return l.glyphs.back().start_ms+duration;
+}
+
+double Compositor::PendingTextMs(double now_ms) const {
+    double end=now_ms;
+    for(const auto& l:layers_) {
+        float x,y,a; bool visible;
+        EffectiveRect(l,&x,&y,&a,&visible);
+        if(visible && a>0) end=std::max(end,TextEnd(l));
+    }
+    return end-now_ms;
+}
+
+bool Compositor::FinishText(double now_ms) {
+    bool changed=false;
+    for(auto& l:layers_) {
+        float x,y,a; bool visible;
+        EffectiveRect(l,&x,&y,&a,&visible);
+        const double remaining=TextEnd(l)-now_ms;
+        if (!visible || a<=0 || remaining<=0) continue;
+        for(auto& g:l.glyphs) g.start_ms-=remaining;
+        changed=true;
+    }
+    if(changed) ++revision_;
+    return changed;
+}
+
 bool Compositor::ReadParam(const Layer &l, const std::string &param, float *v) {
     if (param == "alpha") { *v = l.alpha * 255.0f; return true; }
     if (param == "left" || param == "x") { *v = l.x; return true; }
@@ -340,8 +400,8 @@ void Compositor::DeleteTweens(const std::string &id) {
 }
 
 bool Compositor::Update(double now_ms) {
+    bool changed = PendingTextMs(now_ms_) > 0;
     now_ms_ = now_ms;
-    bool changed = false;
     for (auto it = tweens_.begin(); it != tweens_.end();) {
         Tween &tw = *it;
         const double since = now_ms - tw.start_ms;
@@ -695,6 +755,7 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
             l.texture = tex;
             l.tex_w = w; l.tex_h = h;
             l.content_x = l.content_y = 0;
+            l.glyphs.clear(); l.text.clear();
             // A replacement is a new image surface. Face differences often
             // have different bounding boxes; retaining the previous surface's
             // size stretches the new eyes/mouth away from their scripted origin.
@@ -747,6 +808,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     ++revision_;
     if (text.empty()) {
         for (auto& l : layers_) if (l.id == id) {
+            l.glyphs.clear(); l.text.clear();
             if (l.texture) glDeleteTextures(1, &l.texture);
             l.texture = 0;
             l.tex_w = l.tex_h = 0;
@@ -844,58 +906,69 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     const int tex_h = bottom;
     if (tex_h <= 0 || tex_h > 4096) return false;
 
-    std::vector<uint8_t> coverage(static_cast<size_t>(tex_w) * tex_h, 0);
-    std::vector<uint8_t> rgba(coverage.size() * 4, 0);
-    for (size_t k = 0; k < glyphs.size(); ++k) {
-        if (lx[k] < 0) continue;
-        int gw = 0, gh = 0, xoff = 0, yoff = 0;
-        uint8_t* bmp = stbtt_GetGlyphBitmap(info, scale, scale, glyphs[k], &gw, &gh, &xoff, &yoff);
-        if (!bmp) continue;
-        const int free_width = tex_w - outline * 2 - line_w[ly[k]];
-        const int shift = align == "center" ? free_width / 2 : (align == "right" ? free_width : 0);
-        const int dx0 = lx[k] + xoff + outline + shift;
-        const int dy0 = baseline + ly[k] * line_h + yoff;
-        for (int row = 0; row < gh; ++row) {
-            const int dy = dy0 + row;
-            if (dy < 0 || dy >= tex_h) continue;
-            for (int col = 0; col < gw; ++col) {
-                const int dx = dx0 + col;
-                if (dx < 0 || dx >= tex_w) continue;
-                auto& cov = coverage[static_cast<size_t>(dy) * tex_w + dx];
-                cov = std::max(cov, bmp[row * gw + col]);
+    // Each glyph occupies its own padded atlas cell. Overlapping outlines
+    // and kerning must not reveal neighbouring letters during a character
+    // tween. The complete line layout stays fixed throughout the animation.
+    struct Cell { int x, y, w, h; std::vector<uint8_t> pixels; };
+    std::vector<Cell> cells;
+    std::vector<TextGlyph> positioned;
+    const int atlas_w = 1024;
+    int atlas_x=1, atlas_y=1, atlas_row=0;
+    for (size_t k=0;k<glyphs.size();++k) {
+        if (lx[k]<0) continue;
+        int gw=0,gh=0,xoff=0,yoff=0;
+        uint8_t* bmp=stbtt_GetGlyphBitmap(info,scale,scale,glyphs[k],&gw,&gh,&xoff,&yoff);
+        const int cw=gw+2*outline, ch=gh+2*outline;
+        if (atlas_x+cw+1>atlas_w) { atlas_x=1; atlas_y+=atlas_row+2; atlas_row=0; }
+        if (cw+2>atlas_w || atlas_y+ch+1>4096) { stbtt_FreeBitmap(bmp,nullptr); return false; }
+        std::vector<uint8_t> cov(static_cast<size_t>(cw)*ch,0), pixels(cov.size()*4,0);
+        if (bmp) for(int y=0;y<gh;++y) for(int x=0;x<gw;++x)
+            cov[static_cast<size_t>(y+outline)*cw+x+outline]=bmp[y*gw+x];
+        stbtt_FreeBitmap(bmp,nullptr);
+        for(int y=0;y<ch;++y) for(int x=0;x<cw;++x) {
+            const size_t off=static_cast<size_t>(y)*cw+x;
+            const float fill=cov[off]/255.f;
+            uint8_t border=0;
+            if(outline) for(int oy=-outline;oy<=outline;++oy) for(int ox=-outline;ox<=outline;++ox) {
+                const int xx=x+ox, yy=y+oy;
+                if(xx>=0 && xx<cw && yy>=0 && yy<ch && ox*ox+oy*oy<=outline*outline)
+                    border=std::max(border,cov[static_cast<size_t>(yy)*cw+xx]);
             }
-        }
-        stbtt_FreeBitmap(bmp, nullptr);
-    }
-    for (int y = 0; y < tex_h; ++y) for (int x = 0; x < tex_w; ++x) {
-        const size_t offset = static_cast<size_t>(y) * tex_w + x;
-        const float fill = coverage[offset] / 255.0f;
-        uint8_t border = 0;
-        if (outline) for (int oy = -outline; oy <= outline; ++oy)
-            for (int ox = -outline; ox <= outline; ++ox) {
-                const int xx = x + ox, yy = y + oy;
-                if (xx >= 0 && xx < tex_w && yy >= 0 && yy < tex_h && ox * ox + oy * oy <= outline * outline)
-                    border = std::max(border, coverage[static_cast<size_t>(yy) * tex_w + xx]);
+            const float edge=border/255.f*(1-fill), alpha=fill+edge;
+            if(alpha<=0) continue;
+            for(int c=0;c<3;++c) {
+                const int shift=(2-c)*8;
+                pixels[off*4+c]=static_cast<uint8_t>((((color>>shift)&255)*fill+
+                    ((outline_color>>shift)&255)*edge)/alpha);
             }
-        const float edge = (border / 255.0f) * (1 - fill);
-        const float alpha = fill + edge;
-        if (!alpha) continue;
-        for (int component = 0; component < 3; ++component) {
-            const int shift = (2 - component) * 8;
-            rgba[offset * 4 + component] = static_cast<uint8_t>(
-                (((color >> shift) & 255) * fill + ((outline_color >> shift) & 255) * edge) / alpha);
+            pixels[off*4+3]=static_cast<uint8_t>(std::lround(alpha*255));
         }
-        rgba[offset * 4 + 3] = static_cast<uint8_t>(std::lround(alpha * 255));
+        const int free_width=tex_w-2*outline-line_w[ly[k]];
+        const int shift=align=="center" ? free_width/2 : (align=="right" ? free_width : 0);
+        TextGlyph g;
+        g.x=lx[k]+xoff+shift; g.y=baseline+ly[k]*line_h+yoff-outline;
+        g.w=cw; g.h=ch;
+        g.u0=float(atlas_x)/atlas_w; g.u1=float(atlas_x+cw)/atlas_w;
+        g.v0=atlas_y; g.v1=atlas_y+ch; // normalize after the final atlas height is known
+        positioned.push_back(g);
+        cells.push_back({atlas_x,atlas_y,cw,ch,std::move(pixels)});
+        atlas_x+=cw+2; atlas_row=std::max(atlas_row,ch);
     }
-
-    const uint32_t tex = CreateTexture(rgba.data(), tex_w, tex_h);
+    const int atlas_h=std::max(1,atlas_y+atlas_row+1);
+    std::vector<uint8_t> rgba(static_cast<size_t>(atlas_w)*atlas_h*4,0);
+    for(const auto& cell:cells) for(int y=0;y<cell.h;++y)
+        std::copy_n(cell.pixels.data()+static_cast<size_t>(y)*cell.w*4,cell.w*4,
+                    rgba.data()+(static_cast<size_t>(cell.y+y)*atlas_w+cell.x)*4);
+    for(auto& g:positioned) { g.v0/=atlas_h; g.v1/=atlas_h; }
+    const uint32_t tex=CreateTexture(rgba.data(),atlas_w,atlas_h);
 
     // upsert layer; message-layer default position = bottom-left
     for (auto &l : layers_) {
         if (l.id == id) {
             if (l.texture) glDeleteTextures(1, &l.texture);
             l.texture = tex;
-            l.tex_w = tex_w; l.tex_h = tex_h;
+            l.tex_w = atlas_w; l.tex_h = atlas_h;
+            SetGlyphTimes(l, positioned, text);
             // The placeholder layer may carry a degenerate (0-sized) rect
             // from its ghost creation — the new raster defines the display
             // size, otherwise the quad collapses and nothing is drawn.
@@ -911,7 +984,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     Layer l;
     l.id = id;
     l.texture = tex;
-    l.tex_w = tex_w; l.tex_h = tex_h;
+    l.tex_w = atlas_w; l.tex_h = atlas_h;
+    SetGlyphTimes(l, positioned, text);
     l.w = (float)tex_w; l.h = (float)tex_h;
     l.content_x = number("left", 0);
     l.content_y = number("top", 0);
@@ -1074,6 +1148,31 @@ void Compositor::Draw() {
         EffectiveRect(*l, &ex, &ey, &ew, &eh, &ea, &ev);
         if (!ev || !l->texture) continue;
         glBindTexture(GL_TEXTURE_2D, l->texture);
+        if (!l->glyphs.empty()) {
+            const float sx=l->w!=0 ? ew/l->w : 0, sy=l->h!=0 ? eh/l->h : 0;
+            for (const auto& g:l->glyphs) {
+                float gx=g.x, gy=g.y, alpha=1;
+                for (const auto& tw:l->text_in) {
+                    const double elapsed=now_ms_-g.start_ms;
+                    const float t=elapsed<0 ? 0 : (tw.time_ms<=0 ? 1 : std::min(1.0,elapsed/tw.time_ms));
+                    const float diff=tw.diff*(1-ApplyEase(tw.ease,t));
+                    if (tw.param=="alpha") alpha=std::clamp(1+diff/255.f,0.f,1.f);
+                    else if(tw.param=="left") gx+=diff;
+                    else if(tw.param=="top") gy+=diff;
+                }
+                if (alpha<=0 || g.w<=0 || g.h<=0) continue;
+                glUniform1f(prog_.u_alpha,ea*alpha);
+                const float x0=ex+gx*sx, y0=ey+gy*sy, x1=x0+g.w*sx, y1=y0+g.h*sy;
+                const float verts[16]={x0,y0,g.u0,g.v0, x1,y0,g.u1,g.v0,
+                                       x0,y1,g.u0,g.v1, x1,y1,g.u1,g.v1};
+                glVertexAttribPointer(prog_.a_pos,2,GL_FLOAT,GL_FALSE,16,verts);
+                glEnableVertexAttribArray(prog_.a_pos);
+                glVertexAttribPointer(prog_.a_uv,2,GL_FLOAT,GL_FALSE,16,verts+2);
+                glEnableVertexAttribArray(prog_.a_uv);
+                glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+            }
+            continue;
+        }
         glUniform1f(prog_.u_alpha, ea);
         float x0 = ex, y0 = ey, x1 = ex + ew, y1 = ey + eh;
         // interleaved: x, y, u, v per vertex (triangle strip)

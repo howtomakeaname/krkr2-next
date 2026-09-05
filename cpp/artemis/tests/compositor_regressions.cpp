@@ -136,6 +136,28 @@ int main() {
         "recreate message"), "delete message layer"); c.Draw();
     Check(At(9,4)[0]==0, "deleting a layer clears its saved page");
     c.DeleteLayer("2");
+    c.DeleteTweens("1"); c.SetProps("1",{{"alpha","255"}});
+    c.Update(3000);
+    c.SetTextTween("2",{{"mode","init"},{"type","in"}});
+    c.SetTextTween("2",{{"mode","add"},{"type","in"},{"param","alpha"},
+                         {"delay","100"},{"time","100"},{"diff","-255"}});
+    Check(c.SetText("2","AA",10,0xffffff,30),"rasterize animated text"); c.Draw();
+    Check(At(3,4)[0]==0 && At(9,4)[0]==0,"character fade starts transparent");
+    c.Update(3050); c.Draw();
+    Check(At(3,4)[0]>=125 && At(3,4)[0]<=130 && At(9,4)[0]==0,
+          "first glyph fades while the next glyph waits");
+    c.Update(3100); c.Draw();
+    Check(At(3,4)[0]==255 && At(9,4)[0]==0,"glyph delay uses characters, independent of layout");
+    Check(c.PendingTextMs(3100)==100 && c.FinishText(3100),"finish remaining character animation");
+    c.Draw(); Check(At(9,4)[0]==255 && c.PendingTextMs(3100)==0,"finish reveals the complete page");
+    Check(c.SetText("2","AAA",10,0xffffff,30),"append to animated page"); c.Draw();
+    Check(At(3,4)[0]==255 && At(9,4)[0]==255 && At(15,4)[0]==0,
+          "appending preserves revealed glyphs and animates only new text");
+    c.Update(3200); c.Draw();
+    Check(At(15,4)[0]==255,"appended character completes");
+    c.SetProps("2",{{"visible","0"}});
+    Check(c.PendingTextMs(3100)==0,"hidden text does not block a visible page");
+    c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
     c.SetProps("3.1",{{"left","5"},{"top","4"}});

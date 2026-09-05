@@ -19,6 +19,18 @@ namespace artc {
 
 class PackManager;
 
+struct TextGlyph {
+    float x = 0, y = 0, w = 0, h = 0;
+    float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
+    double start_ms = 0;
+};
+struct TextTween {
+    std::string param;
+    double delay_ms = 0, time_ms = 0;
+    float diff = 0;
+    int ease = 0;
+};
+
 struct Layer {
     std::string id;
     uint32_t texture = 0;      // GL texture name (0 = no texture)
@@ -39,6 +51,9 @@ struct Layer {
     bool draggable = false;
     float drag_l = 0, drag_t = 0, drag_r = 0, drag_b = 0;
     bool has_dragarea = false;
+    std::string text;
+    std::vector<TextGlyph> glyphs;
+    std::vector<TextTween> text_in;
 };
 
 class Compositor {
@@ -62,6 +77,9 @@ public:
     bool SetText(const std::string &id, const std::string &text, float size,
                  uint32_t color, float wrapWidth = 0,
                  const std::map<std::string, std::string>& style = {});
+    void SetTextTween(const std::string& id, const std::map<std::string, std::string>& attrs);
+    double PendingTextMs(double now_ms) const;
+    bool FinishText(double now_ms);
 
     // GL draw (called from the render loop on the engine thread). Draws all
     // visible layers, then invokes the present callback ([flip] semantics).
@@ -184,6 +202,8 @@ private:
     static bool ApplyParam(Layer &l, const std::string &param, float value);
     static bool ReadParam(const Layer &l, const std::string &param, float *value);
     void QueueTween(Tween tw, bool replace);
+    static double TextEnd(const Layer& layer);
+    void SetGlyphTimes(Layer& layer, std::vector<TextGlyph>& glyphs, const std::string& text);
 
     int stage_w_ = 1280, stage_h_ = 720;
     GlProgram prog_{};
