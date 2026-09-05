@@ -10,6 +10,9 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#if defined(ARTC_HAS_GLES)
+#include <EGL/egl.h>
+#endif
 
 static void Check(bool ok,const char* why) {
     if(!ok){std::cerr<<why<<'\n';std::exit(1);}
@@ -222,6 +225,25 @@ static void PlayerTests() {
           "a failed reload keeps the previous player intact");
 }
 int main(int argc,char** argv) {
+#if defined(ARTC_HAS_GLES)
+    // SetPixels uploads through real GL; OHOS builds the compositor with GLES
+    // unconditionally, so give the binary a pbuffer context (as the desktop
+    // ANGLE compositor suite does) before anything renders.
+    EGLDisplay display=eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if(display==EGL_NO_DISPLAY || !eglInitialize(display,nullptr,nullptr)) {
+        std::cerr<<"initialize EGL: error 0x"<<std::hex<<eglGetError()<<std::endl;
+        std::exit(1);
+    }
+    EGLint cfg_attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,
+                        EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_NONE};
+    EGLConfig config;EGLint count=0;
+    Check(eglChooseConfig(display,cfg_attrs,&config,1,&count)&&count,"choose EGL config");
+    EGLint pb_attrs[]={EGL_WIDTH,32,EGL_HEIGHT,32,EGL_NONE};
+    EGLSurface surface=eglCreatePbufferSurface(display,config,pb_attrs);
+    EGLint ctx_attrs[]={EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE};
+    EGLContext context=eglCreateContext(display,config,EGL_NO_CONTEXT,ctx_attrs);
+    Check(eglMakeCurrent(display,surface,surface,context),"make EGL context current");
+#endif
     ModelTests();
     PlayerTests();
     {
