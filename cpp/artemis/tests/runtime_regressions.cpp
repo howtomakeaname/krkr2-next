@@ -3,6 +3,7 @@
 #include "pack/pack_manager.h"
 #include "script/lua_engine.h"
 #include "script/asb_parser.h"
+#include "script/expression.h"
 #include "render/compositor.h"
 #include <chrono>
 #include <filesystem>
@@ -37,6 +38,24 @@ public:
 };
 
 int main() {
+    const auto variable=[](const std::string& name) {
+        if(name=="t.count") return std::string("8");
+        if(name=="t.path") return std::string("movie/logo.mp4");
+        return std::string("0");
+    };
+    std::string expression;
+    const std::pair<const char*,const char*> expressions[]={
+        {"1==1","1"},{"1==0","0"},{"2+3*4","14"},{"(2+3)*4","20"},
+        {"!0 && (3>=2 || 0)","1"},{"0 || 1 && 0","0"},{"8 & 3 | 2","2"},
+        {"0x10 >> 2","4"},{"-7/2","-3"},{"0xffffffff+2","1"},
+        {"t.count + $t.count","16"},{"t.path","movie/logo.mp4"},
+        {"t.path == 'movie/logo.mp4'","1"},{"'movie/' + 'logo.mp4'","movie/logo.mp4"},
+        {"0 && 1/0","0"},{"1 || 1/0","1"}};
+    for(auto test:expressions)
+        Check(artc::EvaluateExpression(test.first,variable,expression) && expression==test.second,
+              test.first);
+    for(const char* invalid:{"", "1/0", "(1+2", "1 +", "0x", "1 << 32", "f()", "1;2"})
+        Check(!artc::EvaluateExpression(invalid,variable,expression),"invalid expression must fail without execution");
     Output out;
     artc::AudioChannels sounds(out);
     Check(sounds.Play("bgm", "title", true, 800, 0, 0), "play BGM");
