@@ -1,4 +1,5 @@
 #include "render/video_decoder.h"
+#include "log/logger.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -18,6 +19,12 @@ extern "C" {
 namespace artc {
 #if defined(ARTC_HAS_FFMPEG)
 namespace {
+bool DecodeError(const char* operation,int code) {
+    char message[AV_ERROR_MAX_STRING_SIZE]{};
+    av_strerror(code,message,sizeof(message));
+    Log(kLogError,std::string("video: ")+operation+": "+message+" ("+std::to_string(code)+")");
+    return false;
+}
 struct Track {
     VideoDecoder::Bytes bytes;
     size_t offset = 0;
@@ -66,15 +73,21 @@ struct Track {
         av_dict_set(&options,"format_whitelist","mov,ogg,avi,matroska,webm,mpeg,mpegvideo",0);
         const int opened=avformat_open_input(&format,nullptr,nullptr,&options);
         av_dict_free(&options);
-        if(opened<0 || avformat_find_stream_info(format,nullptr)<0) return false;
+        if(opened<0) return DecodeError("open container",opened);
+        const int info=avformat_find_stream_info(format,nullptr);
+        if(info<0) return DecodeError("read stream info",info);
         stream=av_find_best_stream(format,type,-1,-1,nullptr,0);
-        if(stream<0) return false;
+        if(stream<0) return type==AVMEDIA_TYPE_AUDIO && stream==AVERROR_STREAM_NOT_FOUND ? false : DecodeError("find track",stream);
         auto* decoder=avcodec_find_decoder(format->streams[stream]->codecpar->codec_id);
-        if(!decoder) return false;
+        if(!decoder) return DecodeError("find codec",AVERROR_DECODER_NOT_FOUND);
         codec=avcodec_alloc_context3(decoder);
-        if(!codec || avcodec_parameters_to_context(codec,format->streams[stream]->codecpar)<0) return false;
+        if(!codec) return DecodeError("allocate codec",AVERROR(ENOMEM));
+        const int parameters=avcodec_parameters_to_context(codec,format->streams[stream]->codecpar);
+        if(parameters<0) return DecodeError("copy codec parameters",parameters);
         codec->thread_count=2;
-        if(avcodec_open2(codec,decoder,nullptr)<0) return false;
+        const int opened_codec=avcodec_open2(codec,decoder,nullptr);
+        if(opened_codec<0) return DecodeError("open codec",opened_codec);
+        Log(kLogInfo,std::string("video: decoded track ")+decoder->name+" bytes="+std::to_string(bytes->size()));
         frame=av_frame_alloc(); packet=av_packet_alloc();
         return frame && packet;
     }
@@ -83,7 +96,10 @@ struct Track {
         for(;;) {
             const int result=avcodec_receive_frame(codec,frame);
             if(result>=0) return true;
-            if(result!=AVERROR(EAGAIN)) { ended=true; return false; }
+            if(result!=AVERROR(EAGAIN)) {
+                ended=true;
+                return result==AVERROR_EOF ? false : DecodeError("receive frame",result);
+            }
             if(draining) { ended=true; return false; }
             int status;
             do {
@@ -93,7 +109,10 @@ struct Track {
             if(status<0) {
                 draining=true;
                 if(avcodec_send_packet(codec,nullptr)<0) { ended=true; return false; }
-            } else if(avcodec_send_packet(codec,packet)<0) { ended=true; return false; }
+            } else {
+                const int sent=avcodec_send_packet(codec,packet);
+                if(sent<0) { ended=true; return DecodeError("send packet",sent); }
+            }
         }
     }
     bool Rewind() {
