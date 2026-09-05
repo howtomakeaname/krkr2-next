@@ -161,8 +161,33 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   PSB v2–v4/MDF resource decoding, RL/raw RGBA/CI8 images, original sprite origins,
   variable/timeline metadata and offline keyframe sampling. Public model data
   exposed duplicate tracks and numeric-string values, both retained/accepted.
-  This is an E-mote data foundation, NOT a working SDK/player: no Lua surface
-  integration, mesh/stencil renderer, child-motion evaluation or physics yet.
+  This is an E-mote data foundation; the bounded scene renderer added below
+  does not turn it into a complete SDK/player.
+
+- `src/script/native_save.*`, `lua_engine.cpp` — decode BOWG/1003 global banks
+  and read-line sets. Import native globals only when compatibility `system.dat`
+  is absent, validating every Pluto graph before application. Existing banks
+  remain authoritative; never merge older native metadata over current progress.
+  Native files stay read-only. Read-line sets are not yet applied to skip state.
+- `src/render/layer_shader.*`, `compositor.*`, `lua_engine.cpp` — intermediate
+  group masks use red times alpha, with transparent coverage outside the image;
+  clipping and masks sample inverse-transformed group-local coordinates. Resolve
+  native path aliases and reload mask textures after GL resource loss. This does
+  not implement every intermediate caching mode, ordinary image masks or masked
+  hit testing.
+- `src/render/emote_scene.*` — bounded image/layout/child-motion evaluation and
+  GLES rendering, including held/linear frames, loop timing, parameterized image
+  changes, sprite origins and hierarchical transforms. Validate all reachable
+  frames before accepting a model; reject unsupported blend/depth, inheritance,
+  mesh/stencil and control semantics. Synthetic GPU fixtures exercise body/face
+  alignment and resource recreation. Lua player integration, SDK timeline
+  controllers, physics and encrypted PSB remain absent; complex public models
+  still require unsupported rendering features.
+- `src/render/snapshot_image.*`, `compositor.*`, `lua_engine.*` — `takess` retains
+  a top-down scene framebuffer snapshot; `savess` writes an atomically replaced
+  PNG with alpha-correct resizing. Saved images can be read through script file
+  APIs and layer creation within the authorized save directory. Captures survive
+  subsequent menu drawing; original embedded-thumbnail import is not implemented.
 
 Full key roles/skip, all shader semantics, E-mote playback, complex typography
 and complete native snapshot interchange remain incomplete.
