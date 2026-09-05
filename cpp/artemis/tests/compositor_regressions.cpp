@@ -130,6 +130,21 @@ int main() {
     auto movie=std::make_shared<std::vector<uint8_t>>(std::istreambuf_iterator<char>(movie_file),std::istreambuf_iterator<char>());
     files.push_back({"movie.mp4",*movie});
 #endif
+    const std::string native_shader=R"(
+        precision highp float;
+        varying vec2 resultCoord0; varying vec2 resultCoord1;
+        uniform sampler2D textureFore; uniform sampler2D textureUser;
+        uniform float red; uniform float green; uniform float blue; uniform float userMix;
+        void main(){vec4 c=texture2D(textureFore,resultCoord1);
+            c.rgb*=vec3(red,green,blue);
+            gl_FragColor=mix(c,texture2D(textureUser,resultCoord1),userMix);}
+    )";
+    const std::string uv_shader=R"(
+        precision highp float; varying vec2 resultCoord0; varying vec2 resultCoord1;
+        void main(){gl_FragColor=vec4(resultCoord0.x,resultCoord1.y,0.0,1.0);}
+    )";
+    files.push_back({"filter.glsl",{native_shader.begin(),native_shader.end()}});
+    files.push_back({"uv.glsl",{uv_shader.begin(),uv_shader.end()}});
     // A pf8 fixture keeps the production pack/font/image loading path.
     std::vector<unsigned char> pack{'p','f','8'};
     auto u32=[&](uint32_t n){for(int i=0;i<4;++i)pack.push_back((n>>(8*i))&255);};
@@ -418,6 +433,43 @@ int main() {
     messages.ClickAt(31,31); messages.RunEnterFrame(); messages.EndFrame();
     Check(!messages.IsWaiting(),"restored pointer input can cancel the movie");
 #endif
+    c.ReleaseGl();c.Init(32,32);
+    Check(c.SetPixels("1",blue,1,1),"shader background");c.SetProps("1",{{"w","32"},{"h","32"}});
+    const uint8_t green[4]={0,255,0,255};
+    Check(c.SetPixels("9.1",red,1,1) && c.SetPixels("9.2",green,1,1),"shader foreground parts");
+    c.SetProps("9.1",{{"w","32"},{"h","32"}});
+    c.SetProps("9.2",{{"left","8"},{"top","8"},{"w","16"},{"h","16"}});
+    c.SetProps("9",{{"intermediate_render","2"},{"alpha","128"}});c.Draw();
+    p=Pixel();Check(abs(p[1]-128)<=1 && abs(p[2]-127)<=1 && p[0]==0,
+        "group opacity applies once after overlapping body/face parts");
+    p=At(2,2);Check(abs(p[0]-128)<=1 && p[1]==0,"group preserves uncovered body pixels");
+    c.SetProps("9",{{"negative","1"}});c.Draw();p=Pixel();
+    Check(abs(p[0]-128)<=1 && p[1]==0 && p[2]==255,"negative filter applies to the composed group");
+    c.SetProps("9",{{"negative","0"},{"grayscale","1"},{"alpha","255"}});c.Draw();p=Pixel();
+    Check(abs(p[0]-150)<=1 && p[0]==p[1] && p[1]==p[2],"native grayscale luminance");
+    c.SetProps("9",{{"grayscale","0"}});
+    Check(messages.DoString("e:tag{'lyshader',id='tint',file='filter.glsl'};e:tag{'lyshader',id='uv',file='uv.glsl'}",
+        "load game shader"),"lyshader loads source through the resource resolver");
+    c.SetProps("9",{{"shader","tint"},{"shaderconstant","red,green,blue"},{"red","1"},{"green","0.5"},{"blue","1"}});
+    c.Draw();p=Pixel();Check(abs(p[1]-128)<=1,"custom GLSL executes on the actual layer subtree");
+    // Invisible layers can supply a custom sampler without entering the scene.
+    Check(c.SetPixels("99",blue,1,1),"custom shader auxiliary texture");c.SetProps("99",{{"visible","0"}});
+    c.SetProps("9",{{"shadertexture","textureUser"},{"textureUser","99"},{"userMix","1"}});c.Draw();
+    Check(Pixel()[2]==255 && Pixel()[1]==0,"shadertexture resolves an invisible layer");
+    c.SetProps("9",{{"shader","uv"}});c.Draw();
+    Check(At(2,2)[1]<30 && At(2,29)[1]>220,"native shader coordinates are top-down after offscreen composition");
+    c.SetProps("9",{{"shader",""},{"negative","1"}});
+    c.SetProps("9.2",{{"intermediate_render","2"},{"negative","1"}});c.Draw();
+    p=Pixel();Check(p[1]==255 && p[0]==0 && p[2]==0,"nested shader passes apply child then parent effects");
+    // Half-transparent screen blending must attenuate the destination by the
+    // premultiplied source, rather than its full straight-alpha color.
+    c.DeleteLayer("9.2");c.SetProps("9",{{"negative","0"},{"layermode","screen"},{"alpha","128"}});
+    const uint8_t grey[4]={128,128,128,255};c.SetPixels("1",grey,1,1);c.SetProps("1",{{"w","32"},{"h","32"}});
+    c.Draw();p=Pixel();Check(abs(p[0]-192)<=1 && p[1]==128 && p[2]==128,"screen respects group opacity");
+    c.SetProps("9",{{"layermode","add"}});c.Draw();p=Pixel();
+    Check(p[0]==255 && p[1]==128 && p[2]==128,"additive group composition");
+    c.SetProps("9",{{"alpha","0"}});c.Draw();p=Pixel();
+    Check(p[0]==128 && p[1]==128 && p[2]==128,"zero-opacity shader group produces no pixels");
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");

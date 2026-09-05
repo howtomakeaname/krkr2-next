@@ -27,6 +27,18 @@
 
 namespace artc {
 
+bool Compositor::LoadShader(const std::string& id,const std::string& file) {
+    std::vector<uint8_t> bytes;
+    if(!packs_ || !packs_->Read(file,bytes)) {
+        Log(kLogError,"lyshader: cannot read "+file);return false;
+    }
+    const bool ok=shaders_.Load(id,std::string(bytes.begin(),bytes.end()));
+    Log(ok?kLogInfo:kLogError,"lyshader: "+id+(ok?" loaded ":" failed ")+file);
+    if(ok)++revision_;
+    return ok;
+}
+
+
 // Artemis layer z is a two-level sort. The leading integer is the primary
 // layer ("600", "1", "-273"); within the same primary layer the SECOND id
 // segment breaks ties the way the engine draws it:
@@ -561,11 +573,13 @@ const char *kVs = R"(attribute vec2 a_pos;
 attribute vec2 a_uv;
 attribute float a_opacity;
 uniform vec2 u_screen;
+uniform float u_top_down;
 varying vec2 v_uv;
 varying float v_opacity;
 void main() {
     vec2 clip = vec2(a_pos.x / u_screen.x * 2.0 - 1.0,
                      1.0 - a_pos.y / u_screen.y * 2.0);
+    clip.y=mix(clip.y,-clip.y,u_top_down);
     gl_Position = vec4(clip, 0.0, 1.0);
     v_uv = a_uv;
     v_opacity = a_opacity;
@@ -621,6 +635,9 @@ bool Compositor::InitGl() {
     uint32_t fs = CompileShader(GL_FRAGMENT_SHADER, kFs);
     glAttachShader(prog_.program, vs);
     glAttachShader(prog_.program, fs);
+    glBindAttribLocation(prog_.program,0,"a_pos");
+    glBindAttribLocation(prog_.program,1,"a_uv");
+    glBindAttribLocation(prog_.program,2,"a_opacity");
     glLinkProgram(prog_.program);
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -628,6 +645,7 @@ bool Compositor::InitGl() {
     prog_.a_uv = glGetAttribLocation(prog_.program, "a_uv");
     prog_.a_opacity = glGetAttribLocation(prog_.program, "a_opacity");
     prog_.u_screen = glGetUniformLocation(prog_.program, "u_screen");
+    prog_.u_top_down = glGetUniformLocation(prog_.program,"u_top_down");
     prog_.u_tex = glGetUniformLocation(prog_.program, "u_tex");
     prog_.u_alpha = glGetUniformLocation(prog_.program, "u_alpha");
 
@@ -1117,6 +1135,7 @@ void Compositor::SetProps(const std::string &id,
     ++revision_;
     for (auto &l : layers_) {
         if (l.id != id) continue;
+        l.effect.Set(attrs);
         if (const auto zoom=attrs.find("zoom"); zoom!=attrs.end())
             l.sx=l.sy=ToF(zoom->second,100)/100.f;
         for (const auto &kv : attrs) {
@@ -1188,6 +1207,7 @@ void Compositor::DeleteLayer(const std::string &id) {
 }
 
 void Compositor::ReleaseGl() {
+    shaders_.ReleaseGl();
     ++revision_;
     for (auto &l : layers_) {
         if (l.texture) glDeleteTextures(1, &l.texture);
@@ -1266,10 +1286,17 @@ void Compositor::Draw() {
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    for (const Layer *l : sorted) {
+    auto draw_leaf=[&](const Layer* l,float inherited,bool top_down) {
         const auto transform=EffectiveTransform(*l);
-        const float ea=transform.alpha;
-        if (!transform.visible || !l->texture) continue;
+        const float ea=transform.alpha/inherited;
+        if (!transform.visible || !l->texture || ea<=0) return;
+        glUseProgram(prog_.program);
+        glUniform1f(prog_.u_top_down,top_down?1:0);
+        glUniform2f(prog_.u_screen,float(stage_w_),float(stage_h_));
+        glUniform1i(prog_.u_tex,0);glActiveTexture(GL_TEXTURE0);
+        glDisableVertexAttribArray(prog_.a_opacity);glVertexAttrib1f(prog_.a_opacity,1);
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
         glBindTexture(GL_TEXTURE_2D, l->texture);
         if (!l->glyphs.empty()) {
             std::vector<float> vertices;
@@ -1304,7 +1331,7 @@ void Compositor::Draw() {
                 glDisableVertexAttribArray(prog_.a_opacity);
                 glVertexAttrib1f(prog_.a_opacity,1);
             }
-            continue;
+            return;
         }
         glUniform1f(prog_.u_alpha, ea);
         const auto p0=transform.Point(0,0), p1=transform.Point(l->w,0);
@@ -1319,7 +1346,30 @@ void Compositor::Draw() {
         glVertexAttribPointer(prog_.a_uv, 2, GL_FLOAT, GL_FALSE, 16, verts + 2);
         glEnableVertexAttribArray(prog_.a_uv);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    }
+    };
+    std::map<std::string,uint32_t> textures;
+    for(const auto& l:layers_)if(l.texture)textures[l.id]=l.texture;
+    std::function<void(size_t,size_t,size_t,uint32_t,bool,float)> draw_range;
+    draw_range=[&](size_t first,size_t last,size_t depth,uint32_t target,bool top_down,float inherited) {
+        for(size_t i=first;i<last;) {
+            const auto* l=sorted[i];const auto transform=EffectiveTransform(*l);
+            if(!transform.visible || transform.alpha<=0){++i;continue;}
+            size_t next=i+1;
+            if(l->effect.Active()) {
+                const auto prefix=l->id+".";
+                while(next<last && sorted[next]->id.compare(0,prefix.size(),prefix)==0)++next;
+                const auto intermediate=shaders_.Begin(depth,stage_w_,stage_h_,target,top_down);
+                if(intermediate) {
+                    draw_leaf(l,transform.alpha,true);
+                    draw_range(i+1,next,depth+1,intermediate,true,transform.alpha);
+                    shaders_.End(depth,l->effect,target,top_down,transform.alpha/inherited,textures);
+                    i=next;continue;
+                }
+            }
+            draw_leaf(l,inherited,top_down);++i;
+        }
+    };
+    draw_range(0,sorted.size(),0,scene_fbo_,false,1);
     // Device-side draw ground truth: every 300 frames dump what actually
     // rendered (drawn/total + first samples with effective rects) so layout
     // bugs are observable from logcat alone.
@@ -1356,6 +1406,7 @@ void Compositor::Draw() {
     glUseProgram(prog_.program);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, scene_tex_);
+    glUniform1f(prog_.u_top_down,0);
     glUniform1f(prog_.u_alpha, 1);
     const float w = float(stage_w_), h = float(stage_h_);
     const float screen[16] = {0,0,0,1, w,0,1,1, 0,h,0,0, w,h,1,0};
@@ -1443,6 +1494,7 @@ void Compositor::SetProps(const std::string &id,
     ++revision_;
     for (auto &l : layers_) {
         if (l.id != id) continue;
+        l.effect.Set(attrs);
         if (const auto zoom=attrs.find("zoom"); zoom!=attrs.end())
             l.sx=l.sy=ToF(zoom->second,100)/100.f;
         for (const auto &kv : attrs) {

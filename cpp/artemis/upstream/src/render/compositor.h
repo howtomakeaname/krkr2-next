@@ -9,6 +9,7 @@
 // Stage coordinates: WIDTH×HEIGHT from system.ini (e.g. 1280×720), mapped to
 // the render surface by an orthographic transform in the shader.
 #pragma once
+#include "render/layer_shader.h"
 #include <functional>
 #include <map>
 #include <string>
@@ -39,6 +40,7 @@ struct TextTween {
 
 struct Layer {
     std::string id;
+    LayerEffect effect;
     uint32_t texture = 0;      // GL texture name (0 = no texture)
     int tex_w = 0, tex_h = 0;
     float x = 0, y = 0;        // draw position (anchor applied)
@@ -72,6 +74,7 @@ public:
     // Tag handlers (called from the Lua bridge on the engine thread).
     void SetPackManager(PackManager *packs) { packs_ = packs; }
     bool LoadImage(const std::string &id, const std::string &file);
+    bool LoadShader(const std::string& id, const std::string& file);
     bool SetPixels(const std::string& id, const uint8_t* rgba, int width, int height);
     void SetProps(const std::string &id, const std::map<std::string, std::string> &attrs);
     void DeleteLayer(const std::string &id);
@@ -195,7 +198,7 @@ private:
     struct GlProgram {
         uint32_t program = 0;
         int a_pos = -1, a_uv = -1, a_opacity = -1;
-        int u_screen = -1, u_tex = -1, u_alpha = -1;
+        int u_screen = -1, u_tex = -1, u_alpha = -1, u_top_down = -1;
     };
     struct TransProgram {
         uint32_t program = 0;
@@ -229,6 +232,7 @@ private:
     void SetGlyphTimes(Layer& layer, std::vector<TextGlyph>& glyphs, const std::string& text);
 
     int stage_w_ = 1280, stage_h_ = 720;
+    LayerShaders shaders_;
     GlProgram prog_{};
     TransProgram tprog_{};
     bool gl_ready_ = false;

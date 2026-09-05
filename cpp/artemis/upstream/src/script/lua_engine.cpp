@@ -581,6 +581,11 @@ int LuaEngine::l_tag(lua_State *L) {
         if (m.count("file")) inst->LoadNativeSnapshot(m.at("file"));
         return 0;
     }
+    if (tagname == "lyshader" && inst && inst->compositor_) {
+        if(m.count("id") && m.count("file"))
+            inst->compositor_->LoadShader(m.at("id"),inst->ResolvePackPath(m.at("file")));
+        return 0;
+    }
     // BGM uses one logical channel; SE/voice use numbered channels. The
     // engine owns fades and crossfades; backends only output individual tracks.
     if (inst && inst->sounds_) {
