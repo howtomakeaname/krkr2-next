@@ -63,3 +63,28 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   voice ends (polled per frame), and a bare `[wait]` (time=0, input=0 — the
   framework's eqwait/trans_flag) waits for the running transition/tween
   instead of blocking until a tap.
+
+- `src/audio/audio_channels.*` — shared logical BGM/SE/voice channels with
+  timed gain/pan ramps, overlap for crossfades, and completed-track retirement.
+- `src/audio/vorbis_stream.*` — shared block decoder with `_a` intro / `_b`
+  continuation support (also for non-looping playback). Android OpenSL ES and
+  the HarmonyOS OHAudio backend consume stereo blocks instead of whole-file PCM.
+- `src/script/lua_engine.*` — wait input permissions no longer create an
+  unconditional wait; mandatory waits survive taps; event filters, wait reasons,
+  and dotted callbacks retain balanced Lua stacks. Layer events preserve the
+  interrupted runner cursor and wait across script jumps/calls/returns.
+- `src/script/asb_parser.*` — common reentrant instruction execution, event
+  return frames, and script-stack file enumeration. The host calls `ExecuteLine`
+  instead of holding script references across Lua callbacks. App resume shifts
+  both active wait deadlines and waits suspended below a menu event.
+- `src/render/compositor.*` — retained scene framebuffer for transition
+  captures, consistent 0–255 alpha, zero/mirrored scale; em-based text with
+  typographic metrics, reserved ruby line spacing, alignment, outline, explicit newlines, and font selection
+  per message layer. Text rectangle origins compose with layer translations;
+  empty text clears old pixels. `rt` appends a line break.
+- Regression fixtures under `../tests` are synthetic scripts/audio and an
+  original rectangle-glyph font; no commercial game content is included.
+- HarmonyOS-only `../ohos/audio_ohos.cpp` — retire finished voices after the
+  submitted frames have been presented; mute and release renderers on a worker
+  so OHAudio's blocking Stop does not stall rendering. Log submitted frames and
+  renderer underflows when retiring a voice.
