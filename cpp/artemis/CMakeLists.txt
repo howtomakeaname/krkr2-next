@@ -12,7 +12,9 @@
 # Platform notes:
 #   * OHOS: GLES2 compositor enabled (ARTC_HAS_GLES), OHAudio voice backend,
 #     hilog output. Consumers must make an EGL context current before
-#     calling into the compositor.
+#     calling into the compositor; ARTC_OHOS_NO_GLES swaps in the math-only
+#     compositor so the regressions can run from a shell (shell-spawned
+#     processes cannot obtain an EGL display).
 #   * other hosts: compositor is math-only and audio is a silent stub — the
 #     library still builds so the bridge can be unit-tested off-device.
 cmake_minimum_required(VERSION 3.16)
@@ -87,11 +89,19 @@ target_compile_options(artemis_core PRIVATE
     -Wno-unused-variable -Wno-unused-parameter -Wno-unused-const-variable
     -Wno-unused-function)
 
+# Shell-spawned processes on an OHOS image cannot obtain an EGL display (the
+# default display connection only exists inside an app's render session), so
+# the regressions can also run there against the math-only compositor that the
+# desktop headless build uses. The OHAudio backend and hilog logging stay on.
+option(ARTC_OHOS_NO_GLES "Build the OHOS engine without the GLES compositor for shell-run regressions" OFF)
 if(OHOS)
-    target_compile_definitions(artemis_core PUBLIC ARTC_HAS_GLES=1)
     target_link_libraries(artemis_core PUBLIC
-        EGL
-        GLESv2
         ohaudio
         hilog_ndk.z)
+    if(NOT ARTC_OHOS_NO_GLES)
+        target_compile_definitions(artemis_core PUBLIC ARTC_HAS_GLES=1)
+        target_link_libraries(artemis_core PUBLIC
+            EGL
+            GLESv2)
+    endif()
 endif()

@@ -19,6 +19,9 @@ public:
                   std::vector<EmoteSceneLayer>& output,std::string& error) const;
     bool Render(Compositor& compositor,const std::string& id,double frame,
                 const std::map<std::string,double>& variables,std::string& error);
+    // Delete every layer this scene installed under id (the bare container id
+    // itself is the caller's — the player removes it via its own RemoveLayers).
+    void Remove(Compositor& compositor,const std::string& id);
 private:
     std::shared_ptr<const EmoteModel> model_;
     std::map<std::pair<std::string,std::string>,EmoteImage> images_;
