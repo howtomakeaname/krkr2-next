@@ -116,6 +116,7 @@ void LuaEngine::EndFrame() {
 }
 
 bool LuaEngine::RunEnterFrame() {
+    advanced_this_frame_ = false;
     if (sounds_) sounds_->Update(NowMs());
     PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
@@ -461,8 +462,9 @@ int LuaEngine::l_tag(lua_State *L) {
             // KrKr2-Next: tweens/transitions now run for real — hold the
             // runner for their remaining time (a tap still skips it).
             inst->transition_wait_ = false;
-            const double pending = inst->compositor_
-                ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
+            const double pending = inst->compositor_ ? std::max(
+                inst->compositor_->PendingAnimationMs(inst->NowMs()),
+                inst->compositor_->PendingTextMs(inst->NowMs())) : 0;
             if (pending > 1) inst->SetTimedWait(static_cast<int>(std::min(pending, 2147483647.0)), m["input"] != "0");
             return 0;
         }
@@ -760,6 +762,10 @@ int LuaEngine::l_tag(lua_State *L) {
         if (tagname == "chgmsg" && inst) {
             auto it = m.find("id");
             inst->msg_layer_ = it == m.end() ? std::string() : it->second;
+            return 0;
+        }
+        if (tagname == "scetween") {
+            inst->compositor_->SetTextTween(inst->msg_layer_, m);
             return 0;
         }
         if (tagname == "/chgmsg" && inst) {
@@ -1130,7 +1136,10 @@ void LuaEngine::ClickAt(float x, float y) {
 }
 
 void LuaEngine::AdvanceByInput() {
+    if (advanced_this_frame_) return;
+    advanced_this_frame_ = true;
     if (auto_enabled_ && auto_stop_click_) { SetAutoMode(false); return; }
+    if (wait_accept_input_ && compositor_ && compositor_->FinishText(NowMs())) return;
     if (wait_accept_input_) SetWaiting(false);
 }
 
@@ -1455,7 +1464,7 @@ bool LuaEngine::IsWaiting() {
         SetWaiting(false);
     }
     if (waiting_ && !timed_wait_ && !se_wait_ && auto_enabled_) {
-        bool blocked = false;
+        bool blocked = compositor_ && compositor_->PendingTextMs(NowMs()) > 0;
         for (const auto& key : auto_sync_se_)
             if (sounds_ && sounds_->IsPlaying(key)) { blocked = true; break; }
         const auto delay = vars_.find("s.automodewait");
@@ -1547,6 +1556,10 @@ int LuaEngine::l_getScriptWaitReason(lua_State *L) {
     auto* self = Self(L);
     self->IsWaiting();
     lua_newtable(L);
+    if (self->compositor_ && self->compositor_->PendingTextMs(self->NowMs()) > 0) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "textTween");
+    }
     if (self->timed_wait_) {
         lua_pushboolean(L, 1);
         lua_setfield(L, -2, "time");

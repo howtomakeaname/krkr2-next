@@ -158,6 +158,25 @@ int main() {
     c.SetProps("2",{{"visible","0"}});
     Check(c.PendingTextMs(3100)==0,"hidden text does not block a visible page");
     c.DeleteLayer("2");
+    c.Update(messages.NowMs());
+    Check(messages.DoString("e:tag{'chgmsg',id='2'}; e:tag{'rp'}; "
+        "e:tag{'scetween',type='in',mode='init'}; "
+        "e:tag{'scetween',type='in',mode='add',param='alpha',delay=10000,time=10000,diff=-255}; "
+        "e:tag{'print',data='AA'}; e:tag{'@'}; assert(e:getScriptWaitReason().textTween)",
+        "typewriter wait"), "script observes pending character animation");
+    messages.ClickAt(31,31); messages.RunEnterFrame();
+    Check(messages.IsWaiting() && c.PendingTextMs(messages.NowMs())==0,
+          "first click completes text and preserves the page wait");
+    messages.ClickAt(31,31); messages.RunEnterFrame();
+    Check(!messages.IsWaiting(),"second click advances the completed page");
+    Check(messages.DoString("e:tag{'rp'}; e:tag{'print',data='AA'}; "
+        "e:tag{'automode',allow=1}; e:tag{'exec',command='automode',mode=1}; "
+        "e:tag{'var',name='s.automodewait',data=0}; e:tag{'@'}", "auto text wait"),
+        "start auto while text is revealing");
+    Check(messages.IsWaiting(),"auto waits for text even with zero reading interval");
+    c.FinishText(messages.NowMs());
+    Check(!messages.IsWaiting(),"auto continues after the complete page is visible");
+    c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
     c.SetProps("3.1",{{"left","5"},{"top","4"}});

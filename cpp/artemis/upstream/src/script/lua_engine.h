@@ -294,6 +294,7 @@ private:
     std::string save_dir_;   // game directory for system.dat / saves
     InputState input_;
     bool pending_click_ = false;
+    bool advanced_this_frame_ = false;
     float click_x_ = 0, click_y_ = 0;
     std::map<int,std::set<int>> key_roles_;
     float mouse_x_ = 0, mouse_y_ = 0;
