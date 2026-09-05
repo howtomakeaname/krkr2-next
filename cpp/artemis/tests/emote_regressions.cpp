@@ -1,5 +1,7 @@
 #include "pack/psb.h"
 #include "render/emote_model.h"
+#include "render/emote_scene.h"
+#include "emote_scene_fixture.h"
 #include <cmath>
 #include <zlib.h>
 #include <cstdlib>
@@ -57,6 +59,21 @@ static void ModelTests() {
 }
 int main(int argc,char** argv) {
     ModelTests();
+    {
+        auto data=emote_fixture::Scene();auto model=std::make_shared<artc::EmoteModel>();std::string error;
+        Check(model->Load(data,error),error.c_str());artc::EmoteScene scene;Check(scene.Load(model,error),error.c_str());
+        std::vector<artc::EmoteSceneLayer> layers;
+        Check(scene.Evaluate(5,{{"expression",10}},layers,error) && layers.front().x==13 && layers.back().icon=="wide",
+            "E-mote child motion, variable range binding and continuous parent frame");
+        Check(scene.Evaluate(100,{},layers,error) && layers.front().x==9 && layers.back().icon=="face","scene time wraps the base motion loop");
+        const auto size=layers.size();
+        Check(!scene.Evaluate(-1,{},layers,error) && layers.size()==size,"invalid scene time preserves output");
+        data.root.object["object"].object["actor"].object["motion"].object["idle"].object["layer"].array[0]
+            .object["frameList"].array[1].object["content"].object["mesh"]=emote_fixture::A({});
+        auto bad=std::make_shared<artc::EmoteModel>();Check(bad->Load(data,error),error.c_str());
+        Check(!scene.Load(bad,error) && error.find("mesh")!=std::string::npos && scene.Evaluate(5,{},layers,error),
+            "unsupported later deformation fails before replacing a working scene");
+    }
     const auto fixture=Fixture();artc::PsbDocument doc;std::string error;
     Check(artc::DecodePsb(fixture,doc,error),error.c_str());
     const auto& a=doc.root.At("a").array;
@@ -97,5 +114,8 @@ int main(int argc,char** argv) {
             for(const auto& v:values)Check(std::isfinite(v.second),"real timeline produces finite variables");
         }
         std::cout<<"decoded_images="<<images<<" variables="<<model.Variables().size()<<'\n';
+        artc::EmoteScene scene;
+        const bool supported=scene.Load(std::make_shared<artc::EmoteModel>(std::move(model)),error);
+        std::cout<<"scene_renderer="<<(supported?"supported":error)<<'\n';
     }
 }

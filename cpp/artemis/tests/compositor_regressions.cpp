@@ -1,5 +1,7 @@
 #include "render/compositor.h"
 #include "render/layer_shader.h"
+#include "render/emote_scene.h"
+#include "emote_scene_fixture.h"
 #include "pack/pack_manager.h"
 #include "script/lua_engine.h"
 #include "render/video_player.h"
@@ -521,6 +523,22 @@ int main() {
     Check(messages.DoString("e:setMagicPath{'coverage','mask.tga'};e:tag{'lyprop',id='9',intermediate_render_mask=':coverage'}",
         "mask path alias"),"mask tag resolves the same resource aliases as image loading");c.Draw();
     Check(At(1,1)[0]==255 && At(6,1)[0]==0 && c.Layers().back().effect.mask=="mask.tga","resolved mask retains its clipping result");
+    c.ReleaseGl();c.Init(32,32);
+    auto emote=std::make_shared<artc::EmoteModel>();std::string emote_error;
+    Check(emote->Load(emote_fixture::Scene(),emote_error),emote_error.c_str());
+    artc::EmoteScene emote_scene;Check(emote_scene.Load(emote,emote_error),emote_error.c_str());
+    Check(emote_scene.Render(c,"30",0,{},emote_error),emote_error.c_str());c.Draw();
+    Check(At(6,8)[0]==255 && At(7,6)[1]==255 && At(10,8)[0]==0,
+        "E-mote picture origins align body and child-motion face on the GPU");
+    Check(emote_scene.Render(c,"30",5,{},emote_error),emote_error.c_str());c.Draw();
+    Check(At(11,8)[0]==255 && At(12,6)[1]==255 && At(7,6)[1]==0,
+        "E-mote keyframe advancement moves face and body together");
+    Check(emote_scene.Render(c,"30",5,{{"expression",10}},emote_error),emote_error.c_str());c.Draw();
+    Check(At(11,6)[1]==255 && At(14,6)[1]==255 && At(15,6)[1]==0,
+        "E-mote expression replacement keeps the new image origin and dimensions");
+    c.ReleaseGl();c.Init(32,32);
+    Check(emote_scene.Render(c,"30",5,{{"expression",10}},emote_error),emote_error.c_str());c.Draw();
+    Check(At(11,6)[1]==255,"E-mote scene reuploads textures after GL context resources are discarded");
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");
