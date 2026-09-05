@@ -686,8 +686,7 @@ int LuaEngine::l_tag(lua_State *L) {
         // print{data} rows (speaker name / line text) into that layer, rt
         // ends a line, /chgmsg closes the selection. Official print
         // rasterizes `data` into the selected layer (engine-side text).
-        // Single-line approximation: the whole page accumulates into one
-        // raster; rt and /chgmsg only reset the accumulator for now.
+        // Accumulate the page, retaining explicit line breaks and layer style.
         if (tagname == "font" && inst) {
             // Load the face once. The tag restyles the CURRENT chgmsg layer;
             // fonts with show=none belong to hidden/off-screen slots (e.g.
@@ -702,7 +701,7 @@ int LuaEngine::l_tag(lua_State *L) {
                 }
             }
             if (!inst->msg_layer_.empty())
-                inst->font_of_[inst->msg_layer_] = {m.begin(), m.end()};
+                for (const auto& kv : m) inst->font_of_[inst->msg_layer_][kv.first] = kv.second;
             auto hidden = m.find("show");
             if (hidden != m.end() && hidden->second == "none") return 0;
             auto &slot = [&]() -> std::map<std::string, std::string> & {
@@ -739,6 +738,8 @@ int LuaEngine::l_tag(lua_State *L) {
                            : inst->font_main_);
             const float size =
                 fr.count("size") ? std::atof(fr.at("size").c_str()) : 40.f;
+            if (fr.count("face"))
+                inst->compositor_->LoadFont(inst->ResolvePackPath(fr.at("face")));
             uint32_t color = 0xFFFFFF;
             if (fr.count("color"))
                 color = static_cast<uint32_t>(
@@ -760,17 +761,13 @@ int LuaEngine::l_tag(lua_State *L) {
                                   std::to_string((int)wrap) + "(" + wrap_src + ") size=" +
                                   std::to_string((int)size));
             }
-            if (inst->compositor_->SetText(
-                    inst->msg_layer_, inst->msg_text_, size, color, wrap)) {
-                std::map<std::string, std::string> pos;
-                if (fr.count("left")) pos["left"] = fr.at("left");
-                if (fr.count("top")) pos["top"] = fr.at("top");
-                if (!pos.empty()) inst->compositor_->SetProps(inst->msg_layer_, pos);
-            }
+            inst->compositor_->SetText(
+                    inst->msg_layer_, inst->msg_text_, size, color, wrap, fr);
             return 0;
         }
         if (tagname == "rt" && inst) {
-            return 0;   // line break folded into the single-line raster
+            inst->msg_text_ += '\n';
+            return 0;
         }
 
     }

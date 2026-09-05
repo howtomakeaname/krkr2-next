@@ -24,6 +24,7 @@ struct Layer {
     uint32_t texture = 0;      // GL texture name (0 = no texture)
     int tex_w = 0, tex_h = 0;
     float x = 0, y = 0;        // draw position (anchor applied)
+    float content_x = 0, content_y = 0; // text rectangle origin inside the layer
     float w = 0, h = 0;        // display size in stage units (0 = natural size)
     float alpha = 1.0f;
     bool visible = true;
@@ -57,9 +58,10 @@ public:
     bool FontReady() const { return font_ready_; }
     // Rasterize a UTF-8 string into a single RGBA texture and put it on a
     // layer (message-layer style). color = 0xRRGGBB. Returns false when no
-    // font is loaded / the string is empty.
+    // font is loaded. An empty string clears the existing text texture.
     bool SetText(const std::string &id, const std::string &text, float size,
-                 uint32_t color, float wrapWidth = 0);
+                 uint32_t color, float wrapWidth = 0,
+                 const std::map<std::string, std::string>& style = {});
 
     // GL draw (called from the render loop on the engine thread). Draws all
     // visible layers, then invokes the present callback ([flip] semantics).
@@ -195,6 +197,7 @@ private:
 
     // font state (stbtt_fontinfo is heap-pimpl'd to keep this header lean)
     std::vector<uint8_t> font_data_;
+    std::string font_path_;
     void *font_info_ = nullptr;
     bool font_ready_ = false;
 };

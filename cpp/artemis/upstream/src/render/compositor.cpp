@@ -130,7 +130,7 @@ void Compositor::EffectiveRect(const Layer &l, float *ex, float *ey, float *ew,
     };
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) apply(**it);
     apply(l);
-    *ex = ox; *ey = oy;
+    *ex = ox + l.content_x * sx; *ey = oy + l.content_y * sy;
     *ew = l.w * sx; *eh = l.h * sy;
     *ea = a; *ev = vis;
 }
@@ -653,6 +653,7 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
             if (l.texture) glDeleteTextures(1, &l.texture);
             l.texture = tex;
             l.tex_w = w; l.tex_h = h;
+            l.content_x = l.content_y = 0;
             if (l.w == 0) { l.w = (float)w; l.h = (float)h; }
             Log(kLogDebug, "lyc: replaced " + id);
             return true;
@@ -671,18 +672,22 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
 
 bool Compositor::LoadFont(const std::string &file) {
     if (!gl_ready_ || !packs_) return false;
-    if (!packs_->Read(file, font_data_)) {
+    if (font_ready_ && file == font_path_) return true;
+    std::vector<uint8_t> data;
+    if (!packs_->Read(file, data)) {
         Log(kLogWarn, "font not found in packs: " + file);
         return false;
     }
     auto *info = new stbtt_fontinfo;
-    const int offset = stbtt_GetFontOffsetForIndex(font_data_.data(), 0);
-    if (offset < 0 || !stbtt_InitFont(info, font_data_.data(), offset)) {
+    const int offset = stbtt_GetFontOffsetForIndex(data.data(), 0);
+    if (offset < 0 || !stbtt_InitFont(info, data.data(), offset)) {
         Log(kLogError, "font init failed: " + file);
         delete info;
         return false;
     }
     delete static_cast<stbtt_fontinfo *>(font_info_);
+    font_data_ = std::move(data);
+    font_path_ = file;
     font_info_ = info;
     font_ready_ = true;
     Log(kLogInfo, "font loaded: " + file + " (" + std::to_string(font_data_.size()) + " B)");
@@ -690,17 +695,48 @@ bool Compositor::LoadFont(const std::string &file) {
 }
 
 bool Compositor::SetText(const std::string &id, const std::string &text,
-                         float size, uint32_t color, float wrapWidth) {
+                         float size, uint32_t color, float wrapWidth,
+                         const std::map<std::string, std::string>& style) {
     ++revision_;
-    if (!font_ready_ || text.empty()) return false;
+    if (text.empty()) {
+        for (auto& l : layers_) if (l.id == id) {
+            if (l.texture) glDeleteTextures(1, &l.texture);
+            l.texture = 0;
+            l.tex_w = l.tex_h = 0;
+            l.w = l.h = 0;
+        }
+        return true;
+    }
+    if (!font_ready_) return false;
     auto *info = static_cast<stbtt_fontinfo *>(font_info_);
-    const float scale = stbtt_ScaleForPixelHeight(info, size);
+    const auto number = [&](const char* name, float fallback) {
+        const auto it = style.find(name);
+        return it == style.end() ? fallback : std::atof(it->second.c_str());
+    };
+    size = std::clamp(size, 1.0f, 256.0f);
+    const float scale = stbtt_ScaleForMappingEmToPixels(info, size);
+    const int outline = std::clamp(static_cast<int>(number("outline", 0)), 0, 8);
+    const float tracking = number("kerning", 0);
+    const auto alignment = style.find("align");
+    const std::string align = alignment == style.end() ? "left" : alignment->second;
+    const auto stroke = style.find("outlinecolor");
+    const uint32_t outline_color = stroke == style.end() ? 0 :
+        static_cast<uint32_t>(strtoul(stroke->second.c_str(), nullptr, 16));
     int ascent = 0, descent = 0, linegap = 0;
     stbtt_GetFontVMetrics(info, &ascent, &descent, &linegap);
+    // CJK fonts often keep a much taller hhea clipping box than their
+    // typographic em box. Using it as a baseline pushes centered button
+    // captions below their scripted top and inflates every line's spacing.
+    stbtt_GetFontVMetricsOS2(info, &ascent, &descent, &linegap);
     const float sascent = ascent * scale;
     const float sdescent = descent * scale;
-    const int baseline = static_cast<int>(sascent);
-    const float advance_h = sascent - sdescent + 3;   // line pitch
+    // spacemiddle separates the reserved ruby row from the main glyph row.
+    // It is often negative; omitting rubysize makes adjacent lines overlap.
+    const float ruby_row = std::max(0.0, number("rubysize", 0));
+    const float row_top = number("spacetop", 0) + ruby_row + number("spacemiddle", 0);
+    const int baseline = static_cast<int>(std::ceil(sascent + row_top)) + outline;
+    const float advance_h = sascent - sdescent + linegap * scale +
+        row_top + number("spacebottom", 0);
 
     // UTF-8 → codepoints → glyphs, then two-pass word layout:
     //   pass 1 measures every glyph's advance;
@@ -723,7 +759,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
         int adv = 0, lsb = 0;
         stbtt_GetGlyphHMetrics(info, gi, &adv, &lsb);
         glyphs.push_back(gi);
-        advances.push_back(static_cast<int>(adv * scale) + 1);
+        advances.push_back(static_cast<int>(std::lround(adv * scale + tracking)));
     }
     if (glyphs.empty()) return false;
 
@@ -732,6 +768,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     std::vector<int> line_w(1, 0);
     int pen = 0, line = 0;
     for (size_t k = 0; k < glyphs.size(); ++k) {
+        if (cps[k] == '\r') { lx[k] = -1; continue; }
+        if (cps[k] == '\n') { lx[k] = -1; pen = 0; ++line; line_w.push_back(0); continue; }
         if (pen > 0 && wrapWidth > 0 && pen + advances[k] > wrapWidth) {
             pen = 0; ++line; line_w.push_back(0);
         }
@@ -742,35 +780,65 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     const int n_lines = static_cast<int>(line_w.size());
     int tex_w = 0;
     for (int w : line_w) tex_w = w > tex_w ? w : tex_w;
+    if (wrapWidth > 0) tex_w = std::max(tex_w, static_cast<int>(std::ceil(wrapWidth)));
+    tex_w += outline * 2;
     if (tex_w <= 0 || tex_w > 4096) {
         Log(kLogWarn, "SetText: degenerate width " + std::to_string(tex_w));
         return false;
     }
-    const int line_h = static_cast<int>(advance_h);
-    const int tex_h = line_h * n_lines + 2;
-
-    std::vector<uint8_t> rgba(static_cast<size_t>(tex_w) * tex_h * 4, 0);
-    const uint8_t r = (color >> 16) & 0xFF, g = (color >> 8) & 0xFF, b = color & 0xFF;
+    const int line_h = std::max(1, static_cast<int>(std::ceil(advance_h)));
+    int bottom = line_h * n_lines + outline * 2;
     for (size_t k = 0; k < glyphs.size(); ++k) {
-        const int gi = glyphs[k];
+        if (lx[k] < 0) continue;
+        int x0, y0, x1, y1;
+        stbtt_GetGlyphBitmapBox(info, glyphs[k], scale, scale, &x0, &y0, &x1, &y1);
+        bottom = std::max(bottom, baseline + ly[k] * line_h + y1 + outline);
+    }
+    const int tex_h = bottom;
+    if (tex_h <= 0 || tex_h > 4096) return false;
+
+    std::vector<uint8_t> coverage(static_cast<size_t>(tex_w) * tex_h, 0);
+    std::vector<uint8_t> rgba(coverage.size() * 4, 0);
+    for (size_t k = 0; k < glyphs.size(); ++k) {
+        if (lx[k] < 0) continue;
         int gw = 0, gh = 0, xoff = 0, yoff = 0;
-        uint8_t *bmp = stbtt_GetGlyphBitmap(info, scale, scale, gi, &gw, &gh, &xoff, &yoff);
-        if (bmp) {
-            const int dx0 = lx[k] + xoff;
-            const int dy0 = baseline + ly[k] * line_h + yoff;
-            for (int row = 0; row < gh; ++row) {
-                const int dy = dy0 + row;
-                if (dy < 0 || dy >= tex_h) continue;
-                for (int col = 0; col < gw; ++col) {
-                    const int dx = dx0 + col;
-                    if (dx < 0 || dx >= tex_w) continue;
-                    const uint8_t cov = bmp[row * gw + col];
-                    uint8_t *px = &rgba[(static_cast<size_t>(dy) * tex_w + dx) * 4];
-                    px[0] = r; px[1] = g; px[2] = b; px[3] = cov;
-                }
+        uint8_t* bmp = stbtt_GetGlyphBitmap(info, scale, scale, glyphs[k], &gw, &gh, &xoff, &yoff);
+        if (!bmp) continue;
+        const int free_width = tex_w - outline * 2 - line_w[ly[k]];
+        const int shift = align == "center" ? free_width / 2 : (align == "right" ? free_width : 0);
+        const int dx0 = lx[k] + xoff + outline + shift;
+        const int dy0 = baseline + ly[k] * line_h + yoff;
+        for (int row = 0; row < gh; ++row) {
+            const int dy = dy0 + row;
+            if (dy < 0 || dy >= tex_h) continue;
+            for (int col = 0; col < gw; ++col) {
+                const int dx = dx0 + col;
+                if (dx < 0 || dx >= tex_w) continue;
+                auto& cov = coverage[static_cast<size_t>(dy) * tex_w + dx];
+                cov = std::max(cov, bmp[row * gw + col]);
             }
-            stbtt_FreeBitmap(bmp, nullptr);
         }
+        stbtt_FreeBitmap(bmp, nullptr);
+    }
+    for (int y = 0; y < tex_h; ++y) for (int x = 0; x < tex_w; ++x) {
+        const size_t offset = static_cast<size_t>(y) * tex_w + x;
+        const float fill = coverage[offset] / 255.0f;
+        uint8_t border = 0;
+        if (outline) for (int oy = -outline; oy <= outline; ++oy)
+            for (int ox = -outline; ox <= outline; ++ox) {
+                const int xx = x + ox, yy = y + oy;
+                if (xx >= 0 && xx < tex_w && yy >= 0 && yy < tex_h && ox * ox + oy * oy <= outline * outline)
+                    border = std::max(border, coverage[static_cast<size_t>(yy) * tex_w + xx]);
+            }
+        const float edge = (border / 255.0f) * (1 - fill);
+        const float alpha = fill + edge;
+        if (!alpha) continue;
+        for (int component = 0; component < 3; ++component) {
+            const int shift = (2 - component) * 8;
+            rgba[offset * 4 + component] = static_cast<uint8_t>(
+                (((color >> shift) & 255) * fill + ((outline_color >> shift) & 255) * edge) / alpha);
+        }
+        rgba[offset * 4 + 3] = static_cast<uint8_t>(std::lround(alpha * 255));
     }
 
     const uint32_t tex = CreateTexture(rgba.data(), tex_w, tex_h);
@@ -786,6 +854,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
             // size, otherwise the quad collapses and nothing is drawn.
             l.w = (float)tex_w;
             l.h = (float)tex_h;
+            l.content_x = number("left", 0);
+            l.content_y = number("top", 0);
             Log(kLogInfo, "SetText: replaced " + id + " " +
                               std::to_string(tex_w) + "x" + std::to_string(tex_h));
             return true;
@@ -796,8 +866,8 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     l.texture = tex;
     l.tex_w = tex_w; l.tex_h = tex_h;
     l.w = (float)tex_w; l.h = (float)tex_h;
-    l.x = 40.0f;
-    l.y = (float)stage_h_ - (float)tex_h - 60.0f;
+    l.content_x = number("left", 0);
+    l.content_y = number("top", 0);
     l.z = 100; // above scene layers
     layers_.push_back(l);
     Log(kLogInfo, "SetText: " + id + " " + std::to_string(tex_w) + "x" +
@@ -898,6 +968,7 @@ void Compositor::Shutdown() {
     delete static_cast<stbtt_fontinfo *>(font_info_);
     font_info_ = nullptr;
     font_data_.clear();
+    font_path_.clear();
     font_ready_ = false;
     present_cb_ = nullptr;
 }
@@ -1060,6 +1131,7 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
         if (l.id == id) {
             l.texture = kHostTexture;
             l.tex_w = w; l.tex_h = h;
+            l.content_x = l.content_y = 0;
             if (l.w == 0) { l.w = (float)w; l.h = (float)h; }
             return true;
         }
@@ -1142,7 +1214,8 @@ bool Compositor::LoadFont(const std::string &file) {
     return false;
 }
 bool Compositor::SetText(const std::string &id, const std::string &text,
-                         float size, uint32_t color, float wrapWidth) {
+                         float size, uint32_t color, float wrapWidth,
+                         const std::map<std::string, std::string>& style) {
     ++revision_;
     if (text.empty()) return false;
     (void)color;   // host mock ignores the baked-in color (no rasterization)
