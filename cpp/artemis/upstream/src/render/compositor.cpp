@@ -654,7 +654,13 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
             l.texture = tex;
             l.tex_w = w; l.tex_h = h;
             l.content_x = l.content_y = 0;
-            if (l.w == 0) { l.w = (float)w; l.h = (float)h; }
+            // A replacement is a new image surface. Face differences often
+            // have different bounding boxes; retaining the previous surface's
+            // size stretches the new eyes/mouth away from their scripted origin.
+            // Keep the layer transform, but reset image-local geometry. A lyprop
+            // following lyc can apply a new sprite-sheet crop/display size.
+            l.w = (float)w; l.h = (float)h;
+            l.u0 = l.v0 = 0; l.u1 = l.v1 = 1;
             Log(kLogDebug, "lyc: replaced " + id);
             return true;
         }
@@ -1132,7 +1138,8 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
             l.texture = kHostTexture;
             l.tex_w = w; l.tex_h = h;
             l.content_x = l.content_y = 0;
-            if (l.w == 0) { l.w = (float)w; l.h = (float)h; }
+            l.w = (float)w; l.h = (float)h;
+            l.u0 = l.v0 = 0; l.u1 = l.v1 = 1;
             return true;
         }
     }

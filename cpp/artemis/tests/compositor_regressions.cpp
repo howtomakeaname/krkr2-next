@@ -74,13 +74,28 @@ int main() {
     std::ifstream font(std::string(ARTC_TEST_DATA)+"/rectangle.ttf",std::ios::binary);
     Check(bool(font),"open synthetic font");
     std::vector<unsigned char> font_data{std::istreambuf_iterator<char>(font),{}};
-    // A single-entry pf8 fixture keeps the production pack/font loading path.
+    // Synthetic uncompressed TGA surfaces with different bounding boxes.
+    auto solid = [](int w, int h) {
+        std::vector<unsigned char> tga(18, 0);
+        tga[2]=2; tga[12]=w; tga[14]=h; tga[16]=32; tga[17]=0x28;
+        for (int i=0;i<w*h;++i) tga.insert(tga.end(), {0,0,255,255});
+        return tga;
+    };
+    const std::string name="font.ttf";
+    const std::vector<std::pair<std::string,std::vector<unsigned char>>> files = {
+        {name,font_data}, {"small.tga",solid(4,2)}, {"large.tga",solid(8,6)}};
+    // A pf8 fixture keeps the production pack/font/image loading path.
     std::vector<unsigned char> pack{'p','f','8'};
     auto u32=[&](uint32_t n){for(int i=0;i<4;++i)pack.push_back((n>>(8*i))&255);};
-    const std::string name="font.ttf";
-    u32(20+name.size());u32(1);u32(name.size());
-    pack.insert(pack.end(),name.begin(),name.end());u32(0);u32(27+name.size());u32(font_data.size());
-    pack.insert(pack.end(),font_data.begin(),font_data.end());
+    uint32_t index_size=4;
+    for(const auto& f:files) index_size+=16+f.first.size();
+    u32(index_size);u32(files.size());
+    uint32_t offset=7+index_size;
+    for(const auto& f:files) {
+        u32(f.first.size());pack.insert(pack.end(),f.first.begin(),f.first.end());
+        u32(0);u32(offset);u32(f.second.size());offset+=f.second.size();
+    }
+    for(const auto& f:files) pack.insert(pack.end(),f.second.begin(),f.second.end());
     auto path=std::filesystem::temp_directory_path()/
         ("artemis-font-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".pfs");
     {std::ofstream out(path,std::ios::binary);out.write((char*)pack.data(),pack.size());}
@@ -103,6 +118,24 @@ int main() {
           "ruby spacing leaves a gap and text origin composes with layer translation");
     Check(c.SetText("2","",10,0xffffff,30), "clear empty message");c.Draw();
     Check(At(7,7)[0]==0 && At(7,7)[2]==255, "empty print removes previous glyph pixels");
+    c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
+    Check(c.LoadImage("3.1","small.tga"),"load first expression");
+    c.SetProps("3.1",{{"left","5"},{"top","4"}});
+    Check(c.LoadImage("3.1","large.tga"),"replace expression with larger bounding box");
+    c.SetProps("3.1",{{"left","3"},{"top","2"}});c.Draw();
+    Check(At(24,15)[0]==255 && At(27,20)[2]==255,
+          "replacement adopts new natural size and composes its offset with parent scale");
+    c.SetProps("3.1",{{"clip","2,1,3,2"}});
+    Check(c.LoadImage("3.1","small.tga"),"replace cropped expression");c.Draw();
+    const auto info=c.GetLayerInfo("3.1");
+    Check(info.width==4 && info.height==2,"new surface discards old crop dimensions");
+    const auto& face=c.Layers().back();
+    Check(face.u0==0 && face.v0==0 && face.u1==1 && face.v1==1,
+          "new surface discards old crop UVs");
+    Check(At(16,9)[0]==255 && At(18,9)[2]==255,
+          "smaller replacement retains layer position and parent transform");
+    Check(!c.LoadImage("3.1","missing.png"),"missing replacement fails");
+    Check(c.GetLayerInfo("3.1").width==4,"failed replacement keeps existing surface");
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");
