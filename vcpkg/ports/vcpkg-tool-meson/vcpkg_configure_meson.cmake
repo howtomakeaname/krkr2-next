@@ -325,6 +325,17 @@ function(vcpkg_generate_meson_cmd_args)
     debug_message("Including cmake vars from: ${cmake_vars_file}")
     include("${cmake_vars_file}")
 
+    # SDK 20 injects --gcc-toolchain even for compile-only probes. Meson
+    # enables -Werror=unused-command-line-argument for its feature/type tests;
+    # without this, sizeof(int) becomes -1 and NEON appears unavailable.
+    # Apply it after SDK flag detection, before generating both compiler
+    # commands and built-in options. Other platforms keep their exact flags.
+    if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+        foreach(lang C CXX)
+            string(APPEND VCPKG_COMBINED_${lang}_FLAGS_${arg_CONFIG} " -Qunused-arguments")
+        endforeach()
+    endif()
+
     vcpkg_list(APPEND arg_OPTIONS --backend ninja --wrap-mode nodownload -Doptimization=plain)
 
     z_vcpkg_get_build_and_host_system(MESON_HOST_MACHINE MESON_BUILD_MACHINE IS_CROSS)
