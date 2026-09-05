@@ -47,8 +47,8 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   script.asb) instead of halting.
 - `src/render/compositor.{h,cpp}` — real `[lytween]` tweens (alpha / left /
   top / xscale / yscale / zoom / w / h, delay + easing curves, `lytweendel`
-  cancels a subtree) and `[trans]` crossfades (last composited frame is
-  captured with glCopyTexImage2D and faded out over the new state; `rule=`
+  cancels a subtree) and `[trans]` crossfades (the retained composited scene is
+  captured and faded out over the new state; `rule=`
   images drive a thresholded wipe with `vague` softness). `Update(now)` /
   `PendingAnimationMs()` let the host advance animations and make `[wt]` /
   `wait scenario` hold the script for their duration.
@@ -88,3 +88,46 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   submitted frames have been presented; mute and release renderers on a worker
   so OHAudio's blocking Stop does not stall rendering. Log submitted frames and
   renderer underflows when retiring a voice.
+- `src/render/compositor.*` — reloading a layer surface adopts the new natural
+  dimensions and resets crop UVs, retaining the layer transform. This fixes PNG
+  face-expression changes with different bounding boxes; it is not E-mote.
+  Tween sets retain sequential segments per property; loop/yoyo counts and
+  infinite animation waits no longer lose segments or overflow the wait timer.
+- `src/script/input_state.h`, `src/script/lua_engine.*` — key overrides implement
+  push/down/down-edge/up-edge/decide bits and -1 restoration. Input is dispatched
+  after the frame callback so scripts can suppress a key in that frame. Confirm
+  and movie-cancel roles respect overrides. Auto-read waits for text and selected
+  voice channels, then the configured reading interval; click/stop can end it.
+- `src/render/compositor.*`, `src/render/line_break.h`, `src/script/lua_engine.*`
+  — retained pages per message layer, glyph atlases and batched draws, per-glyph
+  in-tween timing, click-to-complete before advancing, and ruby ranges/tags.
+  Ruby reserves its measured width and wraps with its base. Basic horizontal
+  CJK prohibit/hung rules keep brackets and punctuation on suitable lines.
+  Mixed style runs, vertical text, full shaping and full ruby semantics remain
+  incomplete; do not remove that distinction during an upstream sync.
+- `src/audio/pcm_stream.h`, `src/audio/audio.*`, `../ohos/audio_ohos.cpp` — shared
+  PCM source interface and playback clocks for movie sound. Platform backends
+  supply the presentation position; the common player uses it for frame timing.
+- `src/render/video_decoder.*`, `src/render/video_player.*`,
+  `src/script/lua_engine.*` — FFmpeg demux/decode from immutable compressed bytes,
+  RGBA video and resampled stereo PCM, full-screen/layer playback and loops,
+  wait reasons and cancel roles. A shorter sound track does not freeze the video
+  at its last audio timestamp. Decoder failures log the failing operation.
+- `src/pack/pack_manager.*` — after searching the patch/PFS chain, resolve loose
+  files below the directory containing the archive, including `movie/*.mp4`.
+  Relative paths are normalized; absolute and parent traversal paths are rejected.
+- `src/script/expression.*`, `src/script/lua_engine.*` — evaluate `$` expressions
+  and references before tag dispatch, with 32-bit integer operations, logical
+  short-circuit, comparisons, strings and variable lookup. Preserve embedded NUL
+  bytes in variable values. This fixes the game's video condition checks.
+- Outside the vendor tree, `vcpkg/ports/ffmpeg/0002-aarch64-swscale-output-height.patch`
+  fixes FFmpeg 3.3.9 NEON conversion wrappers returning zero after writing valid
+  rows. The fix belongs to FFmpeg and applies to ARM64, without disabling NEON.
+  `../tests/video_decoder_regressions.cpp` and GLES tests use generated movies;
+  no commercial movie is committed.
+
+Current save persistence and the Lua-source Pluto subset are **not** compatible
+with original `BOWS` engine snapshots. Full key roles/skip, shader semantics,
+E-mote, complex typography and native snapshot restoration remain incomplete.
+See `doc/artemis-compatibility-audit.md` at the repository root for validation
+scope and the distinction between host and signed HarmonyOS device tests.
