@@ -233,6 +233,9 @@ private:
 
     int stage_w_ = 1280, stage_h_ = 720;
     LayerShaders shaders_;
+    struct MaskTexture {uint32_t texture=0;int width=0,height=0;};
+    std::map<std::string,MaskTexture> masks_;
+    void LoadMask(const std::string& file);
     GlProgram prog_{};
     TransProgram tprog_{};
     bool gl_ready_ = false;

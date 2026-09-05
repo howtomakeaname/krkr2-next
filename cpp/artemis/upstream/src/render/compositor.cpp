@@ -821,6 +821,21 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
     return true;
 }
 
+void Compositor::LoadMask(const std::string& file) {
+    if(file.empty() || masks_.count(file) || !gl_ready_ || !packs_)return;
+    auto& mask=masks_[file];std::vector<uint8_t> bytes;
+    for(const char* ext:{"",".png",".jpg",".jpeg"})if(packs_->Read(file+ext,bytes))break;
+    int w=0,h=0,channels=0;
+    if(bytes.empty() || bytes.size()>64*1024*1024 ||
+       !stbi_info_from_memory(bytes.data(),int(bytes.size()),&w,&h,&channels) ||
+       w<1 || h<1 || w>8192 || h>8192 || uint64_t(w)*h>16777216) {
+        Log(kLogWarn,"intermediate mask unavailable: "+file);return;
+    }
+    auto* pixels=stbi_load_from_memory(bytes.data(),int(bytes.size()),&w,&h,&channels,4);
+    if(!pixels){Log(kLogWarn,"intermediate mask decode failed: "+file);return;}
+    mask={CreateTexture(pixels,w,h),w,h};stbi_image_free(pixels);
+}
+
 bool Compositor::LoadFont(const std::string &file) {
     if (!gl_ready_ || !packs_) return false;
     if (font_ready_ && file == font_path_) return true;
@@ -1133,6 +1148,7 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
 void Compositor::SetProps(const std::string &id,
                           const std::map<std::string, std::string> &attrs) {
     ++revision_;
+    if(auto mask=attrs.find("intermediate_render_mask");mask!=attrs.end())LoadMask(mask->second);
     for (auto &l : layers_) {
         if (l.id != id) continue;
         l.effect.Set(attrs);
@@ -1169,7 +1185,7 @@ void Compositor::SetProps(const std::string &id,
                 // "x,y,w,h" → normalized UV crop
                 int cx = 0, cy = 0, cw = 0, chh = 0;
                 if (std::sscanf(kv.second.c_str(), "%d,%d,%d,%d", &cx, &cy, &cw, &chh) == 4 &&
-                    l.tex_w > 0 && l.tex_h > 0 && cw > 0 && chh > 0) {
+                    l.effect.intermediate==0 && l.tex_w > 0 && l.tex_h > 0 && cw > 0 && chh > 0) {
                     l.u0 = (float)cx / l.tex_w;      l.v0 = (float)cy / l.tex_h;
                     l.u1 = (float)(cx + cw) / l.tex_w; l.v1 = (float)(cy + chh) / l.tex_h;
                     l.w = (float)cw;   // clip defines the displayed sub-image size
@@ -1208,6 +1224,8 @@ void Compositor::DeleteLayer(const std::string &id) {
 
 void Compositor::ReleaseGl() {
     shaders_.ReleaseGl();
+    for(auto& mask:masks_)if(mask.second.texture)glDeleteTextures(1,&mask.second.texture);
+    masks_.clear();
     ++revision_;
     for (auto &l : layers_) {
         if (l.texture) glDeleteTextures(1, &l.texture);
@@ -1362,7 +1380,23 @@ void Compositor::Draw() {
                 if(intermediate) {
                     draw_leaf(l,transform.alpha,true);
                     draw_range(i+1,next,depth+1,intermediate,true,transform.alpha);
-                    shaders_.End(depth,l->effect,target,top_down,transform.alpha/inherited,textures);
+                    LayerCoverage coverage;
+                    const float det=transform.a*transform.d-transform.b*transform.c;
+                    if(std::isfinite(det) && std::abs(det)>1e-8f) {
+                        const float inverse[]={transform.d/det,-transform.b/det,0,-transform.c/det,transform.a/det,0,
+                            (transform.c*transform.ty-transform.d*transform.tx)/det,
+                            (transform.b*transform.tx-transform.a*transform.ty)/det,1};
+                        std::copy_n(inverse,9,coverage.inverse);
+                        if(l->effect.intermediate!=0)if(auto clip=l->effect.parameters.find("clip");clip!=l->effect.parameters.end()) {
+                            auto* r=coverage.rect;
+                            coverage.clip=std::sscanf(clip->second.c_str(),"%f,%f,%f,%f",r,r+1,r+2,r+3)==4 &&
+                                std::all_of(r,r+4,[](float v){return std::isfinite(v);}) && r[2]>=0 && r[3]>=0;
+                        }
+                        if(auto mask=masks_.find(l->effect.mask);mask!=masks_.end()) {
+                            coverage.mask=mask->second.texture;coverage.mask_width=mask->second.width;coverage.mask_height=mask->second.height;
+                        }
+                    }
+                    shaders_.End(depth,l->effect,target,top_down,transform.alpha/inherited,textures,coverage);
                     i=next;continue;
                 }
             }
@@ -1526,7 +1560,7 @@ void Compositor::SetProps(const std::string &id,
             else if (kv.first == "clip") {
                 int cx = 0, cy = 0, cw = 0, chh = 0;
                 if (std::sscanf(kv.second.c_str(), "%d,%d,%d,%d", &cx, &cy, &cw, &chh) == 4 &&
-                    l.tex_w > 0 && l.tex_h > 0 && cw > 0 && chh > 0) {
+                    l.effect.intermediate==0 && l.tex_w > 0 && l.tex_h > 0 && cw > 0 && chh > 0) {
                     l.u0 = (float)cx / l.tex_w;      l.v0 = (float)cy / l.tex_h;
                     l.u1 = (float)(cx + cw) / l.tex_w; l.v1 = (float)(cy + chh) / l.tex_h;
                     l.w = (float)cw;

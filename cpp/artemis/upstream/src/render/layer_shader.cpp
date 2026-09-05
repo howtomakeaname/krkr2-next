@@ -18,6 +18,7 @@ void LayerEffect::Set(const std::map<std::string,std::string>& attrs) {
         else if(v.first=="colormultiply")multiply=std::strtoul(v.second.c_str(),nullptr,0)&0xffffff;
         else if(v.first=="layermode")blend=v.second.empty()?"normal":v.second;
         else if(v.first=="intermediate_render")intermediate=std::atoi(v.second.c_str());
+        else if(v.first=="intermediate_render_mask")mask=v.second;
     }
 }
 #if defined(ARTC_HAS_GLES)
@@ -54,6 +55,29 @@ void main() {
     c.rgb=mix(c.rgb,vec3(1.0)-c.rgb,negative);
     c.rgb=mix(c.rgb,vec3(dot(c.rgb,vec3(0.298912,0.586611,0.114478))),grayscale);
     gl_FragColor=vec4(c.rgb*colorMultiply,c.a);
+})";
+const char* coverage_fragment=R"(
+precision highp float;
+varying vec2 resultCoord1;
+uniform sampler2D artc_fore;
+uniform sampler2D artc_mask;
+uniform vec2 artc_stage;
+uniform mat3 artc_inverse;
+uniform vec4 artc_rect;
+uniform vec2 artc_mask_size;
+uniform float artc_clip;
+uniform float artc_use_mask;
+void main() {
+    vec2 local=(artc_inverse*vec3(resultCoord1*artc_stage,1.0)).xy;
+    float alpha=1.0;
+    if(artc_clip>0.5 && (local.x<artc_rect.x || local.y<artc_rect.y ||
+       local.x>=artc_rect.x+artc_rect.z || local.y>=artc_rect.y+artc_rect.w))alpha=0.0;
+    if(artc_use_mask>0.5) {
+        vec2 uv=local/artc_mask_size;
+        if(uv.x<0.0 || uv.y<0.0 || uv.x>=1.0 || uv.y>=1.0)alpha=0.0;
+        else {vec4 m=texture2D(artc_mask,uv);alpha*=m.r*m.a;}
+    }
+    gl_FragColor=texture2D(artc_fore,resultCoord1)*alpha;
 })";
 std::vector<float> Numbers(std::string s) {
     std::replace(s.begin(),s.end(),',',' ');std::istringstream in(s);
@@ -102,7 +126,8 @@ void LayerShaders::ReleaseGl() {
     }
     groups_.clear();
     if(copy_)glDeleteProgram(copy_);if(builtin_)glDeleteProgram(builtin_);if(white_)glDeleteTextures(1,&white_);
-    copy_=builtin_=white_=0;
+    if(coverage_)glDeleteProgram(coverage_);
+    copy_=builtin_=white_=coverage_=0;
 }
 bool LayerShaders::Allocate(Group& g,int w,int h) {
     if(g.width==w && g.height==h && g.raw.fbo)return true;
@@ -142,7 +167,7 @@ uint32_t LayerShaders::Begin(size_t depth,int w,int h,uint32_t parent,bool top_d
     return g.raw.fbo;
 }
 bool LayerShaders::End(size_t depth,const LayerEffect& effect,uint32_t parent,bool top_down,
-                       float opacity,const std::map<std::string,uint32_t>& textures) {
+                       float opacity,const std::map<std::string,uint32_t>& textures,const LayerCoverage& coverage) {
     auto& g=groups_.at(depth);
     glDisable(GL_BLEND);glUseProgram(copy_);Uniform(copy_,"flip",0);
     glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,g.raw.texture);
@@ -219,6 +244,23 @@ bool LayerShaders::End(size_t depth,const LayerEffect& effect,uint32_t parent,bo
     glUniform3f(glGetUniformLocation(p,"colorMultiply"),((effect.multiply>>16)&255)/255.f,
                 ((effect.multiply>>8)&255)/255.f,(effect.multiply&255)/255.f);
     if(p==builtin_){Uniform(p,"negative",effect.negative);Uniform(p,"grayscale",effect.grayscale);}
+    if(coverage.Active()) {
+        if(!coverage_)coverage_=Compile(coverage_fragment,false);
+        if(!coverage_){glBindFramebuffer(GL_FRAMEBUFFER,parent);return false;}
+        // The raw input has already been resolved to fore, so its surface can
+        // hold the processed premultiplied result without a texture feedback loop.
+        glDisable(GL_BLEND);Quad(p,g.raw,g.width,g.height,true);
+        p=coverage_;glUseProgram(p);
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,g.raw.texture);
+        glUniform1i(glGetUniformLocation(p,"artc_fore"),0);
+        glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,coverage.mask?coverage.mask:white_);
+        glUniform1i(glGetUniformLocation(p,"artc_mask"),1);
+        glUniform2f(glGetUniformLocation(p,"artc_stage"),g.width,g.height);
+        glUniformMatrix3fv(glGetUniformLocation(p,"artc_inverse"),1,GL_FALSE,coverage.inverse);
+        glUniform4fv(glGetUniformLocation(p,"artc_rect"),1,coverage.rect);
+        glUniform2f(glGetUniformLocation(p,"artc_mask_size"),std::max(1,coverage.mask_width),std::max(1,coverage.mask_height));
+        Uniform(p,"artc_clip",coverage.clip);Uniform(p,"artc_use_mask",coverage.mask!=0);
+    }
     glEnable(GL_BLEND);
     if(effect.blend=="add")glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
     else if(effect.blend=="screen")glBlendFuncSeparate(GL_ONE,GL_ONE_MINUS_SRC_COLOR,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
@@ -232,6 +274,6 @@ bool LayerShaders::Load(const std::string& id,const std::string& source) {
 }
 void LayerShaders::ReleaseGl() {}
 uint32_t LayerShaders::Begin(size_t,int,int,uint32_t,bool){return 0;}
-bool LayerShaders::End(size_t,const LayerEffect&,uint32_t,bool,float,const std::map<std::string,uint32_t>&){return false;}
+bool LayerShaders::End(size_t,const LayerEffect&,uint32_t,bool,float,const std::map<std::string,uint32_t>&,const LayerCoverage&){return false;}
 #endif
 }

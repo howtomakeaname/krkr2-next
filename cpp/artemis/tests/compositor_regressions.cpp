@@ -147,6 +147,13 @@ int main() {
     const std::string name="font.ttf";
     std::vector<std::pair<std::string,std::vector<unsigned char>>> files = {
         {name,font_data}, {"small.tga",solid(4,2)}, {"large.tga",solid(8,6)}};
+    auto mask=solid(8,8);
+    for(int y=0;y<8;++y)for(int x=0;x<8;++x) {
+        const size_t at=18+(y*8+x)*4;
+        mask[at]=mask[at+1]=mask[at+2]=x<4?255:0;
+        mask[at+3]=y<4?255:128;
+    }
+    files.push_back({"mask.tga",mask});
 #if defined(ARTC_TEST_MOVIE)
     std::ifstream movie_file(ARTC_TEST_MOVIE,std::ios::binary);
     auto movie=std::make_shared<std::vector<uint8_t>>(std::istreambuf_iterator<char>(movie_file),std::istreambuf_iterator<char>());
@@ -492,6 +499,25 @@ int main() {
     Check(p[0]==255 && p[1]==128 && p[2]==128,"additive group composition");
     c.SetProps("9",{{"alpha","0"}});c.Draw();p=Pixel();
     Check(p[0]==128 && p[1]==128 && p[2]==128,"zero-opacity shader group produces no pixels");
+    c.DeleteLayer("9");c.SetPixels("1",blue,1,1);c.SetProps("1",{{"w","32"},{"h","32"}});
+    c.SetPixels("9.1",red,1,1);c.SetProps("9.1",{{"w","16"},{"h","16"}});
+    c.SetProps("9",{{"left","8"},{"top","8"},{"intermediate_render","1"},
+        {"intermediate_render_mask","mask.tga"},{"alpha","128"}});c.Draw();
+    Check(abs(At(9,9)[0]-128)<=1 && abs(At(9,13)[0]-64)<=2 && At(14,9)[0]==0 && At(18,9)[0]==0,
+        "local grayscale mask multiplies alpha once and never extends its border pixels");
+    c.SetProps("9",{{"clip","0,0,8,4"}});c.Draw();
+    Check(abs(At(9,9)[0]-128)<=1 && At(9,13)[0]==0,"intermediate clip intersects the mask");
+    c.SetProps("9",{{"left","16"},{"rotate","90"}});c.Draw();
+    Check(abs(At(15,9)[0]-128)<=1 && At(15,14)[0]==0 && At(11,9)[0]==0,
+        "mask and clip follow the effect group's rotated local coordinates");
+    c.SetProps("9",{{"intermediate_render_mask",""},{"clip","0,0,0,0"}});c.Draw();
+    Check(At(15,9)[0]==0,"zero-sized group clip renders no content");
+    c.SetProps("9",{{"intermediate_render","0"},{"alpha","255"}});c.Draw();
+    Check(At(15,9)[0]==255,"disabling the intermediate clip restores its children");
+    c.ReleaseGl();c.Init(32,32);
+    c.SetPixels("9.1",red,1,1);c.SetProps("9.1",{{"w","16"},{"h","16"}});
+    c.SetProps("9",{{"intermediate_render","2"},{"intermediate_render_mask","mask.tga"}});c.Draw();
+    Check(At(1,1)[0]==255 && At(6,1)[0]==0,"mask textures reload after GL resource release");
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");
