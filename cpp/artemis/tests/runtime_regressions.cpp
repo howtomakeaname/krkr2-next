@@ -4,6 +4,8 @@
 #include "script/lua_engine.h"
 #include "script/asb_parser.h"
 #include "script/expression.h"
+#include "script/native_save.h"
+#include <zlib.h>
 #include "render/compositor.h"
 #include <chrono>
 #include <filesystem>
@@ -37,7 +39,49 @@ public:
     }
 };
 
-int main() {
+int main(int argc, char** argv) {
+    {
+    // Synthetic native CSerializer directory: fields deliberately not ordered.
+    std::vector<uint8_t> payload;
+    auto u32=[&](uint32_t n){for(int i=0;i<4;++i){payload.push_back(n&255);n>>=8;}};
+    auto str=[&](const std::string& v){u32(v.size());payload.insert(payload.end(),v.begin(),v.end());};
+    u32(0); // root field 24: empty text map
+    const auto layers=payload.size();u32(1);str("1");u32(1);
+    u32(0xffffffff);str("lyprop");u32(2);str("id");str("1");str("left");str("42");
+    const auto bank=payload.size();u32(1);str("scr");str(std::string("a\0b",3));
+    const auto directory=payload.size();u32(2);
+    u32(bank);u32(1);u32(2);u32(bank);
+    u32(0);u32(3);u32(30);u32(bank);u32(26);u32(layers);u32(24);u32(0);
+    u32(directory);
+    std::vector<uint8_t> native={'B','O','W','S',0xeb,3,0,0};
+    for(int i=0;i<4;++i)native.push_back((payload.size()>>(8*i))&255);
+    uLongf compressed=compressBound(payload.size());native.resize(12+compressed);
+    Check(compress2(native.data()+12,&compressed,payload.data(),payload.size(),6)==Z_OK,"compress synthetic native save");
+    native.resize(12+compressed);
+    artc::NativeSave decoded;std::string save_error;
+    Check(artc::DecodeNativeSave(native,decoded,save_error),save_error.c_str());
+    Check(decoded.variables.at("scr")==std::string("a\0b",3) && decoded.layers.size()==1 &&
+          decoded.layers[0].attrs.at("left")=="42","decode indexed native variables and command journal");
+    for(size_t i=0;i<native.size();++i) {
+        auto truncated=std::vector<uint8_t>(native.begin(),native.begin()+i);
+        Check(!artc::DecodeNativeSave(truncated,decoded,save_error),"truncated snapshot rejected");
+        Check(decoded.variables.at("scr")==std::string("a\0b",3),"failed snapshot leaves output unchanged");
+    }
+    auto corrupt=native;corrupt.back()^=1;
+    Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"native checksum verified");
+    corrupt=native;corrupt.push_back(0);
+    Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"native compressed trailing data rejected");
+    corrupt=native;corrupt[4]=0;
+    Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"unsupported native version rejected");
+    // Optional private, read-only original snapshots; never included in fixtures.
+    for(int i=1;i<argc;++i) {
+        std::ifstream file(argv[i],std::ios::binary);
+        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});
+        Check(artc::DecodeNativeSave(bytes,decoded,save_error),save_error.c_str());
+        std::cout<<"native snapshot: "<<decoded.variables.size()<<" variables, "
+                 <<decoded.layers.size()<<" layer commands, "<<decoded.text.size()<<" text layers\n";
+    }
+    }
     const auto variable=[](const std::string& name) {
         if(name=="t.count") return std::string("8");
         if(name=="t.path") return std::string("movie/logo.mp4");

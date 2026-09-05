@@ -58,7 +58,8 @@ target_include_directories(artemis_core
     PRIVATE
         ${ARTC_UPSTREAM}/src/render
         ${ARTC_UPSTREAM}/third_party)
-target_link_libraries(artemis_core PUBLIC artemis_lua51)
+find_package(ZLIB REQUIRED)
+target_link_libraries(artemis_core PUBLIC artemis_lua51 ZLIB::ZLIB)
 
 # The application already supplies FFmpeg through vcpkg. Standalone host
 # regressions can use the system libraries without changing the app manifest.
