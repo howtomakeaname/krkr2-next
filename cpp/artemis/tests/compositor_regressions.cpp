@@ -302,6 +302,24 @@ int main() {
     Check(At(16,13)[0]==255 && At(23,14)[2]==255,
           "glyph batches use the same parent rotation as image quads");
     c.DeleteLayer("9");
+    Check(c.LoadImage("9.1","small.tga"),"load rotational tween fixture");
+    c.SetProps("9",{{"left","16"},{"top","16"},{"rotate","0"}});
+    c.SetProps("9.1",{{"left","4"}});
+    c.AddTween("9",{{"rotate","0,180"},{"time","100"},{"yoyo","1"}},4000);
+    c.Update(4050); c.Draw();
+    Check(At(15,22)[0]==255 && c.HitLayer(15,22)=="9.1",
+          "rotation tween draws and hits its clockwise midpoint");
+    c.Update(4100); c.Draw();
+    Check(At(10,15)[0]==255,"rotation tween reaches its half-turn");
+    c.Update(4200); c.Draw();
+    Check(At(22,17)[0]==255 && c.PendingAnimationMs(4200)==0,
+          "yoyo returns the whole child tree to its original pose");
+    c.BeginTweenSet();
+    c.AddTween("9",{{"param","rotate"},{"to","90"},{"time","100"}},4300);
+    c.AddTween("9",{{"param","rotate"},{"to","180"},{"time","100"}},4300);
+    c.EndTweenSet(4300); c.Update(4500); c.Draw();
+    Check(At(10,15)[0]==255,"sequential rotations retain their implicit starting angles");
+    c.DeleteLayer("9");
 #if defined(ARTC_TEST_MOVIE)
     c.DeleteLayer("3");
     artc::Audio movie_audio; movie_audio.Init(&packs);

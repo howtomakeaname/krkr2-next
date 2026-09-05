@@ -296,6 +296,7 @@ bool Compositor::ReadParam(const Layer &l, const std::string &param, float *v) {
     if (param == "xscale") { *v = l.sx * 100.0f; return true; }
     if (param == "yscale") { *v = l.sy * 100.0f; return true; }
     if (param == "zoom") { *v = l.sx * 100.0f; return true; }
+    if (param == "rotate") { *v = l.rotate; return true; }
     if (param == "w") { *v = l.w; return true; }
     if (param == "h") { *v = l.h; return true; }
     return false;
@@ -308,6 +309,7 @@ bool Compositor::ApplyParam(Layer &l, const std::string &param, float v) {
     if (param == "xscale") { l.sx = v / 100.0f; return true; }
     if (param == "yscale") { l.sy = v / 100.0f; return true; }
     if (param == "zoom") { l.sx = l.sy = v / 100.0f; return true; }
+    if (param == "rotate") { l.rotate = v; return true; }
     if (param == "w") { l.w = v; return true; }
     if (param == "h") { l.h = v; return true; }
     return false;
@@ -323,7 +325,7 @@ void Compositor::AddTween(const std::string &id,
     // `param` missing: the animated property is whichever known key carries
     // a "from,to" pair (tween{ id, alpha="255,0" } style).
     if (param.empty()) {
-        for (const char *k : {"alpha", "left", "top", "x", "y", "xscale", "yscale", "zoom", "w", "h"}) {
+        for (const char *k : {"alpha", "left", "top", "x", "y", "xscale", "yscale", "zoom", "rotate", "w", "h"}) {
             if (attrs.count(k)) { param = k; break; }
         }
     }
