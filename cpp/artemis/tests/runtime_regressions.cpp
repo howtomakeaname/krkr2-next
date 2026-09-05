@@ -5,6 +5,7 @@
 #include "script/asb_parser.h"
 #include "script/expression.h"
 #include "script/native_save.h"
+#include "script/save_storage.h"
 #include <zlib.h>
 #include "render/compositor.h"
 #include <chrono>
@@ -41,6 +42,20 @@ public:
 
 int main(int argc, char** argv) {
     {
+    {
+        artc::VariableBank input={{"binary",std::string("a\0b",3)},{"empty",""}},output;
+        for(bool checkpoint:{false,true}) {
+            std::vector<uint8_t> bytes;
+            Check(artc::EncodeVariableBank(input,checkpoint,bytes) && artc::DecodeVariableBank(bytes,checkpoint,output) && input==output,
+                  "variable banks preserve empty values and binary strings");
+            for(size_t n=0;n<bytes.size();++n) {
+                const auto broken=std::vector<uint8_t>(bytes.begin(),bytes.begin()+n);
+                Check(!artc::DecodeVariableBank(broken,checkpoint,output) && output==input,
+                      "truncated bank cannot partially replace live variables");
+            }
+            if(checkpoint){bytes.back()^=1;Check(!artc::DecodeVariableBank(bytes,true,output),"checkpoint checksum");}
+        }
+    }
     // Synthetic native CSerializer directory: fields deliberately not ordered.
     std::vector<uint8_t> payload;
     auto u32=[&](uint32_t n){for(int i=0;i<4;++i){payload.push_back(n&255);n>>=8;}};
