@@ -692,6 +692,8 @@ int LuaEngine::l_tag(lua_State *L) {
             return 0;
         }
         if (tagname == "lyprop" && m.count("id")) {
+            if(m.count("intermediate_render_mask"))
+                m["intermediate_render_mask"]=inst->ResolvePackPath(m["intermediate_render_mask"]);
             inst->compositor_->SetProps(m["id"], m);
             return 0;
         }

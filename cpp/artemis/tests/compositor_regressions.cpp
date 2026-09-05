@@ -518,6 +518,9 @@ int main() {
     c.SetPixels("9.1",red,1,1);c.SetProps("9.1",{{"w","16"},{"h","16"}});
     c.SetProps("9",{{"intermediate_render","2"},{"intermediate_render_mask","mask.tga"}});c.Draw();
     Check(At(1,1)[0]==255 && At(6,1)[0]==0,"mask textures reload after GL resource release");
+    Check(messages.DoString("e:setMagicPath{'coverage','mask.tga'};e:tag{'lyprop',id='9',intermediate_render_mask=':coverage'}",
+        "mask path alias"),"mask tag resolves the same resource aliases as image loading");c.Draw();
+    Check(At(1,1)[0]==255 && At(6,1)[0]==0 && c.Layers().back().effect.mask=="mask.tga","resolved mask retains its clipping result");
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");
