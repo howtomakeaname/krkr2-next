@@ -220,6 +220,9 @@ void Audio::SetVolume(const std::string &key, int vol) {
         OH_AudioRenderer_SetVolume(it->second->renderer, VolumeToGain(it->second->vol1000));
 }
 
+// Implemented by the streaming OHAudio backend; unused by legacy tags.
+void Audio::SetPan(const std::string &, int) {}
+
 void Audio::PauseAll() {
     std::lock_guard<std::mutex> lk(impl_->mutex);
     impl_->paused = true;
