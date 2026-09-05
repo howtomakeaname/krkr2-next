@@ -15,6 +15,7 @@
 #include "script/input_state.h"
 #include "script/auto_read.h"
 #include "render/compositor.h"
+#include "render/video_player.h"
 
 #include "lua.hpp"
 #include <chrono>
@@ -140,7 +141,7 @@ public:
     // wait without emitting a click-wait exit; restore it when the handler returns.
     struct WaitState {
         bool waiting, timed, accept_input, announced, sound, transition;
-        std::string sound_key;
+        std::string sound_key, video_key;
         std::chrono::steady_clock::time_point deadline;
         double auto_elapsed;
     };
@@ -207,6 +208,7 @@ private:
     void DispatchClick(float x, float y);
     void AdvanceByInput();
     void SetAutoMode(bool enabled);
+    void UpdateVideos();
     static int l_enqueueTag(lua_State *L);
     static int l_random(lua_State *L);
     static int l_getScriptStack(lua_State *L);
@@ -271,6 +273,9 @@ private:
     // audio backend (splay/seplay/voplay) — raw ptr, owned by this engine
     Audio *audio_ = nullptr;
     AudioChannels *sounds_ = nullptr;
+    std::map<std::string, std::unique_ptr<VideoPlayer>> videos_;
+    std::string video_wait_;
+    int video_skip_ = 0;
     // message pipeline: chgmsg-selected layer + accumulated print text
     std::string msg_layer_;
     struct MessagePage {

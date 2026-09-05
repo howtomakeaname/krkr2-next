@@ -1,6 +1,8 @@
 #include "render/compositor.h"
 #include "pack/pack_manager.h"
 #include "script/lua_engine.h"
+#include "render/video_player.h"
+#include "audio/audio.h"
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <array>
@@ -83,8 +85,13 @@ int main() {
         return tga;
     };
     const std::string name="font.ttf";
-    const std::vector<std::pair<std::string,std::vector<unsigned char>>> files = {
+    std::vector<std::pair<std::string,std::vector<unsigned char>>> files = {
         {name,font_data}, {"small.tga",solid(4,2)}, {"large.tga",solid(8,6)}};
+#if defined(ARTC_TEST_MOVIE)
+    std::ifstream movie_file(ARTC_TEST_MOVIE,std::ios::binary);
+    auto movie=std::make_shared<std::vector<uint8_t>>(std::istreambuf_iterator<char>(movie_file),std::istreambuf_iterator<char>());
+    files.push_back({"movie.mp4",*movie});
+#endif
     // A pf8 fixture keeps the production pack/font/image loading path.
     std::vector<unsigned char> pack{'p','f','8'};
     auto u32=[&](uint32_t n){for(int i=0;i<4;++i)pack.push_back((n>>(8*i))&255);};
@@ -221,6 +228,28 @@ int main() {
           "smaller replacement retains layer position and parent transform");
     Check(!c.LoadImage("3.1","missing.png"),"missing replacement fails");
     Check(c.GetLayerInfo("3.1").width==4,"failed replacement keeps existing surface");
+#if defined(ARTC_TEST_MOVIE)
+    c.DeleteLayer("3");
+    artc::Audio movie_audio; movie_audio.Init(&packs);
+    artc::VideoPlayer player(c,movie_audio);
+    Check(player.Start(movie,"9",false,true,1000,1000),"start fullscreen movie"); c.Draw();
+    Check(Pixel()[0]>220 && Pixel()[2]<30,"movie frame renders above the scene");
+    player.Update(1600); c.Draw();
+    Check(!player.Active() && Pixel()[2]==255,"movie end restores the underlying scene");
+    Check(player.Start(movie,"8",true,false,1000,2000),"start looping layer movie");
+    player.Update(2600); player.Update(2800);
+    Check(player.Active(),"layer movie loops without ending the player"); player.Stop();
+    Check(messages.DoString("e:tag{'video',file='movie.mp4',skip=0}; assert(e:getScriptWaitReason().video)",
+        "video wait"),"video tag establishes a script wait");
+    messages.ClickAt(31,31); messages.RunEnterFrame();
+    Check(messages.IsWaiting(),"unskippable movie consumes taps without advancing the scenario");
+    Check(messages.DoString("e:tag{'video',file='movie.mp4',skip=2}; e:tag{'keyconfig',role=1,keys='27'}",
+        "movie cancel role"),"configure movie cancel key");
+    messages.ClickAt(31,31); messages.RunEnterFrame();
+    Check(messages.IsWaiting(),"cancel role excludes ordinary pointer taps");
+    messages.PushKeyDown(27); messages.RunEnterFrame(); messages.EndFrame();
+    Check(!messages.IsWaiting(),"configured cancel key stops the movie and releases the wait");
+#endif
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");

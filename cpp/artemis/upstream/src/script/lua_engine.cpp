@@ -76,6 +76,7 @@ LuaEngine *LuaEngine::Self(lua_State *L) {
 }
 
 LuaEngine::~LuaEngine() {
+    videos_.clear(); // players release their output before Audio is destroyed
     delete sounds_;
     sounds_ = nullptr;
     if (audio_) { delete audio_; audio_ = nullptr; }
@@ -118,6 +119,7 @@ void LuaEngine::EndFrame() {
 bool LuaEngine::RunEnterFrame() {
     advanced_this_frame_ = false;
     if (sounds_) sounds_->Update(NowMs());
+    UpdateVideos();
     PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
     bool ok=true;
@@ -452,6 +454,30 @@ int LuaEngine::l_tag(lua_State *L) {
         inst->SetWaiting(true);   // pause the native runner until the next tap
         return 0;
     }
+    if (inst && inst->compositor_ && tagname == "video") {
+        const bool fullscreen=m["id"].empty();
+        const std::string id=fullscreen ? "2147483647.artc_movie" : m["id"];
+        if(m["file"].empty()) { inst->videos_.erase(id); return 0; }
+        auto bytes=std::make_shared<std::vector<uint8_t>>();
+        const std::string file=inst->ResolvePackPath(m["file"]);
+        if(!inst->packs_ || !inst->packs_->Read(file,*bytes)) {
+            Log(kLogError,"video: file not found: "+file); return 0;
+        }
+        inst->videos_.erase(id);
+        auto player=std::make_unique<VideoPlayer>(*inst->compositor_,*inst->audio_);
+        const auto volume=inst->vars_.find("s.videovol");
+        const int gain=volume==inst->vars_.end() ? 1000 : std::atoi(volume->second.c_str());
+        if(!player->Start(bytes,id,m["loop"]=="1",fullscreen,gain,inst->NowMs())) {
+            Log(kLogError,"video: decoder failed: "+file); return 0;
+        }
+        inst->videos_[id]=std::move(player);
+        if(fullscreen) {
+            inst->video_wait_=id; inst->video_skip_=std::atoi(m["skip"].c_str());
+            inst->SetWaiting(true);
+        }
+        Log(kLogInfo,"video: playing "+file+(fullscreen ? " fullscreen" : " layer="+id));
+        return 0;
+    }
     if (tagname == "wait" && inst) {
         // Official wait semantics (spec/tag/script/wait.md): suspend the
         // script until a user input (input=1/2) and/or the time (ms) elapses.
@@ -676,6 +702,10 @@ int LuaEngine::l_tag(lua_State *L) {
             // lyevent keep receiving hit-test hits inside the story.
             const std::string lid = m["id"];
             const std::string pre = lid + ".";
+            for(auto it=inst->videos_.begin();it!=inst->videos_.end();) {
+                if(it->first==lid || it->first.compare(0,pre.size(),pre)==0) it=inst->videos_.erase(it);
+                else ++it;
+            }
             for (auto it = inst->msg_text_.begin(); it != inst->msg_text_.end();) {
                 if (it->first == lid || it->first.compare(0, pre.size(), pre) == 0)
                     it = inst->msg_text_.erase(it);
@@ -1167,6 +1197,19 @@ void LuaEngine::DispatchFrameInput() {
     const float x=pending_click_ ? click_x_ : mouse_x_;
     const float y=pending_click_ ? click_y_ : mouse_y_;
     pending_click_=false;
+    if(!video_wait_.empty()) {
+        bool cancel=false;
+        if(video_skip_==1) cancel=click || input_.Query(13,InputState::Decide);
+        else if(video_skip_==2) {
+            const auto role=key_roles_.find(1);
+            if(role==key_roles_.end()) cancel=click || input_.Query(27,InputState::Decide);
+            else for(int key:role->second)
+                if(input_.Query(key,InputState::Decide) ||
+                   (key==1 && click && (!input_.Overridden(1) || input_.Query(1,InputState::Decide)))) cancel=true;
+        }
+        if(cancel) videos_.erase(video_wait_);
+        return;
+    }
     if (click && (!input_.Overridden(1) || input_.Query(1,InputState::Decide)))
         DispatchClick(x,y);
     // Key callbacks can alter their registrations, enqueue scripts, or emit
@@ -1434,7 +1477,7 @@ void LuaEngine::SetWaiting(bool w) {
     if (!w) { se_wait_ = false; timed_wait_ = false; }
     else if (!timed_wait_ && !se_wait_) wait_accept_input_ = true;
     waiting_ = w;
-    const bool click_wait = w && !timed_wait_ && !se_wait_;
+    const bool click_wait = w && !timed_wait_ && !se_wait_ && video_wait_.empty();
     if (click_wait_announced_ == click_wait) return;
     click_wait_announced_ = click_wait;
     const auto it = event_handlers_.find(click_wait ? "onClickWaitIn" : "onClickWaitOut");
@@ -1444,8 +1487,9 @@ void LuaEngine::SetWaiting(bool w) {
 
 LuaEngine::WaitState LuaEngine::SuspendWait() {
     WaitState state{waiting_, timed_wait_, wait_accept_input_, click_wait_announced_,
-                    se_wait_, transition_wait_, wait_se_key_, wait_until_, auto_timer_.Elapsed(NowMs())};
+                    se_wait_, transition_wait_, wait_se_key_, video_wait_, wait_until_, auto_timer_.Elapsed(NowMs())};
     waiting_ = timed_wait_ = se_wait_ = transition_wait_ = click_wait_announced_ = false;
+    video_wait_.clear();
     auto_timer_.Reset();
     return state;
 }
@@ -1458,6 +1502,7 @@ void LuaEngine::RestoreWait(const WaitState& state) {
     se_wait_ = state.sound;
     transition_wait_ = state.transition;
     wait_se_key_ = state.sound_key;
+    video_wait_ = state.video_key;
     wait_until_ = state.deadline;
     auto_timer_.Restore(NowMs(), state.auto_elapsed);
 }
@@ -1473,6 +1518,10 @@ void LuaEngine::SetTimedWait(int ms, bool accept_input) {
 // Polled once per frame: auto-clears an expired timed wait so the runner
 // resumes without user input. Called by the frame loop before stepping.
 bool LuaEngine::IsWaiting() {
+    if(!video_wait_.empty()) {
+        if(videos_.count(video_wait_)) return true;
+        video_wait_.clear(); SetWaiting(false);
+    }
     if (timed_wait_ && ClockNow() >= wait_until_) {
         timed_wait_ = false;
         SetWaiting(false);
@@ -1490,6 +1539,13 @@ bool LuaEngine::IsWaiting() {
         if (auto_timer_.Ready(NowMs(), ms, blocked)) SetWaiting(false);
     }
     return waiting_;
+}
+
+void LuaEngine::UpdateVideos() {
+    for(auto it=videos_.begin();it!=videos_.end();) {
+        it->second->Update(NowMs());
+        if(!it->second->Active()) it=videos_.erase(it); else ++it;
+    }
 }
 
 // KrKr2-Next: setonsoundfinish callbacks — the framework registers
@@ -1574,6 +1630,10 @@ int LuaEngine::l_getScriptWaitReason(lua_State *L) {
     auto* self = Self(L);
     self->IsWaiting();
     lua_newtable(L);
+    if (!self->video_wait_.empty()) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "video");
+    }
     if (self->compositor_ && self->compositor_->PendingTextMs(self->NowMs()) > 0) {
         lua_pushboolean(L, 1);
         lua_setfield(L, -2, "textTween");
