@@ -265,9 +265,8 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
     // movie_play guard: the asb *movie_play chain (movie_init → calllua
     // movie_play) runs on the "continue from save" path too, but our save
     // bank doesn't persist `scr.movie` — so scr.movie is nil there and
-    // movie_play crashes at `local p = scr.movie; p.file`. Until real movie
-    // playback lands, skip the chain when there's nothing to play; the
-    // framework's [wt] after it still yields to the player.
+    // movie_play crashes at `local p = scr.movie; p.file`. Skip only this
+    // incomplete save restoration; a valid movie request plays normally.
     DoString(
         "if not _artc_mp_guard then\n"
         " local _real = _G.movie_play\n"
@@ -1198,14 +1197,15 @@ void LuaEngine::DispatchFrameInput() {
     const float y=pending_click_ ? click_y_ : mouse_y_;
     pending_click_=false;
     if(!video_wait_.empty()) {
+        const bool movie_click=click && (!input_.Overridden(1) || input_.Query(1,InputState::Decide));
         bool cancel=false;
-        if(video_skip_==1) cancel=click || input_.Query(13,InputState::Decide);
+        if(video_skip_==1) cancel=movie_click || input_.Query(13,InputState::Decide);
         else if(video_skip_==2) {
             const auto role=key_roles_.find(1);
-            if(role==key_roles_.end()) cancel=click || input_.Query(27,InputState::Decide);
+            if(role==key_roles_.end()) cancel=movie_click || input_.Query(27,InputState::Decide);
             else for(int key:role->second)
                 if(input_.Query(key,InputState::Decide) ||
-                   (key==1 && click && (!input_.Overridden(1) || input_.Query(1,InputState::Decide)))) cancel=true;
+                   (key==1 && movie_click)) cancel=true;
         }
         if(cancel) videos_.erase(video_wait_);
         return;

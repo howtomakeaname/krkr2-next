@@ -265,6 +265,13 @@ int main() {
     Check(messages.IsWaiting(),"cancel role excludes ordinary pointer taps");
     messages.PushKeyDown(27); messages.RunEnterFrame(); messages.EndFrame();
     Check(!messages.IsWaiting(),"configured cancel key stops the movie and releases the wait");
+    Check(messages.DoString("e:tag{'video',file='movie.mp4',skip=1}; e:overrideKey{key=1,status=0}",
+        "movie key override"),"start a skippable movie with pointer input suppressed");
+    messages.ClickAt(31,31); messages.RunEnterFrame(); messages.EndFrame();
+    Check(messages.IsWaiting(),"suppressed pointer input does not cancel a skippable movie");
+    Check(messages.DoString("e:overrideKey{key=1,status=-1}","restore movie input"),"restore physical pointer input");
+    messages.ClickAt(31,31); messages.RunEnterFrame(); messages.EndFrame();
+    Check(!messages.IsWaiting(),"restored pointer input can cancel the movie");
 #endif
     std::filesystem::remove(path);
     c.Shutdown();
