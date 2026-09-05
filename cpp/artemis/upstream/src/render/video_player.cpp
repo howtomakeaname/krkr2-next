@@ -12,7 +12,7 @@ bool VideoPlayer::Start(VideoDecoder::Bytes bytes, const std::string& layer, boo
     Stop();
     if(!decoder_.Open(std::move(bytes)) || !decoder_.Next(next_)) return false;
     layer_=layer; audio_key_="movie:"+layer;
-    loop_=loop; fullscreen_=fullscreen; started_ms_=now_ms; cycle_ms_=0;
+    loop_=loop; fullscreen_=fullscreen; started_ms_=now_ms; cycle_ms_=elapsed_ms_=0;
     next_valid_=active_=true;
     end_ms_=std::max(decoder_.DurationMs(),next_.pts_ms+next_.duration_ms);
     if(fullscreen_) {
@@ -43,8 +43,14 @@ void VideoPlayer::Update(double now_ms) {
     if(!active_) return;
     // OHAudio/OpenSL report consumed frames, not PCM queued ahead. Silent
     // hosts and video-only clips use the same paused clock as script waits.
-    const double audio_ms=audio_.PlaybackMs(audio_key_);
-    const double elapsed=audio_ms>=0 ? audio_ms : now_ms-started_ms_;
+    const bool audio_playing=audio_.IsPlaying(audio_key_);
+    const double audio_ms=audio_playing ? audio_.PlaybackMs(audio_key_) : -1;
+    // Preserve the last audio position when the track drains or its clock
+    // becomes unavailable. Some backends retain a stopped position forever;
+    // the remaining video must continue on the engine's paused clock.
+    const double elapsed=elapsed_ms_=std::max(elapsed_ms_,
+        audio_ms>=0 ? audio_ms : now_ms-started_ms_);
+    if(audio_ms>=0) started_ms_=now_ms-elapsed;
     int decoded=0;
     while(next_valid_ && next_.pts_ms+cycle_ms_<=elapsed && decoded++<8) {
         Present(next_);
@@ -56,7 +62,7 @@ void VideoPlayer::Update(double now_ms) {
             cycle_ms_=end_ms_;
             next_valid_=true;
             end_ms_=cycle_ms_+std::max(decoder_.DurationMs(),next_.pts_ms+next_.duration_ms);
-        } else if(!audio_.IsPlaying(audio_key_)) Stop();
+        } else if(!audio_playing) Stop();
     }
 }
 

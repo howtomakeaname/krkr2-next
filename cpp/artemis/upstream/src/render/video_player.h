@@ -22,7 +22,7 @@ private:
     VideoDecoder decoder_;
     VideoDecoder::Frame next_;
     std::string layer_, audio_key_;
-    double started_ms_=0, cycle_ms_=0, end_ms_=0;
+    double started_ms_=0, cycle_ms_=0, end_ms_=0, elapsed_ms_=0;
     bool active_=false, loop_=false, fullscreen_=false, next_valid_=false;
 };
 } // namespace artc

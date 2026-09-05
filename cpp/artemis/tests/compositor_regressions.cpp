@@ -239,6 +239,22 @@ int main() {
     Check(player.Start(movie,"8",true,false,1000,2000),"start looping layer movie");
     player.Update(2600); player.Update(2800);
     Check(player.Active(),"layer movie loops without ending the player"); player.Stop();
+    struct ShortMovieAudio : artc::Audio {
+        double position=0;
+        bool playing=true;
+        bool PlayStream(const std::string&,std::unique_ptr<artc::PcmStream>,int) override { return true; }
+        double PlaybackMs(const std::string&) const override { return position; }
+        bool IsPlaying(const std::string&) const override { return playing; }
+    } short_audio;
+    artc::VideoPlayer short_track(c,short_audio);
+    Check(short_track.Start(movie,"9",false,true,1000,3000),"start movie with a shorter audio track");
+    short_audio.position=200; short_track.Update(3500);
+    Check(short_track.Active(),"speaker position controls video despite startup latency");
+    short_audio.playing=false; short_track.Update(3600);
+    Check(short_track.Active(),"audio drain continues from presented position without a jump");
+    short_track.Update(4000); c.Draw();
+    Check(!short_track.Active() && Pixel()[2]==255,
+          "a stopped audio clock cannot strand the remaining video or its script wait");
     Check(messages.DoString("e:tag{'video',file='movie.mp4',skip=0}; assert(e:getScriptWaitReason().video)",
         "video wait"),"video tag establishes a script wait");
     messages.ClickAt(31,31); messages.RunEnterFrame();
