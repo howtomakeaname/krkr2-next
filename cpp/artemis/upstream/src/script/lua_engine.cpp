@@ -104,24 +104,14 @@ void LuaEngine::ResumeAudio() { if (audio_) audio_->ResumeAll(); }
 
 // ---- input & frame hooks ----
 
-void LuaEngine::PushKeyDown(int key) {
-    if (key < 0 || key >= 256) return;
-    if (!key_down_[key]) key_down_edge_[key] = true;
-    key_down_[key] = true;
-}
-
-void LuaEngine::PushKeyUp(int key) {
-    if (key < 0 || key >= 256) return;
-    if (key_down_[key]) key_up_edge_[key] = true;
-    key_down_[key] = false;
-}
+void LuaEngine::PushKeyDown(int key) { input_.Press(key); }
+void LuaEngine::PushKeyUp(int key) { input_.Release(key); }
 
 void LuaEngine::SetMousePoint(float x, float y) { mouse_x_ = x; mouse_y_ = y; }
 void LuaEngine::SetTouchCount(int count) { touch_count_ = count; }
 
 void LuaEngine::EndFrame() {
-    std::memset(key_down_edge_, 0, sizeof(key_down_edge_));
-    std::memset(key_up_edge_, 0, sizeof(key_up_edge_));
+    input_.EndFrame();
 }
 
 bool LuaEngine::RunEnterFrame() {
@@ -207,6 +197,8 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
         {"enqueueTag", l_enqueueTag},
         {"bindSurfaceAsync", l_noop},
         {"isDown", l_isDown},
+        {"isPush", l_isPush},
+        {"isDecide", l_isDecide},
         {"isDownEdge", l_isDownEdge},
         {"isUpEdge", l_isUpEdge},
         {"getMousePoint", l_getMousePoint},
@@ -946,25 +938,37 @@ std::string LuaEngine::ResolvePackPath(const std::string &path) const {
 int LuaEngine::l_isDown(lua_State *L) {
     LuaEngine *self = Self(L);
     const int key = static_cast<int>(luaL_checkinteger(L, 2));
-    lua_pushboolean(L, self && key >= 0 && key < 256 && self->key_down_[key] ? 1 : 0);
+    lua_pushboolean(L, self && self->input_.Query(key, InputState::Down));
     return 1;
 }
 
 int LuaEngine::l_isDownEdge(lua_State *L) {
     LuaEngine *self = Self(L);
     const int key = static_cast<int>(luaL_checkinteger(L, 2));
-    lua_pushboolean(L, self && key >= 0 && key < 256 && self->key_down_edge_[key] ? 1 : 0);
+    lua_pushboolean(L, self && self->input_.Query(key, InputState::DownEdge));
     return 1;
 }
 
 int LuaEngine::l_isUpEdge(lua_State *L) {
     LuaEngine *self = Self(L);
     const int key = static_cast<int>(luaL_checkinteger(L, 2));
-    lua_pushboolean(L, self && key >= 0 && key < 256 && self->key_up_edge_[key] ? 1 : 0);
+    lua_pushboolean(L, self && self->input_.Query(key, InputState::UpEdge));
     return 1;
 }
 
 // e:getMousePoint() → {x=…, y=…} (stage coordinates; scaled by the feeder)
+int LuaEngine::l_isPush(lua_State *L) {
+    auto* self=Self(L);
+    lua_pushboolean(L,self && self->input_.Query(luaL_checkinteger(L,2),InputState::Push));
+    return 1;
+}
+
+int LuaEngine::l_isDecide(lua_State *L) {
+    auto* self=Self(L);
+    lua_pushboolean(L,self && self->input_.Query(luaL_checkinteger(L,2),InputState::Decide));
+    return 1;
+}
+
 int LuaEngine::l_getMousePoint(lua_State *L) {
     LuaEngine *self = Self(L);
     lua_newtable(L);
@@ -996,9 +1000,17 @@ int LuaEngine::l_setEventHandler(lua_State *L) {
     return 0;
 }
 
-// e:overrideKey{key=…, status=…} — key remapping; accepted silently for now
+// Overrides affect this frame only; missing key applies to all 320 keys.
 int LuaEngine::l_overrideKey(lua_State *L) {
-    (void)L;
+    auto* self=Self(L);
+    if (!self || !lua_istable(L,2)) return 0;
+    lua_getfield(L,2,"key");
+    const int key=lua_isnil(L,-1) ? -1 : luaL_checkinteger(L,-1);
+    lua_pop(L,1);
+    lua_getfield(L,2,"status");
+    const int status=lua_isnil(L,-1) ? -1 : luaL_checkinteger(L,-1);
+    lua_pop(L,1);
+    self->input_.Override(key,status);
     return 0;
 }
 

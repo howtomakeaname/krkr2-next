@@ -106,6 +106,23 @@ int main() {
     artc::PackManager packs;
     artc::Ini ini;
     Check(lua.Init(&packs, ini, "android", 1280, 720), "initialize Lua");
+    lua.PushKeyDown(13);
+    Check(lua.DoString("assert(e:isDown(13) and e:isDownEdge(13) and e:isPush(13)); "
+        "e:overrideKey{key=13,status=0}; assert(not e:isDown(13)); "
+        "e:overrideKey{key=13,status=-1}; assert(e:isDown(13)); "
+        "e:overrideKey{status=0}; assert(not e:isDown(13)); "
+        "e:overrideKey{key=319,status=32}; assert(e:isDecide(319)); "
+        "assert(not e:isDown(319) and not e:isDownEdge(319)); "
+        "e:overrideKey{key=13,status=8}; assert(e:isDownEdge(13) and not e:isDown(13)); "
+        "e:overrideKey{key=14,status=16}; assert(e:isUpEdge(14)); "
+        "e:overrideKey{key=15,status=4}; assert(e:isDown(15) and not e:isPush(15)); "
+        "e:overrideKey{key=16,status=2}; assert(e:isPush(16) and not e:isDownEdge(16))",
+        "override flags"),"override query bits match the original input API");
+    lua.EndFrame();
+    Check(lua.DoString("assert(e:isDown(13) and not e:isDownEdge(13)); "
+        "assert(not e:isDecide(319) and not e:isUpEdge(14))", "next frame"),
+        "frame completion removes overrides and preserves physical held keys");
+    lua.PushKeyUp(13);lua.EndFrame();
     lua.DispatchTag("wait", {{"time", "10000"}, {"input", "0"}});
     lua.ClickAt(20, 20);
     Check(lua.IsWaiting(), "mandatory wait must survive pointer input");

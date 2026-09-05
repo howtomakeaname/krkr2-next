@@ -12,6 +12,7 @@
 #pragma once
 #include "config/ini.h"
 #include "pack/pack_manager.h"
+#include "script/input_state.h"
 
 #include "lua.hpp"
 #include <chrono>
@@ -186,6 +187,8 @@ private:
     static int l_file(lua_State *L);
     static int l_setMagicPath(lua_State *L);
     static int l_isDown(lua_State *L);
+    static int l_isPush(lua_State *L);
+    static int l_isDecide(lua_State *L);
     static int l_isDownEdge(lua_State *L);
     static int l_isUpEdge(lua_State *L);
     static int l_getMousePoint(lua_State *L);
@@ -277,9 +280,7 @@ private:
     bool reset_requested_ = false;
     bool exit_requested_ = false;
     std::string save_dir_;   // game directory for system.dat / saves
-    bool key_down_[256] = {};
-    bool key_down_edge_[256] = {};
-    bool key_up_edge_[256] = {};
+    InputState input_;
     float mouse_x_ = 0, mouse_y_ = 0;
     int touch_count_ = 0;
     int debug_mode_ = 0;
