@@ -11,6 +11,23 @@ target_compile_definitions(audio_stream_regressions PRIVATE ARTC_TEST_DATA="${AR
 target_link_libraries(audio_stream_regressions PRIVATE artemis_core)
 add_test(NAME audio_stream_regressions COMMAND audio_stream_regressions)
 
+get_target_property(ARTC_DEFINES artemis_core INTERFACE_COMPILE_DEFINITIONS)
+if("ARTC_HAS_FFMPEG=1" IN_LIST ARTC_DEFINES)
+    find_program(ARTC_FFMPEG_TOOL ffmpeg)
+    if(ARTC_FFMPEG_TOOL)
+        set(ARTC_TEST_MOVIE "${CMAKE_CURRENT_BINARY_DIR}/synthetic-movie.mp4")
+        add_custom_command(OUTPUT "${ARTC_TEST_MOVIE}"
+            COMMAND "${ARTC_FFMPEG_TOOL}" -loglevel error -y
+                -f lavfi -i color=c=red:s=32x32:r=10:d=0.5
+                -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.5
+                -c:v mpeg4 -c:a aac -shortest "${ARTC_TEST_MOVIE}"
+            VERBATIM)
+        add_executable(video_decoder_regressions video_decoder_regressions.cpp "${ARTC_TEST_MOVIE}")
+        target_link_libraries(video_decoder_regressions PRIVATE artemis_core)
+        add_test(NAME video_decoder_regressions COMMAND video_decoder_regressions "${ARTC_TEST_MOVIE}")
+    endif()
+endif()
+
 option(ARTC_TEST_GLES "Run compositor regressions using desktop ANGLE" OFF)
 if(ARTC_TEST_GLES)
     if(NOT OHOS)
