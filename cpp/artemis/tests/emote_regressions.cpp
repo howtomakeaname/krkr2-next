@@ -1,8 +1,11 @@
 #include "pack/psb.h"
 #include "render/emote_model.h"
 #include "render/emote_scene.h"
+#include "render/emote_player.h"
+#include "render/compositor.h"
 #include "emote_scene_fixture.h"
 #include <cmath>
+#include <memory>
 #include <zlib.h>
 #include <cstdlib>
 #include <fstream>
@@ -57,8 +60,170 @@ static void ModelTests() {
     doc.bytes[0]=1;Check(model.Load(doc,error),error.c_str());
     Check(!model.Image("face","smile",image,error) && image.rgba[0]==30,"invalid texture retains prior pixels");
 }
+// The playback contract: frame clock, queue semantics, fades, hold-end,
+// skip/pass, difference-vs-lerp variable mixing (observed through the
+// parameterized face icon) and Load atomicity.
+static void PlayerTests() {
+    std::string error;
+    auto document=emote_fixture::PlayerDocument();
+    // The encoder round-trips through the real decoder before anything trusts it.
+    {artc::PsbDocument decoded;const auto bytes=emote_fixture::EncodePsb(document);
+     Check(artc::DecodePsb(bytes,decoded,error),error.c_str());
+     Check(decoded.root.At("metadata").At("timelineControl").array.size()==3,"test PSB writer round-trips timelineControl");}
+    auto model=std::make_shared<artc::EmoteModel>();
+    Check(model->Load(std::move(document),error),error.c_str());
+
+    artc::EmotePlayer player;
+    Check(!player.Active(),"player starts inactive");
+    Check(!player.Load(nullptr,error) && error.find("missing")!=std::string::npos,"null model rejected");
+    Check(player.Load(model,error),error.c_str());
+    Check(player.Active(),"loaded player is active");
+    Check(player.CountMainTimelines()==2 && player.MainTimelineLabelAt(0)=="loop" &&
+          player.MainTimelineLabelAt(1)=="once","main timeline enumeration follows the model map");
+    Check(player.CountDiffTimelines()==1 && player.DiffTimelineLabelAt(0)=="delta","difference timeline enumeration");
+    Check(player.CountVariables()==1 && player.VariableLabelAt(0)=="expression","variable enumeration");
+    Check(player.TimelineTotalFrames("once")==60 && player.TimelineTotalFrames("loop")==20 &&
+          player.TimelineTotalFrames("missing")<0,"timeline lengths");
+    Check(player.IsLoopTimeline("loop") && !player.IsLoopTimeline("once"),"loop detection");
+    Check(!player.PlayTimeline("missing",0,error) && error.find("unknown")!=std::string::npos,"unknown timeline rejected");
+    Check(player.PlayTimeline("once",0,error) && player.IsTimelinePlaying("once"),"play starts the timeline");
+    Check(player.PlayTimeline("delta",artc::EmotePlayer::kTimelineSequential,error) &&
+          !player.IsTimelinePlaying("delta") && player.CountPlayingTimelines()==1,"sequential queues behind live playback");
+    player.Progress(1000);  // 60 frames: "once" holds its final pose, queue starts
+    Check(!player.IsTimelinePlaying("once") && player.IsTimelinePlaying("delta") &&
+          player.PlayingTimelineLabelAt(1)=="delta" &&
+          player.PlayingTimelineFlagsAt(1)==artc::EmotePlayer::kTimelineSequential,"a freed slot starts the queued timeline");
+
+    // transform round-trips
+    player.SetCoord(5,6,0,0);double x=0,y=0;player.GetCoord(&x,&y);
+    Check(x==5 && y==6,"coordinate round-trip");
+    player.SetScale(2,3,0,0);player.GetScale(&x,&y);
+    Check(x==2 && y==3,"scale round-trip");
+    player.SetRot(90,0,0);Check(player.GetRot()==90,"rotation round-trip");
+    player.SetColor(0x80ABCDEFu,0,0);Check(player.GetColor()==0x80ABCDEFu,"color round-trip");
+    player.SetMirror(true);Check(player.IsMirrored(),"mirror flag");
+    player.Hide();Check(player.IsHidden(),"hide flag");player.Show();
+
+    // render + frame clock through the compositor (host SetPixels build)
+    artc::Compositor compositor;
+    Check(player.Render(compositor,"p",error),error.c_str());
+    Check(compositor.GetLayerInfo("p").found && compositor.GetLayerInfo("p.000001").found,
+          "render installs the container and scene layers");
+    player.Progress(5000.0/3.0);  // +100 frames on top of the 60 already played
+    Check(player.Render(compositor,"p",error),error.c_str());
+    Check(std::abs(compositor.GetLayerInfo("p.000001").left-14.0)<1e-3,
+          "progress advances the base motion at 60 fps");  // 160 frames wraps to 6 → 8+10*0.6
+    artc::EmotePlayer ticking;
+    Check(ticking.Load(model,error),error.c_str());
+    Check(ticking.Update(0,&compositor,"q") && compositor.GetLayerInfo("q").found,"update renders");
+    Check(ticking.Update(500,&compositor,"q"),error.c_str());  // dt 500 ms → 30 frames → frame 8
+    Check(std::abs(compositor.GetLayerInfo("q.000001").left-16.0)<1e-3,"update ticks wall-clock deltas");
+
+    // ComposeVariables is private — observe mixing through the parameterized
+    // face icon: body picture is 4px wide, the face 2px ("face") or 4px ("wide").
+    auto picture_sum=[&](const char* id) {
+        int sum=0;
+        for(const auto& l:compositor.Layers())
+            if(l.id.rfind(id,0)==0 && l.id.size()>=7 && l.id.compare(l.id.size()-7,7,".000000")==0)
+                sum+=int(compositor.GetLayerInfo(l.id).width);
+        return sum;
+    };
+    artc::EmotePlayer mixer;
+    Check(mixer.Load(model,error),error.c_str());
+    Check(mixer.SetVariable("expression",6,0,0,error),error.c_str());
+    Check(mixer.FadeInTimeline("loop",200,0,error),error.c_str());
+    mixer.Progress(8000.0/60.0);  // timeline position 8, blend 2/3
+    Check(mixer.Render(compositor,"r",error) && picture_sum("r")==6,
+          "a main timeline lerps the base toward the sampled value");  // 6+(8-6)*2/3≈7.3 <10 → face
+    mixer.StopTimeline("loop");
+    Check(mixer.SetVariable("expression",6,0,0,error) && mixer.FadeInTimeline("delta",200,0,error),error.c_str());
+    mixer.Progress(8000.0/60.0);
+    Check(mixer.Render(compositor,"r",error) && picture_sum("r")==8,
+          "a difference timeline adds on top of the base");  // 6+8*2/3≈11.3 → clamped 10 → wide
+
+    // transitions and ease weights
+    artc::EmotePlayer vars;
+    Check(vars.Load(model,error),error.c_str());
+    Check(!vars.IsAnimating(),"fresh player is still");
+    Check(vars.SetVariable("expression",10,1000,1,error),error.c_str());
+    vars.Progress(500);
+    bool found=false;
+    Check(vars.GetVariable("expression",&found)==2.5 && found,"ease >= 0 weighs ease+1");
+    Check(vars.SetVariable("expression",10,1000,-1,error),error.c_str());
+    vars.Progress(500);
+    Check(std::abs(vars.GetVariable("expression",&found)-(2.5+7.5*std::sqrt(0.5)))<1e-9 && found,
+          "ease < 0 weighs 1/(1-ease)");
+    Check(vars.IsAnimating(),"a running transition keeps the player animating");
+    vars.Pass();
+    Check(vars.GetVariable("expression",&found)==10 && found && !vars.IsAnimating(),
+          "pass completes transitions without touching timelines");
+    Check(!vars.SetVariable("missing",1,0,0,error) && error.find("unknown")!=std::string::npos,
+          "unknown variable rejected");
+    Check(vars.GetVariable("missing",&found)==0 && !found,"unknown variable read reports missing");
+
+    // queue semantics: restart-in-place, stop releasing the queue
+    artc::EmotePlayer queue;
+    Check(queue.Load(model,error),error.c_str());
+    Check(queue.PlayTimeline("loop",0,error) && queue.PlayTimeline("once",1,error),error.c_str());
+    Check(queue.PlayTimeline("loop",artc::EmotePlayer::kTimelineParallel,error) &&
+          queue.PlayingTimelineLabelAt(0)=="loop" &&
+          queue.PlayingTimelineLabelAt(1)=="once" && queue.PlayingTimelineFlagsAt(0)==1,
+          "replaying a label restarts it in place with the new flags");
+    queue.StopTimeline("once");
+    Check(queue.CountPlayingTimelines()==1 && queue.PlayingTimelineLabelAt(0)=="loop","stop removes the live timeline");
+    Check(queue.PlayTimeline("delta",2,error) && !queue.IsTimelinePlaying("delta"),error.c_str());
+    queue.StopTimeline("loop");  // frees the slot → queued delta starts
+    Check(queue.IsTimelinePlaying("delta"),"stopping the live timeline releases the sequential queue");
+    queue.PlayTimeline("delta",2,error);  // busy → queued copy
+    queue.StopTimeline("delta");
+    Check(queue.CountPlayingTimelines()==0 && !queue.IsTimelinePlaying("delta"),"stop removes a queued copy too");
+
+    // fades and manual blend
+    Check(queue.FadeInTimeline("loop",200,0,error),error.c_str());
+    Check(queue.TimelineBlendRatio("loop",&found)==0 && found,"fade-in starts silent");
+    queue.Progress(100);
+    Check(std::abs(queue.TimelineBlendRatio("loop",&found)-0.5)<1e-9 && found,"fade-in interpolates");
+    Check(queue.FadeOutTimeline("loop",200,error),error.c_str());
+    queue.Progress(200);  // blend reaches 0 → auto-stop
+    Check(!queue.IsTimelinePlaying("loop") && queue.TimelineBlendRatio("loop",&found)==0 && !found,
+          "fade-out removes the timeline at zero blend");
+    Check(!queue.FadeOutTimeline("loop",100,error) && error.find("not playing")!=std::string::npos,
+          "fading an idle timeline fails");
+    Check(queue.FadeInTimeline("loop",100,0,error),error.c_str());
+    queue.Progress(100);  // fade completes → blend 1
+    Check(queue.FadeOutTimeline("loop",1000,error),error.c_str());
+    queue.Progress(100);  // blend 1 → 0.9
+    Check(queue.SetTimelineBlendRatio("loop",0.5,error),error.c_str());
+    queue.Progress(2000);
+    Check(queue.TimelineBlendRatio("loop",&found)==0.5 && found && queue.IsTimelinePlaying("loop"),
+          "a direct blend set cancels the fade and its auto-stop");
+    Check(queue.SetTimelineHoldEnd("loop",false,error),error.c_str());
+    queue.Progress(1000);  // 60 frames ≥ loop end 20 → parks
+    Check(!queue.IsTimelinePlaying("loop"),"hold-end parks a looping timeline at its loop end");
+
+    // skip jumps finite timelines to their end and frees the queue
+    artc::EmotePlayer skipper;
+    Check(skipper.Load(model,error),error.c_str());
+    Check(skipper.PlayTimeline("once",1,error) && skipper.PlayTimeline("delta",2,error),error.c_str());
+    Check(skipper.SetVariable("expression",10,5000,0,error),error.c_str());
+    skipper.Skip();
+    Check(skipper.GetVariable("expression",&found)==10 && found,"skip completes transitions");
+    Check(skipper.IsTimelinePlaying("delta") && !skipper.IsTimelinePlaying("once"),
+          "skip jumps a finite timeline to its end and frees the queue");
+    skipper.StopAllTimelines();
+    Check(skipper.CountPlayingTimelines()==0,"stop-all clears the player");
+
+    // a failed Load keeps the previous player intact
+    auto broken=emote_fixture::PlayerDocument();
+    broken.root.object["metadata"].object["base"].object["motion"]=S("missing");
+    auto bad=std::make_shared<artc::EmoteModel>();
+    Check(!bad->Load(std::move(broken),error),"broken model rejected");
+    Check(!player.Load(bad,error) && player.Active() && player.IsTimelinePlaying("delta"),
+          "a failed reload keeps the previous player intact");
+}
 int main(int argc,char** argv) {
     ModelTests();
+    PlayerTests();
     {
         auto data=emote_fixture::Scene();auto model=std::make_shared<artc::EmoteModel>();std::string error;
         Check(model->Load(data,error),error.c_str());artc::EmoteScene scene;Check(scene.Load(model,error),error.c_str());
