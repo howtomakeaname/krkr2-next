@@ -424,7 +424,7 @@ int LuaEngine::l_tag(lua_State *L) {
             inst->transition_wait_ = false;
             const double pending = inst->compositor_
                 ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
-            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending), m["input"] != "0");
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(std::min(pending, 2147483647.0)), m["input"] != "0");
             return 0;
         }
         int time = 0;
@@ -456,7 +456,7 @@ int LuaEngine::l_tag(lua_State *L) {
             // when there is no animation left. `@` establishes a click wait.
             const double pending = inst->compositor_
                 ? inst->compositor_->PendingAnimationMs(inst->NowMs()) : 0;
-            if (pending > 1) inst->SetTimedWait(static_cast<int>(pending), in == "1" || in == "2");
+            if (pending > 1) inst->SetTimedWait(static_cast<int>(std::min(pending, 2147483647.0)), in == "1" || in == "2");
         }
         return 0;
     }
