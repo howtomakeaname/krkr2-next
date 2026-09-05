@@ -13,6 +13,7 @@
 #include "config/ini.h"
 #include "pack/pack_manager.h"
 #include "script/input_state.h"
+#include "script/auto_read.h"
 
 #include "lua.hpp"
 #include <chrono>
@@ -139,6 +140,7 @@ public:
         bool waiting, timed, accept_input, announced, sound, transition;
         std::string sound_key;
         std::chrono::steady_clock::time_point deadline;
+        double auto_elapsed;
     };
     WaitState SuspendWait();
     void RestoreWait(const WaitState& state);
@@ -202,6 +204,7 @@ private:
     void DispatchFrameInput();
     void DispatchClick(float x, float y);
     void AdvanceByInput();
+    void SetAutoMode(bool enabled);
     static int l_enqueueTag(lua_State *L);
     static int l_random(lua_State *L);
     static int l_getScriptStack(lua_State *L);
@@ -251,6 +254,11 @@ private:
     bool timed_wait_ = false;
     bool wait_accept_input_ = true;
     bool click_wait_announced_ = false;
+    bool auto_allowed_ = true, auto_enabled_ = false;
+    bool auto_stop_click_ = true, auto_stop_stop_ = true;
+    std::vector<std::string> auto_sync_se_;
+    AutoReadTimer auto_timer_;
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>> auto_events_;
     // KrKr2-Next: [wait se=N] — released when voice N stops (or by input).
     bool se_wait_ = false;
     std::string wait_se_key_;

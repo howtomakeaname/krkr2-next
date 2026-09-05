@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <set>
 
 extern "C" {
@@ -402,6 +403,33 @@ int LuaEngine::l_tag(lua_State *L) {
             lua_pop(L, 1);
         }
     }
+    if (inst && tagname == "automode") {
+        if (m.count("allow")) {
+            inst->auto_allowed_ = m["allow"] != "0";
+            if (!inst->auto_allowed_) inst->SetAutoMode(false);
+        }
+        if (m.count("stopbyclick")) inst->auto_stop_click_ = m["stopbyclick"] != "0";
+        if (m.count("stopbystop")) inst->auto_stop_stop_ = m["stopbystop"] != "0";
+        if (m.count("syncse")) {
+            inst->auto_sync_se_.clear();
+            std::istringstream list(m["syncse"]);
+            std::string key;
+            while (std::getline(list, key, ',')) if (!key.empty()) inst->auto_sync_se_.push_back(key);
+            inst->auto_timer_.Reset();
+        }
+        return 0;
+    }
+    if (inst && tagname == "exec" && m["command"] == "automode") {
+        inst->SetAutoMode(m.count("mode") ? m["mode"] != "0" : !inst->auto_enabled_);
+        return 0;
+    }
+    if (inst && (tagname == "setonautomodein" || tagname == "setonautomodeout" ||
+                 tagname == "delonautomodein" || tagname == "delonautomodeout")) {
+        const auto event = tagname.substr(3);
+        if (tagname.compare(0, 3, "set") == 0) inst->auto_events_[event] = {m.begin(), m.end()};
+        else inst->auto_events_.erase(event);
+        return 0;
+    }
     if (inst && tagname=="keyconfig") {
         auto& keys=inst->key_roles_[std::atoi(m["role"].c_str())];
         keys.clear();
@@ -472,6 +500,7 @@ int LuaEngine::l_tag(lua_State *L) {
         return 0;
     }
     if ((tagname == "stop" || tagname == "return") && inst && inst->stop_handler_) {
+        if (tagname == "stop" && inst->auto_stop_stop_) inst->SetAutoMode(false);
         inst->stop_handler_(tagname);
         return 0;
     }
@@ -1091,6 +1120,7 @@ void LuaEngine::ClickAt(float x, float y) {
 }
 
 void LuaEngine::AdvanceByInput() {
+    if (auto_enabled_ && auto_stop_click_) { SetAutoMode(false); return; }
     if (wait_accept_input_) SetWaiting(false);
 }
 
@@ -1346,7 +1376,24 @@ void LuaEngine::CallEvent(const std::string &fn,
     }
 }
 
+void LuaEngine::SetAutoMode(bool enabled) {
+    if (enabled && !auto_allowed_) return;
+    if (auto_enabled_ == enabled) return;
+    auto_enabled_ = enabled;
+    sysvals_["status.automode"] = enabled ? "1" : "0";
+    auto_timer_.Reset();
+    const auto it = auto_events_.find(enabled ? "onautomodein" : "onautomodeout");
+    if (it == auto_events_.end()) return;
+    const auto attrs = it->second; // callback can unregister itself
+    std::map<std::string, std::string> values(attrs.begin(), attrs.end());
+    const auto token = script_runner_ ? script_runner_->BeginEvent(*this) : 0;
+    if (!values["function"].empty()) CallEvent(values["function"], attrs, false);
+    else if (!values["file"].empty()) DispatchTag(values["handler"] == "jump" ? "jump" : "call", attrs);
+    if (script_runner_) script_runner_->EndEvent(token);
+}
+
 void LuaEngine::SetWaiting(bool w) {
+    if (waiting_ != w) auto_timer_.Reset();
     if (!w) { se_wait_ = false; timed_wait_ = false; }
     else if (!timed_wait_ && !se_wait_) wait_accept_input_ = true;
     waiting_ = w;
@@ -1360,8 +1407,9 @@ void LuaEngine::SetWaiting(bool w) {
 
 LuaEngine::WaitState LuaEngine::SuspendWait() {
     WaitState state{waiting_, timed_wait_, wait_accept_input_, click_wait_announced_,
-                    se_wait_, transition_wait_, wait_se_key_, wait_until_};
+                    se_wait_, transition_wait_, wait_se_key_, wait_until_, auto_timer_.Elapsed(NowMs())};
     waiting_ = timed_wait_ = se_wait_ = transition_wait_ = click_wait_announced_ = false;
+    auto_timer_.Reset();
     return state;
 }
 
@@ -1374,6 +1422,7 @@ void LuaEngine::RestoreWait(const WaitState& state) {
     transition_wait_ = state.transition;
     wait_se_key_ = state.sound_key;
     wait_until_ = state.deadline;
+    auto_timer_.Restore(NowMs(), state.auto_elapsed);
 }
 
 // [wt]/[wait] style time waits: hold the runner until the deadline passes.
@@ -1394,6 +1443,14 @@ bool LuaEngine::IsWaiting() {
     if (se_wait_ && (!sounds_ || !sounds_->IsPlaying(wait_se_key_))) {
         se_wait_ = false;
         SetWaiting(false);
+    }
+    if (waiting_ && !timed_wait_ && !se_wait_ && auto_enabled_) {
+        bool blocked = false;
+        for (const auto& key : auto_sync_se_)
+            if (sounds_ && sounds_->IsPlaying(key)) { blocked = true; break; }
+        const auto delay = vars_.find("s.automodewait");
+        const double ms = delay == vars_.end() ? 1000 : std::atof(delay->second.c_str());
+        if (auto_timer_.Ready(NowMs(), ms, blocked)) SetWaiting(false);
     }
     return waiting_;
 }

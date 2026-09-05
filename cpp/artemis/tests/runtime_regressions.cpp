@@ -154,6 +154,39 @@ int main() {
     lua.EndFrame();
     Check(lua.DoString("e:setEventHandler{onEnterFrame=''}", "remove filter"),"remove frame filter");
 
+    artc::AutoReadTimer reading;
+    Check(!reading.Ready(0, 100, true), "voice/text blocks the auto timer");
+    Check(!reading.Ready(500, 100, false), "reading interval starts after voice/text");
+    Check(!reading.Ready(599, 100, false), "auto respects the configured interval");
+    const double elapsed = reading.Elapsed(550);
+    reading.Reset(); reading.Restore(2000, elapsed);
+    Check(!reading.Ready(2049, 100, false) && reading.Ready(2050, 100, false),
+          "menu time does not consume the suspended reading interval");
+    Check(!reading.Ready(2060, 100, true) && !reading.Ready(3000, 100, false),
+          "a newly synchronized voice resets the reading interval");
+
+    artc::LuaEngine auto_script;
+    Check(auto_script.Init(&packs, ini, "android", 1280, 720), "auto engine init");
+    Check(auto_script.DoString("auto_out=0; function auto_stop(e,p) auto_out=auto_out+1 end; "
+        "e:tag{'setonautomodeout',['function']='auto_stop'}; "
+        "e:tag{'automode',allow=0}; e:tag{'exec',command='automode',mode=1}; "
+        "assert(e:var('s.status.automode')=='0'); e:tag{'automode',allow=1}; "
+        "e:tag{'exec',command='automode',mode=1}; e:tag{'var',name='s.automodewait',data=0}; "
+        "assert(e:var('s.status.automode')=='1')", "auto setup"), "auto permission and state");
+    auto_script.SetTimedWait(10000);
+    Check(auto_script.IsWaiting(), "auto must not bypass a mandatory timer");
+    auto_script.SetWaiting(false); auto_script.SetWaiting(true);
+    Check(!auto_script.IsWaiting(), "zero-delay auto releases a click wait");
+    Check(auto_script.DoString("e:tag{'var',name='s.automodewait',data=10000}", "auto interval"),
+          "set reading interval");
+    auto_script.SetWaiting(true); auto_script.ClickAt(10,10); auto_script.RunEnterFrame();
+    Check(auto_script.IsWaiting(), "first click cancels auto without skipping the page");
+    Check(auto_script.DoString("assert(auto_out==1 and e:var('s.status.automode')=='0'); "
+        "e:tag{'exec',command='automode',mode=0}; assert(auto_out==1)", "auto stopped"),
+        "auto stop callback fires exactly once");
+    auto_script.ClickAt(10,10); auto_script.RunEnterFrame();
+    Check(!auto_script.IsWaiting(), "next click advances after cancelling auto");
+
     artc::Compositor compositor;
     compositor.SetProps("500.1", {{"w", "100"}, {"h", "100"}});
     const_cast<artc::Layer&>(compositor.Layers().front()).texture = 1;
