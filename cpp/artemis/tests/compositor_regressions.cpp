@@ -210,6 +210,37 @@ int main() {
     Check(messages.DoString("e:tag{'rp'}; e:tag{'print',data='A'}", "clear ruby"), "clear ruby page");
     Check(c.Layers().back().glyphs.size()==1,"rp also clears ruby ranges");
     c.DeleteLayer("2");
+    Check(c.SetText("2","AA",10,0xffffff,100),"measure line-break fixture");
+    const auto advance=c.Layers().back().glyphs[1].x-c.Layers().back().glyphs[0].x;
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"AAAA。A",10,0xffffff,4*advance,{{"prohibit","0"}}),
+          "layout without line-break restrictions");
+    Check(c.Layers().back().glyphs[4].y>c.Layers().back().glyphs[3].y,
+          "disabled prohibition retains character wrapping");
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"AAAA。A",10,0xffffff,4*advance,{{"prohibit","1"}}),
+          "layout prohibited line-start punctuation");
+    const auto closing=c.Layers().back().glyphs;
+    Check(closing[3].y>closing[2].y && closing[4].y==closing[3].y,
+          "closing punctuation carries its preceding character to the next line");
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"AAAA。A",10,0xffffff,4*advance,{{"prohibit","1"},{"hung","1"}}),
+          "layout hanging punctuation");
+    const auto hanging=c.Layers().back().glyphs;
+    Check(hanging[4].y==hanging[3].y && hanging[4].x>=4*advance && hanging[5].y>hanging[4].y,
+          "hanging full stop stays on the filled line without pulling the next letter along");
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"AAA（AA",10,0xffffff,4*advance,{{"prohibit","1"}}),
+          "layout prohibited line-end bracket");
+    const auto opening=c.Layers().back().glyphs;
+    Check(opening[3].y>opening[2].y && opening[4].y==opening[3].y,
+          "opening bracket wraps with the next character");
+    c.DeleteLayer("2");
+    Check(c.SetText("2",u8"A\n。",10,0xffffff,4*advance,{{"prohibit","1"},{"hung","1"}}),
+          "layout explicit newline before punctuation");
+    Check(c.Layers().back().glyphs[1].y>c.Layers().back().glyphs[0].y,
+          "explicit newline overrides automatic line-break rules");
+    c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
     c.SetProps("3.1",{{"left","5"},{"top","4"}});

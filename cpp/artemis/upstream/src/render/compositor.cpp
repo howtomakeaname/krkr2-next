@@ -1,4 +1,5 @@
 #include "render/compositor.h"
+#include "render/line_break.h"
 #include "pack/pack_manager.h"
 #include "pack/pf8_reader.h"
 #include "log/logger.h"
@@ -938,35 +939,49 @@ bool Compositor::SetText(const std::string &id, const std::string &text,
     // layout: (line, pen_x_in_line)
     std::vector<int> lx(glyphs.size()), ly(glyphs.size());
     std::vector<int> line_w(1, 0);
-    int pen = 0, line = 0;
-    for (size_t k = 0; k < base_count; ++k) {
-        if (cps[k] == '\r') { lx[k] = -1; continue; }
-        if (cps[k] == '\n') { lx[k] = -1; pen = 0; ++line; line_w.push_back(0); continue; }
+    struct Unit { size_t first,last; int width; const RubyGroup* ruby; };
+    std::vector<Unit> units;
+    for(size_t k=0;k<base_count;) {
+        if(cps[k]=='\r') { lx[k++]=-1;continue; }
         const RubyGroup* group=nullptr;
-        for(const auto& r:ruby_groups) if(r.first==k) { group=&r; break; }
-        if(group) {
-            if(pen>0 && wrapWidth>0 && pen+group->width>wrapWidth) {
-                pen=0; ++line; line_w.push_back(0);
-            }
-            int base_pen=pen+(group->width-group->base_width)/2;
-            for(size_t j=group->first;j<group->last;++j) {
-                lx[j]=base_pen; ly[j]=line; base_pen+=advances[j];
-            }
-            int reading_width=0;
-            for(size_t j=group->glyph_first;j<group->glyph_last;++j) reading_width+=advances[j];
-            int ruby_pen=pen+(group->width-reading_width)/2;
-            for(size_t j=group->glyph_first;j<group->glyph_last;++j) {
-                lx[j]=ruby_pen; ly[j]=line; ruby_pen+=advances[j];
-            }
-            pen+=group->width; line_w[line]=std::max(line_w[line],pen);
-            k=group->last-1; continue;
+        for(const auto& r:ruby_groups) if(r.first==k) {group=&r;break;}
+        const size_t end=group ? group->last : k+1;
+        units.push_back({k,end,group ? group->width : advances[k],group});k=end;
+    }
+    const bool prohibit=number("prohibit",0)!=0, hung=number("hung",0)!=0;
+    int pen = 0, line = 0;
+    for(size_t u=0;u<units.size();) {
+        const size_t k=units[u].first;
+        if(cps[k]=='\n') {lx[k]=-1;pen=0;++line;line_w.push_back(0);++u;continue;}
+        size_t end=u+1;int width=units[u].width;
+        // Keep an opening bracket with its following text, and a closing
+        // mark with the preceding text. Ruby remains one indivisible unit.
+        while(prohibit && end<units.size() && cps[units[end].first]!='\n' &&
+              (ProhibitLineEnd(cps[units[end-1].last-1]) ||
+               (ProhibitLineStart(cps[units[end].first]) && !(hung && HangPunctuation(cps[units[end].first]))))) {
+            width+=units[end].width;++end;
         }
-        if (pen > 0 && wrapWidth > 0 && pen + advances[k] > wrapWidth) {
-            pen = 0; ++line; line_w.push_back(0);
+        if(pen>0 && wrapWidth>0 && pen+width>wrapWidth && !(hung && HangPunctuation(cps[k]))) {
+            pen=0;++line;line_w.push_back(0);
         }
-        lx[k] = pen; ly[k] = line;
-        pen += advances[k];
-        if (line_w[line] < pen) line_w[line] = pen;
+        for(;u<end;++u) {
+            const auto& unit=units[u];
+            if(const auto* group=unit.ruby) {
+              int base_pen=pen+(group->width-group->base_width)/2;
+              for(size_t j=group->first;j<group->last;++j) {
+                  lx[j]=base_pen; ly[j]=line; base_pen+=advances[j];
+              }
+              int reading_width=0;
+              for(size_t j=group->glyph_first;j<group->glyph_last;++j) reading_width+=advances[j];
+              int ruby_pen=pen+(group->width-reading_width)/2;
+              for(size_t j=group->glyph_first;j<group->glyph_last;++j) {
+                  lx[j]=ruby_pen; ly[j]=line; ruby_pen+=advances[j];
+              }
+            } else {
+              lx[unit.first]=pen;ly[unit.first]=line;
+            }
+            pen+=unit.width;line_w[line]=std::max(line_w[line],pen);
+        }
     }
     const int n_lines = static_cast<int>(line_w.size());
     int tex_w = 0;
