@@ -1,32 +1,28 @@
 // audio_ohos.cpp — OpenHarmony OHAudio backend for the Artemis compat engine.
 //
-// Mirrors the Android OpenSL ES design in upstream/src/audio/audio.cpp: one
-// system renderer per active voice (the audio server mixes them), the whole
-// ogg decoded up front with stb_vorbis to S16 PCM, a pull callback that
-// copies from the PCM buffer and wraps around when the voice loops. Voices
-// keep their native sample rate / channel count so no resampling is needed.
-//
-// Thread model: OHAudio invokes OnWriteData on its own server thread; the
-// voice table is guarded by a mutex and every renderer is stopped before its
-// PCM buffer is released, so the callback never sees a dangling pointer.
+// One renderer per voice; Vorbis decoding and intro/loop sequencing are shared
+// engine code. Callbacks decode only the requested stereo block. Renderers are
+// stopped and released before their sources, so no callback outlives its voice.
 #include "audio/audio.h"
+#include "audio/vorbis_stream.h"
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "log/logger.h"
 #include "pack/pack_manager.h"
 
-#define STB_VORBIS_NO_STDIO 1
-#define STB_VORBIS_HEADER_ONLY
-#include "stb_vorbis/stb_vorbis.c"   // -I upstream/third_party
 
 #include <ohaudio/native_audiorenderer.h>
 #include <ohaudio/native_audiostream_base.h>
@@ -38,15 +34,16 @@ namespace {
 
 struct Voice {
     OH_AudioRenderer *renderer = nullptr;
-    short *pcm = nullptr;          // interleaved S16, owned (malloc'd by stb_vorbis)
-    size_t pcm_bytes = 0;
-    size_t cursor = 0;             // byte offset of the next sample to hand out
-    bool loop = false;
+    VorbisStream source;
+    uint64_t total_frames = 0;
+    std::string key;
+    std::atomic<uint64_t> submitted_frames{0};
     std::atomic<bool> finished{false};
-    std::mutex mutex;              // protects cursor (callback vs. Stop)
+    std::mutex mutex;              // serializes source callbacks
     int channels = 0;
     int sample_rate = 0;
     int vol1000 = 1000;
+    std::atomic<int> pan1000{0};
 };
 
 OH_AudioData_Callback_Result OnWriteData(OH_AudioRenderer *, void *user_data,
@@ -55,22 +52,15 @@ OH_AudioData_Callback_Result OnWriteData(OH_AudioRenderer *, void *user_data,
     auto *out = static_cast<uint8_t *>(audio_data);
     if (!v || size <= 0) return AUDIO_DATA_CALLBACK_RESULT_VALID;
     std::lock_guard<std::mutex> lk(v->mutex);
-    size_t written = 0;
     const size_t want = static_cast<size_t>(size);
-    while (written < want) {
-        if (v->cursor >= v->pcm_bytes) {
-            if (!v->loop) break;
-            v->cursor = 0;
-        }
-        const size_t chunk = std::min(want - written, v->pcm_bytes - v->cursor);
-        std::memcpy(out + written, reinterpret_cast<uint8_t *>(v->pcm) + v->cursor, chunk);
-        v->cursor += chunk;
-        written += chunk;
-    }
-    if (written < want) {
-        std::memset(out + written, 0, want - written);
-        v->finished = true;
-    }
+    const size_t frames = want / (sizeof(int16_t) * 2);
+    const size_t written = v->source.ReadStereo(reinterpret_cast<int16_t*>(out), frames);
+    const size_t bytes = written * sizeof(int16_t) * 2;
+    v->submitted_frames.fetch_add(written, std::memory_order_relaxed);
+    if (bytes < want) std::memset(out + bytes, 0, want - bytes);
+    if (v->source.Ended()) v->finished = true;
+    ApplyStereoPan(reinterpret_cast<int16_t*>(out), written,
+                   v->pan1000.load(std::memory_order_relaxed));
     return AUDIO_DATA_CALLBACK_RESULT_VALID;
 }
 
@@ -83,13 +73,14 @@ float VolumeToGain(int vol1000) {
 void DestroyVoice(std::unique_ptr<Voice> &v) {
     if (!v) return;
     if (v->renderer) {
+        uint32_t underflows = 0;
+        const auto stats = OH_AudioRenderer_GetUnderflowCount(v->renderer, &underflows);
+        Log(kLogInfo, "audio: retire " + v->key + " submitted=" +
+            std::to_string(v->submitted_frames.load()) + " underflows=" +
+            (stats == AUDIOSTREAM_SUCCESS ? std::to_string(underflows) : "unavailable"));
         OH_AudioRenderer_Stop(v->renderer);
         OH_AudioRenderer_Release(v->renderer);
         v->renderer = nullptr;
-    }
-    if (v->pcm) {
-        free(v->pcm);
-        v->pcm = nullptr;
     }
     v.reset();
 }
@@ -101,6 +92,46 @@ struct Audio::Impl {
     std::mutex mutex;
     std::map<std::string, std::unique_ptr<Voice>> voices;
     bool paused = false;
+    std::mutex retire_mutex;
+    std::condition_variable retire_ready;
+    std::deque<std::unique_ptr<Voice>> retired;
+    bool closing = false;
+    std::thread releaser;
+
+    Impl() : releaser([this] {
+        for (;;) {
+            std::unique_ptr<Voice> voice;
+            {
+                std::unique_lock<std::mutex> lock(retire_mutex);
+                retire_ready.wait(lock, [this] { return closing || !retired.empty(); });
+                if (retired.empty()) return;
+                voice = std::move(retired.front());
+                retired.pop_front();
+            }
+            // Stop waits for queued audio (commonly >50 ms on OHAudio).
+            // Keep that wait off the engine's render/input thread.
+            DestroyVoice(voice);
+        }
+    }) {}
+
+    ~Impl() {
+        {
+            std::lock_guard<std::mutex> lock(retire_mutex);
+            closing = true;
+        }
+        retire_ready.notify_one();
+        releaser.join(); // every callback has ended before unloading the engine
+    }
+
+    void Retire(std::unique_ptr<Voice>& voice) {
+        if (!voice) return;
+        if (voice->renderer) OH_AudioRenderer_SetVolume(voice->renderer, 0);
+        {
+            std::lock_guard<std::mutex> lock(retire_mutex);
+            retired.push_back(std::move(voice));
+        }
+        retire_ready.notify_one();
+    }
 };
 
 Audio::Audio() : impl_(new Impl) {}
@@ -117,31 +148,18 @@ void Audio::Shutdown() {
 }
 
 bool Audio::Play(const std::string &key, const std::string &file, bool loop, int vol) {
-    std::vector<uint8_t> ogg;
-    if (!impl_->packs || !impl_->packs->Read(file, ogg) || ogg.empty()) {
-        Log(kLogWarn, "audio: ogg not found: " + file);
-        return false;
-    }
-    int channels = 0, sample_rate = 0;
-    short *pcm = nullptr;
-    const int frames = stb_vorbis_decode_memory(ogg.data(), static_cast<int>(ogg.size()),
-                                                &channels, &sample_rate, &pcm);
-    if (frames <= 0 || !pcm || channels <= 0 || sample_rate <= 0) {
-        Log(kLogWarn, "audio: vorbis decode failed: " + file);
-        if (pcm) free(pcm);
-        return false;
-    }
-    const size_t pcm_bytes = static_cast<size_t>(frames) * 2u * static_cast<size_t>(channels);
-    if (pcm_bytes > (1u << 28)) {
-        Log(kLogWarn, "audio: file too large to queue: " + file);
-        free(pcm);
-        return false;
-    }
-
     auto voice = std::make_unique<Voice>();
-    voice->pcm = pcm;
-    voice->pcm_bytes = pcm_bytes;
-    voice->loop = loop;
+    if (!impl_->packs || !voice->source.Open(
+            [this](const std::string& name, std::vector<uint8_t>& bytes) {
+                return impl_->packs->Read(name, bytes);
+            }, file, loop)) {
+        Log(kLogWarn, "audio: cannot open Vorbis stream: " + file);
+        return false;
+    }
+    const int sample_rate = voice->source.SampleRate();
+    const int channels = 2;
+    voice->total_frames = voice->source.FrameCount();
+    voice->key = key;
     voice->channels = channels;
     voice->sample_rate = sample_rate;
     voice->vol1000 = vol < 0 ? 0 : (vol > 1000 ? 1000 : vol);
@@ -150,7 +168,6 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
     if (OH_AudioStreamBuilder_Create(&builder, AUDIOSTREAM_TYPE_RENDERER) != AUDIOSTREAM_SUCCESS ||
         !builder) {
         Log(kLogError, "audio: OH_AudioStreamBuilder_Create failed: " + file);
-        free(pcm);
         return false;
     }
     OH_AudioStreamBuilder_SetSamplingRate(builder, sample_rate);
@@ -166,26 +183,30 @@ bool Audio::Play(const std::string &key, const std::string &file, bool loop, int
     if (gen != AUDIOSTREAM_SUCCESS || !renderer) {
         Log(kLogError, "audio: GenerateRenderer failed (" + std::to_string(static_cast<int>(gen)) +
                            "): " + file);
-        free(pcm);
         return false;
     }
     voice->renderer = renderer;
     OH_AudioRenderer_SetVolume(renderer, VolumeToGain(voice->vol1000));
 
+    const uint64_t voice_frames = voice->total_frames;
     {
         std::lock_guard<std::mutex> lk(impl_->mutex);
         auto it = impl_->voices.find(key);
         if (it != impl_->voices.end()) {
-            DestroyVoice(it->second);   // replace an existing voice on this key
+            impl_->Retire(it->second);
             impl_->voices.erase(it);
         }
-        if (!impl_->paused) OH_AudioRenderer_Start(renderer);
+        if (!impl_->paused && OH_AudioRenderer_Start(renderer) != AUDIOSTREAM_SUCCESS) {
+            Log(kLogError, "audio: renderer start failed: " + file);
+            impl_->Retire(voice);
+            return false;
+        }
         impl_->voices[key] = std::move(voice);
     }
 
     Log(kLogInfo, "audio: play " + key + " " + file + " [" + std::to_string(channels) +
                       "ch " + std::to_string(sample_rate) + "Hz " +
-                      std::to_string(pcm_bytes >> 10) + "KiB] loop=" + std::to_string(loop) +
+                      std::to_string(voice_frames) + " frames] loop=" + std::to_string(loop) +
                       " vol=" + std::to_string(vol));
     return true;
 }
@@ -194,7 +215,7 @@ void Audio::Stop(const std::string &key) {
     std::lock_guard<std::mutex> lk(impl_->mutex);
     auto it = impl_->voices.find(key);
     if (it == impl_->voices.end()) return;
-    DestroyVoice(it->second);
+    impl_->Retire(it->second);
     impl_->voices.erase(it);
 }
 
@@ -202,12 +223,19 @@ bool Audio::IsPlaying(const std::string &key) const {
     std::lock_guard<std::mutex> lk(impl_->mutex);
     auto it = impl_->voices.find(key);
     if (it == impl_->voices.end() || !it->second) return false;
-    return it->second->loop || !it->second->finished.load();
+    const auto& v = *it->second;
+    if (!v.finished.load()) return true;
+    // The callback queues PCM ahead of the speaker. Releasing its renderer
+    // as soon as the last buffer is filled truncates the tail of the voice.
+    int64_t position = 0, timestamp = 0;
+    if (OH_AudioRenderer_GetTimestamp(v.renderer, CLOCK_MONOTONIC, &position, &timestamp)
+            != AUDIOSTREAM_SUCCESS) return true;
+    return position < static_cast<int64_t>(v.submitted_frames.load());
 }
 
 void Audio::StopAll() {
     std::lock_guard<std::mutex> lk(impl_->mutex);
-    for (auto &kv : impl_->voices) DestroyVoice(kv.second);
+    for (auto &kv : impl_->voices) impl_->Retire(kv.second);
     impl_->voices.clear();
 }
 
@@ -220,8 +248,12 @@ void Audio::SetVolume(const std::string &key, int vol) {
         OH_AudioRenderer_SetVolume(it->second->renderer, VolumeToGain(it->second->vol1000));
 }
 
-// Implemented by the streaming OHAudio backend; unused by legacy tags.
-void Audio::SetPan(const std::string &, int) {}
+void Audio::SetPan(const std::string &key, int pan) {
+    std::lock_guard<std::mutex> lk(impl_->mutex);
+    const auto it = impl_->voices.find(key);
+    if (it != impl_->voices.end() && it->second)
+        it->second->pan1000.store(std::clamp(pan, -1000, 1000), std::memory_order_relaxed);
+}
 
 void Audio::PauseAll() {
     std::lock_guard<std::mutex> lk(impl_->mutex);
@@ -234,7 +266,9 @@ void Audio::ResumeAll() {
     std::lock_guard<std::mutex> lk(impl_->mutex);
     impl_->paused = false;
     for (auto &kv : impl_->voices)
-        if (kv.second && kv.second->renderer && !kv.second->finished)
+        // Even when the callback has queued the last sample, the renderer
+        // may still have an unplayed tail that was paused with the app.
+        if (kv.second && kv.second->renderer)
             OH_AudioRenderer_Start(kv.second->renderer);
 }
 
