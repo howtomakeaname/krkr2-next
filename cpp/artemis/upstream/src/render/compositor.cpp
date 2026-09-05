@@ -141,7 +141,8 @@ std::string Compositor::HitLayer(float x, float y) const {
         float ex, ey, ew, eh, ea; bool ev;
         EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
         if (!ev || !l.texture) continue;
-        if (x < ex || y < ey || x >= ex + ew || y >= ey + eh) continue;
+        if (x < std::min(ex, ex + ew) || y < std::min(ey, ey + eh) ||
+            x >= std::max(ex, ex + ew) || y >= std::max(ey, ey + eh)) continue;
         if (!best) best = &l;
         else {
             const int c = ZCmp(l.id, best->id);
@@ -229,12 +230,12 @@ bool Compositor::ReadParam(const Layer &l, const std::string &param, float *v) {
 }
 
 bool Compositor::ApplyParam(Layer &l, const std::string &param, float v) {
-    if (param == "alpha") { l.alpha = v > 1.0f ? v / 255.0f : (v < 0 ? 0 : v); if (l.alpha > 1) l.alpha = 1; return true; }
+    if (param == "alpha") { l.alpha = std::clamp(v / 255.0f, 0.0f, 1.0f); return true; }
     if (param == "left" || param == "x") { l.x = v; l.own_pos = true; return true; }
     if (param == "top" || param == "y") { l.y = v; l.own_pos = true; return true; }
-    if (param == "xscale") { if (v > 0) l.sx = v / 100.0f; return true; }
-    if (param == "yscale") { if (v > 0) l.sy = v / 100.0f; return true; }
-    if (param == "zoom") { if (v > 0) { l.sx = l.sy = v / 100.0f; } return true; }
+    if (param == "xscale") { l.sx = v / 100.0f; return true; }
+    if (param == "yscale") { l.sy = v / 100.0f; return true; }
+    if (param == "zoom") { l.sx = l.sy = v / 100.0f; return true; }
     if (param == "w") { l.w = v; return true; }
     if (param == "h") { l.h = v; return true; }
     return false;
@@ -382,7 +383,8 @@ std::vector<std::string> Compositor::HitLayers(float x, float y) const {
         float ex, ey, ew, eh, ea; bool ev;
         EffectiveRect(l, &ex, &ey, &ew, &eh, &ea, &ev);
         if (!ev || !l.texture) continue;
-        if (x < ex || y < ey || x >= ex + ew || y >= ey + eh) continue;
+        if (x < std::min(ex, ex + ew) || y < std::min(ey, ey + eh) ||
+            x >= std::max(ex, ex + ew) || y >= std::max(ey, ey + eh)) continue;
         hits.push_back(&l);
     }
     // topmost first: higher z (ZCmp) then deeper id wins
@@ -526,10 +528,11 @@ bool Compositor::InitGl() {
 // Copy the composited stage (the current viewport) into last_frame_tex_ so
 // the next [trans] can fade it out. GPU-side copy; nothing is read back.
 void Compositor::CaptureFrame() {
-    if (!gl_ready_) return;
-    GLint vp[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, vp);
-    if (vp[2] <= 0 || vp[3] <= 0) return;
+    if (!gl_ready_ || !scene_fbo_) return;
+    GLint previous_fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, scene_fbo_);
+    glActiveTexture(GL_TEXTURE0);
     if (!last_frame_tex_) {
         glGenTextures(1, &last_frame_tex_);
         glBindTexture(GL_TEXTURE_2D, last_frame_tex_);
@@ -542,18 +545,16 @@ void Compositor::CaptureFrame() {
     }
     // GLES2 rejects copying more components than the framebuffer stores:
     // pick RGB when the surface has no alpha plane.
-    GLint alpha_bits = 0;
-    glGetIntegerv(GL_ALPHA_BITS, &alpha_bits);
     glGetError();   // clear any stale error before the copy
-    glCopyTexImage2D(GL_TEXTURE_2D, 0, alpha_bits > 0 ? GL_RGBA : GL_RGB,
-                     vp[0], vp[1], vp[2], vp[3], 0);
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, stage_w_, stage_h_, 0);
     trans_have_frame_ = glGetError() == GL_NO_ERROR;
+    glBindFramebuffer(GL_FRAMEBUFFER, previous_fbo);
 }
 
 bool Compositor::BeginTransition(double now_ms, int time_ms, const std::vector<uint8_t> &rule,
                                  int rule_w, int rule_h, int vague) {
-    // StepScript runs before this tick's Present, so the default FB is
-    // still the previous composed scene — capture that as the fade-from.
+    // Window back buffers are undefined after eglSwapBuffers. The retained
+    // scene remains valid on Android, OHOS and pbuffer hosts alike.
     CaptureFrame();
     if (!gl_ready_ || time_ms <= 0 || !trans_have_frame_) return false;
     if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
@@ -593,7 +594,7 @@ void Compositor::DrawTransitionOverlay() {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, last_frame_tex_);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     // Captured frame rows are bottom-up: sample v=1 at the stage top.
     const float W = (float)stage_w_, H = (float)stage_h_;
     float verts[16] = {
@@ -816,11 +817,11 @@ void Compositor::SetProps(const std::string &id,
             else if (kv.first == "h") l.h = std::stof(kv.second);
             else if (kv.first == "alpha") {
                 const float a = std::stof(kv.second);
-                l.alpha = a > 1.0f ? a / 255.0f : a;   // script uses 0-255
+                l.alpha = std::clamp(a / 255.0f, 0.0f, 1.0f);   // script uses 0-255
             }
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
-            else if (kv.first == "xscale") { const float v = std::stof(kv.second); if (v > 0) l.sx = v / 100.0f; }
-            else if (kv.first == "yscale") { const float v = std::stof(kv.second); if (v > 0) l.sy = v / 100.0f; }
+            else if (kv.first == "xscale") { const float v = std::stof(kv.second); l.sx = v / 100.0f; }
+            else if (kv.first == "yscale") { const float v = std::stof(kv.second); l.sy = v / 100.0f; }
             else if (kv.first == "ownpos") l.own_pos = true;
             else if (kv.first == "anchory") l.ay = std::stof(kv.second);
             else if (kv.first == "visible") l.visible = (kv.second != "0");
@@ -883,6 +884,8 @@ void Compositor::ReleaseGl() {
     tweens_.clear();
     if (trans_rule_tex_) { glDeleteTextures(1, &trans_rule_tex_); trans_rule_tex_ = 0; }
     if (last_frame_tex_) { glDeleteTextures(1, &last_frame_tex_); last_frame_tex_ = 0; }
+    if (scene_fbo_) { glDeleteFramebuffers(1, &scene_fbo_); scene_fbo_ = 0; }
+    if (scene_tex_) { glDeleteTextures(1, &scene_tex_); scene_tex_ = 0; }
     if (prog_.program) { glDeleteProgram(prog_.program); prog_.program = 0; }
     if (tprog_.program) { glDeleteProgram(tprog_.program); tprog_.program = 0; }
     trans_active_ = false;
@@ -902,6 +905,34 @@ void Compositor::Shutdown() {
 void Compositor::Draw() {
     if (!gl_ready_) return;
 
+    GLint target = 0, viewport[4];
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &target);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    if (!scene_fbo_) {
+        glGenTextures(1, &scene_tex_);
+        glBindTexture(GL_TEXTURE_2D, scene_tex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, stage_w_, stage_h_, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenFramebuffers(1, &scene_fbo_);
+        glBindFramebuffer(GL_FRAMEBUFFER, scene_fbo_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, scene_tex_, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            Log(kLogError, "compositor: scene framebuffer incomplete");
+            glDeleteFramebuffers(1, &scene_fbo_); scene_fbo_ = 0;
+            glDeleteTextures(1, &scene_tex_); scene_tex_ = 0;
+            glBindFramebuffer(GL_FRAMEBUFFER, target);
+            return;
+        }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, scene_fbo_);
+    glViewport(0, 0, stage_w_, stage_h_);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+
     // sort by z (stable: preserve insertion order for equal z)
     std::vector<const Layer *> sorted;
     for (const auto &l : layers_) sorted.push_back(&l);
@@ -917,7 +948,7 @@ void Compositor::Draw() {
     glUniform1i(prog_.u_tex, 0);
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     for (const Layer *l : sorted) {
         float ex, ey, ew, eh, ea; bool ev;
@@ -968,6 +999,19 @@ void Compositor::Draw() {
     // the last Present). Copying the full stage every Draw was a GPU
     // sync we do not need for idle frames.
     DrawTransitionOverlay();
+    glBindFramebuffer(GL_FRAMEBUFFER, target);
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    glUseProgram(prog_.program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, scene_tex_);
+    glUniform1f(prog_.u_alpha, 1);
+    const float w = float(stage_w_), h = float(stage_h_);
+    const float screen[16] = {0,0,0,1, w,0,1,1, 0,h,0,0, w,h,1,0};
+    glVertexAttribPointer(prog_.a_pos, 2, GL_FLOAT, GL_FALSE, 16, screen);
+    glEnableVertexAttribArray(prog_.a_pos);
+    glVertexAttribPointer(prog_.a_uv, 2, GL_FLOAT, GL_FALSE, 16, screen + 2);
+    glEnableVertexAttribArray(prog_.a_uv);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     // [flip]: the composed frame is now the presentation candidate
     if (present_cb_) present_cb_();
 }
@@ -1041,11 +1085,11 @@ void Compositor::SetProps(const std::string &id,
             else if (kv.first == "h") l.h = std::stof(kv.second);
             else if (kv.first == "alpha") {
                 const float a = std::stof(kv.second);
-                l.alpha = a > 1.0f ? a / 255.0f : a;
+                l.alpha = std::clamp(a / 255.0f, 0.0f, 1.0f);
             }
             else if (kv.first == "anchorx") l.ax = std::stof(kv.second);
-            else if (kv.first == "xscale") { const float v = std::stof(kv.second); if (v > 0) l.sx = v / 100.0f; }
-            else if (kv.first == "yscale") { const float v = std::stof(kv.second); if (v > 0) l.sy = v / 100.0f; }
+            else if (kv.first == "xscale") { const float v = std::stof(kv.second); l.sx = v / 100.0f; }
+            else if (kv.first == "yscale") { const float v = std::stof(kv.second); l.sy = v / 100.0f; }
             else if (kv.first == "ownpos") l.own_pos = true;
             else if (kv.first == "anchory") l.ay = std::stof(kv.second);
             else if (kv.first == "visible") l.visible = (kv.second != "0");

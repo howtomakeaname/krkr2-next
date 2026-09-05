@@ -186,6 +186,7 @@ private:
     float trans_vague_ = 0;
     uint32_t trans_rule_tex_ = 0;
     uint32_t last_frame_tex_ = 0;   // copy of the last composited frame
+    uint32_t scene_fbo_ = 0, scene_tex_ = 0; // retained scene, independent of swap buffers
     bool trans_have_frame_ = false;
     std::vector<Layer> layers_;   // draw order = vector order
     PackManager *packs_ = nullptr;
