@@ -6,6 +6,7 @@
 #include "audio/audio.h"
 #include "audio/audio_channels.h"
 #include "pack/pack_manager.h"
+#include "pack/psb.h"
 #include "script/pluto_lua.h"
 #include "script/pluto_codec.h"
 #include "script/native_save.h"
@@ -15,6 +16,7 @@
 #include "log/logger.h"
 
 #include <cstring>
+#include <new>       // placement new for the E-mote proxy userdata
 #include <chrono>
 #include <cmath>
 #include <ctime>
@@ -86,6 +88,425 @@ bool IsClickWaitTag(const std::string &tag) {
 }
 } // namespace
 
+// ---- E-mote layer proxies (e:createEmoteLayer) ----
+// The userdata holds {engine, layer id}; every method resolves the live
+// player through the engine registry, so a proxy surviving a lydel or a
+// same-id replace reports "layer removed" instead of dangling. Method
+// names follow the reference motion-player binding; the original proxy was
+// luabind-registered with the same camelCase surface, so both spellings
+// are accepted. Unregistered physics/hit-test methods (startWind,
+// setOuterForce, contains, ...) fall through to a logging stub like the
+// e-table does — this layer deliberately does not fake SDK behavior it
+// cannot render.
+namespace {
+const char kEmoteMetaName[] = "artc.emote";
+
+struct EmoteProxy {
+    LuaEngine *engine;
+    std::string id;
+};
+
+EmoteProxy *CheckEmoteProxy(lua_State *L) {
+    return static_cast<EmoteProxy *>(luaL_checkudata(L, 1, kEmoteMetaName));
+}
+
+// Resolve the proxy's live player; on a stale handle leaves
+// nil + "E-mote layer removed" on the stack (caller returns 2).
+EmotePlayer *Emote(lua_State *L) {
+    EmoteProxy *p = CheckEmoteProxy(L);
+    if (p) {
+        EmotePlayer *e = p->engine->FindEmote(p->id);
+        if (e) return e;
+    }
+    Log(kLogError, "emote: layer removed");
+    lua_pushnil(L);
+    lua_pushstring(L, "E-mote layer removed");
+    return nullptr;
+}
+
+// Failable operation: log and return false + reason (2 values).
+int EmoteError(lua_State *L, const std::string &error) {
+    Log(kLogError, "emote: " + error);
+    lua_pushboolean(L, false);
+    lua_pushstring(L, error.c_str());
+    return 2;
+}
+
+int m_setRot(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->SetRot(luaL_checknumber(L, 2), luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0));
+    return 0;
+}
+int m_getRot(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushnumber(L, e->GetRot());
+    return 1;
+}
+int m_setCoord(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->SetCoord(luaL_checknumber(L, 2), luaL_checknumber(L, 3),
+                luaL_optnumber(L, 4, 0), luaL_optnumber(L, 5, 0));
+    return 0;
+}
+int m_getCoord(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    double x = 0, y = 0;
+    e->GetCoord(&x, &y);
+    lua_pushnumber(L, x);
+    lua_pushnumber(L, y);
+    return 2;
+}
+// Reference contract is setScale(s, transition, ease); four args are the
+// per-axis extension setScale(sx, sy, transition, ease).
+int m_setScale(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const double s = luaL_checknumber(L, 2);
+    if (lua_gettop(L) >= 4) {
+        e->SetScale(s, luaL_checknumber(L, 3), luaL_optnumber(L, 4, 0),
+                    luaL_optnumber(L, 5, 0));
+    } else {
+        e->SetScale(s, s, luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0));
+    }
+    return 0;
+}
+int m_getScale(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    double x = 0, y = 0;
+    e->GetScale(&x, &y);
+    lua_pushnumber(L, x);
+    lua_pushnumber(L, y);
+    return 2;
+}
+int m_setMirror(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->SetMirror(lua_toboolean(L, 2) != 0);
+    return 0;
+}
+int m_setColor(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->SetColor(static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0));
+    return 0;
+}
+int m_getColor(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, static_cast<lua_Integer>(e->GetColor()));
+    return 1;
+}
+int m_show(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->Show();
+    return 0;
+}
+int m_hide(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->Hide();
+    return 0;
+}
+
+int m_playTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->PlayTimeline(label, static_cast<int>(luaL_optinteger(L, 3, 0)), error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_stopTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->StopTimeline(luaL_checkstring(L, 2));
+    return 0;
+}
+int m_isTimelinePlaying(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushboolean(L, e->IsTimelinePlaying(luaL_checkstring(L, 2)) ? 1 : 0);
+    return 1;
+}
+int m_isLoopTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushboolean(L, e->IsLoopTimeline(luaL_checkstring(L, 2)) ? 1 : 0);
+    return 1;
+}
+int m_getTimelineTotalFrameCount(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushnumber(L, e->TimelineTotalFrames(luaL_checkstring(L, 2)));
+    return 1;
+}
+int m_fadeInTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->FadeInTimeline(label, luaL_checknumber(L, 3),
+                           static_cast<int>(luaL_optinteger(L, 4, 0)), error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_fadeOutTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->FadeOutTimeline(label, luaL_checknumber(L, 3), error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_setTimelineBlendRatio(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->SetTimelineBlendRatio(label, luaL_checknumber(L, 3), error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_getTimelineBlendRatio(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushnumber(L, e->TimelineBlendRatio(luaL_checkstring(L, 2), nullptr));
+    return 1;
+}
+// setTimeline(label, loop): loop=false parks a looping timeline at its
+// loop end instead of wrapping; loop=true resumes wrapping.
+int m_setTimeline(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->SetTimelineHoldEnd(label, lua_toboolean(L, 3) != 0, error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_countMainTimelines(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, e->CountMainTimelines());
+    return 1;
+}
+int m_getMainTimelineLabelAt(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushstring(L, e->MainTimelineLabelAt(
+                         static_cast<int>(luaL_optinteger(L, 2, -1))).c_str());
+    return 1;
+}
+int m_countDiffTimelines(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, e->CountDiffTimelines());
+    return 1;
+}
+int m_getDiffTimelineLabelAt(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushstring(L, e->DiffTimelineLabelAt(
+                         static_cast<int>(luaL_optinteger(L, 2, -1))).c_str());
+    return 1;
+}
+int m_countPlayingTimelines(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, e->CountPlayingTimelines());
+    return 1;
+}
+int m_getPlayingTimelineLabelAt(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushstring(L, e->PlayingTimelineLabelAt(
+                         static_cast<int>(luaL_optinteger(L, 2, -1))).c_str());
+    return 1;
+}
+int m_getPlayingTimelineFlagsAt(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, e->PlayingTimelineFlagsAt(
+                         static_cast<int>(luaL_optinteger(L, 2, -1))));
+    return 1;
+}
+int m_countVariables(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushinteger(L, e->CountVariables());
+    return 1;
+}
+int m_getVariableLabelAt(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushstring(L, e->VariableLabelAt(
+                         static_cast<int>(luaL_optinteger(L, 2, -1))).c_str());
+    return 1;
+}
+int m_setVariable(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    const char *label = luaL_checkstring(L, 2);
+    std::string error;
+    if (!e->SetVariable(label, luaL_checknumber(L, 3), luaL_optnumber(L, 4, 0),
+                        luaL_optnumber(L, 5, 0), error))
+        return EmoteError(L, error);
+    lua_pushboolean(L, true);
+    return 1;
+}
+int m_getVariable(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    bool found = false;
+    const double value = e->GetVariable(luaL_checkstring(L, 2), &found);
+    if (!found) return EmoteError(L, std::string("unknown E-mote variable: ") +
+                                         luaL_checkstring(L, 2));
+    lua_pushnumber(L, value);
+    return 1;
+}
+int m_getAnimating(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    lua_pushboolean(L, e->IsAnimating() ? 1 : 0);
+    return 1;
+}
+int m_skip(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->Skip();
+    return 0;
+}
+int m_pass(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->Pass();
+    return 0;
+}
+int m_progress(lua_State *L) {
+    EmotePlayer *e = Emote(L);
+    if (!e) return 2;
+    e->Progress(luaL_checknumber(L, 2));
+    return 0;
+}
+
+const struct {
+    const char *name;
+    lua_CFunction fn;
+} kEmoteMethods[] = {
+    {"setRot", m_setRot}, {"SetRot", m_setRot},
+    {"setRotate", m_setRot}, {"SetRotate", m_setRot},
+    {"getRot", m_getRot}, {"GetRot", m_getRot},
+    {"setCoord", m_setCoord}, {"SetCoord", m_setCoord},
+    {"getCoord", m_getCoord}, {"GetCoord", m_getCoord},
+    {"setScale", m_setScale}, {"SetScale", m_setScale},
+    {"getScale", m_getScale}, {"GetScale", m_getScale},
+    {"setMirror", m_setMirror}, {"SetMirror", m_setMirror},
+    {"setColor", m_setColor}, {"SetColor", m_setColor},
+    {"getColor", m_getColor}, {"GetColor", m_getColor},
+    {"show", m_show}, {"Show", m_show},
+    {"hide", m_hide}, {"Hide", m_hide},
+    {"playTimeline", m_playTimeline}, {"PlayTimeline", m_playTimeline},
+    {"stopTimeline", m_stopTimeline}, {"StopTimeline", m_stopTimeline},
+    {"isTimelinePlaying", m_isTimelinePlaying}, {"IsTimelinePlaying", m_isTimelinePlaying},
+    {"isLoopTimeline", m_isLoopTimeline}, {"IsLoopTimeline", m_isLoopTimeline},
+    {"getTimelineTotalFrameCount", m_getTimelineTotalFrameCount},
+    {"GetTimelineTotalFrameCount", m_getTimelineTotalFrameCount},
+    {"fadeInTimeline", m_fadeInTimeline}, {"FadeInTimeline", m_fadeInTimeline},
+    {"fadeOutTimeline", m_fadeOutTimeline}, {"FadeOutTimeline", m_fadeOutTimeline},
+    {"setTimelineBlendRatio", m_setTimelineBlendRatio},
+    {"SetTimelineBlendRatio", m_setTimelineBlendRatio},
+    {"getTimelineBlendRatio", m_getTimelineBlendRatio},
+    {"GetTimelineBlendRatio", m_getTimelineBlendRatio},
+    {"setTimeline", m_setTimeline}, {"SetTimeline", m_setTimeline},
+    {"countMainTimelines", m_countMainTimelines},
+    {"CountMainTimelines", m_countMainTimelines},
+    {"getMainTimelineLabelAt", m_getMainTimelineLabelAt},
+    {"GetMainTimelineLabelAt", m_getMainTimelineLabelAt},
+    {"countDiffTimelines", m_countDiffTimelines},
+    {"CountDiffTimelines", m_countDiffTimelines},
+    {"getDiffTimelineLabelAt", m_getDiffTimelineLabelAt},
+    {"GetDiffTimelineLabelAt", m_getDiffTimelineLabelAt},
+    {"countPlayingTimelines", m_countPlayingTimelines},
+    {"CountPlayingTimelines", m_countPlayingTimelines},
+    {"getPlayingTimelineLabelAt", m_getPlayingTimelineLabelAt},
+    {"GetPlayingTimelineLabelAt", m_getPlayingTimelineLabelAt},
+    {"getPlayingTimelineFlagsAt", m_getPlayingTimelineFlagsAt},
+    {"GetPlayingTimelineFlagsAt", m_getPlayingTimelineFlagsAt},
+    {"countVariables", m_countVariables}, {"CountVariables", m_countVariables},
+    {"getVariableLabelAt", m_getVariableLabelAt},
+    {"GetVariableLabelAt", m_getVariableLabelAt},
+    {"setVariable", m_setVariable}, {"SetVariable", m_setVariable},
+    {"getVariable", m_getVariable}, {"GetVariable", m_getVariable},
+    {"getAnimating", m_getAnimating}, {"GetAnimating", m_getAnimating},
+    {"isAnimating", m_getAnimating}, {"IsAnimating", m_getAnimating},
+    {"skip", m_skip}, {"Skip", m_skip},
+    {"pass", m_pass}, {"Pass", m_pass},
+    {"progress", m_progress}, {"Progress", m_progress},
+};
+
+// __index(userdata, key) — registered method, else a logging stub closure
+// (same discovery pattern as the e-table's l_index/l_stub pair).
+int EmoteStub(lua_State *L);
+
+int EmoteIndex(lua_State *L) {
+    if (lua_type(L, 2) != LUA_TSTRING) {
+        lua_pushnil(L);
+        return 1;
+    }
+    const char *key = lua_tostring(L, 2);
+    for (const auto &m : kEmoteMethods)
+        if (std::strcmp(m.name, key) == 0) {
+            lua_pushcfunction(L, m.fn);
+            return 1;
+        }
+    lua_pushvalue(L, 2);
+    lua_pushcclosure(L, EmoteStub, 1);
+    return 1;
+}
+
+int EmoteStub(lua_State *L) {
+    static std::set<std::string> reported;
+    const char *key = lua_tostring(L, lua_upvalueindex(1));
+    if (key && reported.insert(key).second)
+        Log(kLogWarn, std::string("UNIMPLEMENTED: emote:") + key);
+    return 0;
+}
+
+int EmoteGc(lua_State *L) {
+    EmoteProxy *p = static_cast<EmoteProxy *>(lua_touserdata(L, 1));
+    if (p) p->~EmoteProxy();  // std::string member
+    return 0;
+}
+
+void PushEmoteProxy(lua_State *L, LuaEngine *engine, const std::string &id) {
+    if (luaL_newmetatable(L, kEmoteMetaName)) {
+        lua_pushcfunction(L, EmoteGc);
+        lua_setfield(L, -2, "__gc");
+        lua_pushcfunction(L, EmoteIndex);
+        lua_setfield(L, -2, "__index");
+    }
+    lua_pop(L, 1);  // cached in the registry
+    auto *p = static_cast<EmoteProxy *>(lua_newuserdata(L, sizeof(EmoteProxy)));
+    new (p) EmoteProxy{engine, id};
+    luaL_getmetatable(L, kEmoteMetaName);
+    lua_setmetatable(L, -2);
+}
+} // namespace
+
 LuaEngine *LuaEngine::Self(lua_State *L) {
     lua_pushlightuserdata(L, reinterpret_cast<void *>(&kEngineKey));
     lua_gettable(L, LUA_REGISTRYINDEX);
@@ -96,6 +517,7 @@ LuaEngine *LuaEngine::Self(lua_State *L) {
 
 LuaEngine::~LuaEngine() {
     videos_.clear(); // players release their output before Audio is destroyed
+    emotes_.clear();
     delete sounds_;
     sounds_ = nullptr;
     if (audio_) { delete audio_; audio_ = nullptr; }
@@ -139,6 +561,7 @@ bool LuaEngine::RunEnterFrame() {
     advanced_this_frame_ = false;
     if (sounds_) sounds_->Update(NowMs());
     UpdateVideos();
+    UpdateEmotes();
     PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
     bool ok=true;
@@ -243,6 +666,9 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
         // getfgfilepos → "pos,x,y[,w,h,frames,com]").
         {"unbindSurface", l_noop},
         {"loadPngComments", l_loadPngComments},
+        {"createEmoteLayer", l_createEmoteLayer},
+        {"getEmoteLayer", l_getEmoteLayer},
+        {"getEmoteVersion", l_getEmoteVersion},
     };
     for (const auto &m : methods) {
         lua_pushcfunction(L_, m.fn);
@@ -795,6 +1221,15 @@ int LuaEngine::l_tag(lua_State *L) {
                 if(it->first==lid || it->first.compare(0,pre.size(),pre)==0) it=inst->videos_.erase(it);
                 else ++it;
             }
+            // E-mote players own their scene subtree; dropping the registry
+            // entry alone would let the next frame re-create its layers under
+            // a deleted parent.
+            for(auto it=inst->emotes_.begin();it!=inst->emotes_.end();) {
+                if(it->first==lid || it->first.compare(0,pre.size(),pre)==0) {
+                    it->second->RemoveLayers(*inst->compositor_,it->first);
+                    it=inst->emotes_.erase(it);
+                } else ++it;
+            }
             for (auto it = inst->msg_text_.begin(); it != inst->msg_text_.end();) {
                 if (it->first == lid || it->first.compare(0, pre.size(), pre) == 0)
                     it = inst->msg_text_.erase(it);
@@ -1104,6 +1539,124 @@ int LuaEngine::l_loadPngComments(lua_State *L) {
         lua_pushnil(L);
     }
     return 1;
+}
+
+// e:createEmoteLayer{id=…, files={…}, width=…, height=…, progress=…} — load a
+// PSB E-mote model as a layer subtree rooted at the id. The original engine
+// accepted a multi-file archive (split PSB); this port reads exactly one PSB
+// file and fails explicitly otherwise. width/height/progress are accepted for
+// call-compatibility (render size is the compositor stage's).
+int LuaEngine::l_createEmoteLayer(lua_State *L) {
+    LuaEngine *self = Self(L);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    std::string id;
+    std::string file;
+    int files = 0;
+    lua_pushnil(L);
+    while (lua_next(L, 2) != 0) {
+        if (lua_type(L, -2) == LUA_TSTRING) {
+            const char *k = lua_tostring(L, -2);
+            if (k && std::strcmp(k, "id") == 0 && lua_type(L, -1) == LUA_TSTRING) {
+                id = lua_tostring(L, -1);
+            } else if (k && std::strcmp(k, "files") == 0 && lua_istable(L, -1)) {
+                // rawgeti walk (no lua_objlen): works on both Lua 5.1 and 5.4
+                for (int i = 1;; ++i) {
+                    lua_rawgeti(L, -1, i);
+                    if (lua_isnil(L, -1)) {
+                        lua_pop(L, 1);
+                        break;
+                    }
+                    if (lua_type(L, -1) == LUA_TSTRING) {
+                        ++files;
+                        if (files == 1) file = lua_tostring(L, -1);
+                    }
+                    lua_pop(L, 1);
+                }
+            }
+            // width / height / progress: contract parity only (see above)
+        }
+        lua_pop(L, 1);
+    }
+    if (id.empty()) {
+        Log(kLogError, "createEmoteLayer: missing id");
+        lua_pushnil(L);
+        return 1;
+    }
+    if (!self || !self->compositor_) {
+        Log(kLogError, "createEmoteLayer: no compositor");
+        lua_pushnil(L);
+        return 1;
+    }
+    if (files == 0) {
+        Log(kLogError, "createEmoteLayer: missing files");
+        lua_pushnil(L);
+        return 1;
+    }
+    if (files > 1) {
+        Log(kLogError, "createEmoteLayer: multi-file E-mote archives are not supported");
+        lua_pushnil(L);
+        return 1;
+    }
+    std::vector<uint8_t> bytes;
+    const std::string resolved = self->ResolvePackPath(file);
+    if (!self->packs_ || !self->packs_->Read(resolved, bytes)) {
+        Log(kLogError, "createEmoteLayer: file not found: " + resolved);
+        lua_pushnil(L);
+        return 1;
+    }
+    PsbDocument document;
+    std::string error;
+    if (!DecodePsb(bytes, document, error)) {
+        Log(kLogError, "createEmoteLayer: " + error + ": " + resolved);
+        lua_pushnil(L);
+        return 1;
+    }
+    auto model = std::make_shared<EmoteModel>();
+    if (!model->Load(std::move(document), error)) {
+        Log(kLogError, "createEmoteLayer: " + error);
+        lua_pushnil(L);
+        return 1;
+    }
+    auto player = std::make_unique<EmotePlayer>();
+    if (!player->Load(std::move(model), error)) {
+        Log(kLogError, "createEmoteLayer: " + error);
+        lua_pushnil(L);
+        return 1;
+    }
+    // Replace-in-place: tear the previous same-id layer down first so a stale
+    // scene never renders beside the new one.
+    const auto old = self->emotes_.find(id);
+    if (old != self->emotes_.end()) {
+        old->second->RemoveLayers(*self->compositor_, id);
+        self->compositor_->DeleteLayer(id);
+        self->emotes_.erase(old);
+    }
+    self->emotes_[id] = std::move(player);
+    PushEmoteProxy(L, self, id);
+    return 1;
+}
+
+// e:getEmoteLayer(id) — proxy for a live E-mote layer, nil when absent.
+int LuaEngine::l_getEmoteLayer(lua_State *L) {
+    LuaEngine *self = Self(L);
+    const char *id = luaL_checkstring(L, 2);
+    if (!self || !self->FindEmote(id)) {
+        lua_pushnil(L);
+        return 1;
+    }
+    PushEmoteProxy(L, self, id);
+    return 1;
+}
+
+// e:getEmoteVersion() — SDK version string advertised to the framework.
+int LuaEngine::l_getEmoteVersion(lua_State *L) {
+    lua_pushstring(L, "3.9.8");
+    return 1;
+}
+
+EmotePlayer *LuaEngine::FindEmote(const std::string &id) {
+    const auto it = emotes_.find(id);
+    return it == emotes_.end() ? nullptr : it->second.get();
 }
 
 // e:setMagicPath{word, path} — register the ":word" path alias (official spec:
@@ -1693,6 +2246,15 @@ void LuaEngine::UpdateVideos() {
     }
 }
 
+// E-mote layers never auto-expire (the model's base motion keeps animating);
+// tick each player, rendering through the compositor when one is attached.
+void LuaEngine::UpdateEmotes() {
+    for (auto &entry : emotes_) {
+        if (entry.second->Update(NowMs(), compositor_, entry.first)) continue;
+        Log(kLogError, "E-mote layer failed to render: " + entry.first);
+    }
+}
+
 // KrKr2-Next: setonsoundfinish callbacks — the framework registers
 // `sesys_voiceend` etc. after seplay; fire each once its voice has ended.
 void LuaEngine::PollSoundFinish() {
@@ -1795,7 +2357,7 @@ bool LuaEngine::LoadSnapshot(const std::string& file) {
     }
     tag_queue_.clear();SuspendWait();SetAutoMode(false);
     save_image_={};
-    videos_.clear();audio_->StopAll();delete sounds_;sounds_=new AudioChannels(*audio_);
+    videos_.clear();emotes_.clear();audio_->StopAll();delete sounds_;sounds_=new AudioChannels(*audio_);
     onsoundfinish_.clear();pending_click_=false;drag_id_.clear();lyevents_.clear();
     if(script_runner_)script_runner_->DiscardFlow();
     if(compositor_) {
