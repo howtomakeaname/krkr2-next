@@ -88,6 +88,27 @@ int main(int argc, char** argv) {
     Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"native compressed trailing data rejected");
     corrupt=native;corrupt[4]=0;
     Check(!artc::DecodeNativeSave(corrupt,decoded,save_error),"unsupported native version rejected");
+    // BOWG stores globals directly at the root, without the BOWS field-30 bank.
+    payload.clear();u32(1);str("system/first.iet");u32(2);u32(7);u32(3);
+    const auto globals_at=payload.size();u32(1);str("g.config");str(std::string("x\0y",3));
+    const auto globals_dir=payload.size();u32(1);u32(0);u32(2);
+    u32(2);u32(globals_at);u32(1);u32(0);u32(globals_dir);
+    std::vector<uint8_t> global={'B','O','W','G',0xeb,3,0,0};
+    for(int i=0;i<4;++i)global.push_back((payload.size()>>(8*i))&255);
+    compressed=compressBound(payload.size());global.resize(12+compressed);
+    Check(compress2(global.data()+12,&compressed,payload.data(),payload.size(),6)==Z_OK,"compress synthetic global bank");
+    global.resize(12+compressed);
+    artc::NativeGlobals globals;
+    Check(artc::DecodeNativeGlobals(global,globals,save_error),save_error.c_str());
+    Check(globals.variables.at("g.config")==std::string("x\0y",3) &&
+          globals.read_lines.at("system/first.iet")==std::vector<uint32_t>({7,3}),"BOWG globals and read-line sets");
+    for(size_t i=0;i<global.size();++i) {
+        auto truncated=std::vector<uint8_t>(global.begin(),global.begin()+i);
+        Check(!artc::DecodeNativeGlobals(truncated,globals,save_error) && globals.variables.at("g.config")==std::string("x\0y",3),
+              "invalid global bank cannot partially replace output");
+    }
+    Check(!artc::DecodeNativeGlobals(native,globals,save_error) && !artc::DecodeNativeSave(global,decoded,save_error),
+          "global and scenario saves cannot be interchanged");
     const auto slot_dir=std::filesystem::temp_directory_path()/
         ("artemis-native-slot-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(slot_dir);
@@ -147,6 +168,11 @@ int main(int argc, char** argv) {
     for(int i=1;i<argc;++i) {
         std::ifstream file(argv[i],std::ios::binary);
         std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});
+        if(bytes.size()>=4 && std::string(bytes.begin(),bytes.begin()+4)=="BOWG") {
+            Check(artc::DecodeNativeGlobals(bytes,globals,save_error),save_error.c_str());
+            std::cout<<"native globals: "<<globals.variables.size()<<" variables, "<<globals.read_lines.size()<<" read-line sets\n";
+            continue;
+        }
         Check(artc::DecodeNativeSave(bytes,decoded,save_error),save_error.c_str());
         std::cout<<"native snapshot: "<<decoded.variables.size()<<" variables, "
                  <<decoded.layers.size()<<" layer commands, "<<decoded.text.size()<<" text layers\n";

@@ -34,9 +34,9 @@ struct Archive {
     std::vector<uint8_t> data;
     std::map<uint32_t,std::map<uint32_t,uint32_t>> objects;
     uint32_t directory=0;
-    explicit Archive(const std::vector<uint8_t>& file) {
-        if(file.size()<16 || file.size()>kMaxBytes || std::memcmp(file.data(),"BOWS",4))
-            throw std::runtime_error("not a BOWS snapshot");
+    explicit Archive(const std::vector<uint8_t>& file,const char* magic="BOWS") {
+        if(file.size()<16 || file.size()>kMaxBytes || std::memcmp(file.data(),magic,4))
+            throw std::runtime_error("wrong native save signature");
         Reader h{file,4,file.size()};
         if(h.U32()!=1003)throw std::runtime_error("unsupported BOWS version");
         const auto n=h.U32();if(n<8 || n>kMaxBytes)throw std::runtime_error("invalid BOWS expanded size");
@@ -94,6 +94,22 @@ bool DecodeNativeSave(const std::vector<uint8_t>& file,NativeSave& out,std::stri
             for(auto& command:entry.second)next.layers.push_back(std::move(command));
         next.text=a.Commands(24);
         out=std::move(next);error.clear();return true;
+    }catch(const std::exception& e){error=e.what();return false;}
+}
+bool DecodeNativeGlobals(const std::vector<uint8_t>& file,NativeGlobals& out,std::string& error) {
+    try {
+        Archive a(file,"BOWG");NativeGlobals next;
+        auto vars=a.Field(0,2,a.directory);next.variables=vars.Strings();vars.End();
+        for(const auto& v:next.variables)
+            if(v.first.rfind("g.",0)!=0)throw std::runtime_error("non-global variable in BOWG bank");
+        auto lines=a.Field(0,1,a.directory);const auto count=lines.Count();size_t total=0;
+        for(uint32_t i=0;i<count;++i) {
+            auto file=lines.String();const auto n=lines.Count();total+=n;
+            if(total>kMaxCount || next.read_lines.count(file))throw std::runtime_error("invalid BOWG read-line set");
+            auto& entries=next.read_lines[file];entries.reserve(n);
+            for(uint32_t j=0;j<n;++j)entries.push_back(lines.U32());
+        }
+        lines.End();out=std::move(next);error.clear();return true;
     }catch(const std::exception& e){error=e.what();return false;}
 }
 }
