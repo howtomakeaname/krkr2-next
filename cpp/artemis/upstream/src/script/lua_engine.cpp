@@ -10,6 +10,7 @@
 #include "script/pluto_codec.h"
 #include "script/native_save.h"
 #include "script/save_storage.h"
+#include "script/save_metadata.h"
 #include <filesystem>
 #include "log/logger.h"
 
@@ -1641,7 +1642,9 @@ void LuaEngine::LoadSystemData() {
     VariableBank next;std::vector<uint8_t> bytes;const auto path=SavePath(save_dir_,"system.dat");
     if(!ReadSaveFile(path,bytes))return;
     if(!DecodeVariableBank(bytes,false,next)) {Log(kLogError,"save: invalid system bank "+path);return;}
+    const bool repaired=RepairCompatibilitySaveDates(L_,next,save_dir_);
     for(auto& kv:next)vars_[kv.first]=std::move(kv.second);
+    if(repaired) {Log(kLogInfo,"save: recovered empty compatibility-slot dates from file times");SaveSystemData();}
     Log(kLogInfo,"save: restored variables from "+path);
 }
 bool LuaEngine::SaveSnapshot(const std::string& file) {

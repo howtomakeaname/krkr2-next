@@ -131,6 +131,17 @@ int main(int argc, char** argv) {
     )","checkpoint slots"),"save honors distinct slot filenames and onSave preparation");
     Check(slot_engine.LoadSnapshot("one.dat") && slot_engine.LoadSnapshot("two.dat"),"each checkpoint reloads its own graph");
     Check(slot_engine.DoString("assert(restored==3)","checkpoint callbacks"),"checkpoint load callbacks complete");
+    Check(slot_engine.DoString(R"(
+        local slots={[1]={file='one',date={}},[2]={file='two',date={2000,1,2,3,4,5}},[3]={file='missing',date={}}}
+        e:tag{'var',name='g.system',data=pluto.persist({},{saveslot=slots})}; e:tag{'save'}
+    )","legacy empty save date"),"persist metadata from an early compatibility build");
+    artc::LuaEngine recovered;recovered.SetSaveDir(slot_dir.string());
+    Check(recovered.Init(&slot_packs,artc::Ini{},"android",1280,720),"reload bank with missing dates");
+    Check(recovered.DoString(R"(
+        local slots=pluto.unpersist({},e:var('g.system')).saveslot
+        assert(#slots[1].date==6 and slots[1].date[1]>=1970)
+        assert(slots[2].date[1]==2000 and #slots[3].date==0)
+    )","migrated date"),"recover a matching ARCV date without altering valid dates or inventing missing-file dates");
     std::filesystem::remove_all(slot_dir);
     // Optional private, read-only original snapshots; never included in fixtures.
     for(int i=1;i<argc;++i) {
