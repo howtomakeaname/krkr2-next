@@ -69,6 +69,7 @@ public:
     // Tag handlers (called from the Lua bridge on the engine thread).
     void SetPackManager(PackManager *packs) { packs_ = packs; }
     bool LoadImage(const std::string &id, const std::string &file);
+    bool SetPixels(const std::string& id, const uint8_t* rgba, int width, int height);
     void SetProps(const std::string &id, const std::map<std::string, std::string> &attrs);
     void DeleteLayer(const std::string &id);
 

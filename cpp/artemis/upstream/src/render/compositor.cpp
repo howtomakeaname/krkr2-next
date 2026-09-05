@@ -812,6 +812,27 @@ bool Compositor::LoadFont(const std::string &file) {
     return true;
 }
 
+bool Compositor::SetPixels(const std::string& id, const uint8_t* rgba, int width, int height) {
+    if(!rgba || width<=0 || height<=0 || width>8192 || height>8192) return false;
+    SetProps(id,{});
+    for(auto& l:layers_) if(l.id==id) {
+        if(!l.texture || l.w==l.tex_w) l.w=width;
+        if(!l.texture || l.h==l.tex_h) l.h=height;
+        if(l.texture && l.tex_w==width && l.tex_h==height) {
+            glBindTexture(GL_TEXTURE_2D,l.texture);
+            glTexSubImage2D(GL_TEXTURE_2D,0,0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,rgba);
+        } else {
+            if(l.texture) glDeleteTextures(1,&l.texture);
+            l.texture=CreateTexture(rgba,width,height);
+        }
+        l.tex_w=width; l.tex_h=height;
+        l.glyphs.clear(); l.text.clear(); l.content_x=l.content_y=0;
+        l.u0=l.v0=0; l.u1=l.v1=1;
+        return l.texture!=0;
+    }
+    return false;
+}
+
 bool Compositor::SetText(const std::string &id, const std::string &text,
                          float size, uint32_t color, float wrapWidth,
                          const std::map<std::string, std::string>& style,
@@ -1328,6 +1349,17 @@ bool Compositor::InitGl() { return false; }
 // HitLayer/DumpRects; no GL object is created on the host.
 constexpr uint32_t kHostTexture = 0xFFFFFFFFu;
 
+bool Compositor::SetPixels(const std::string& id, const uint8_t* rgba, int width, int height) {
+    if(!rgba || width<=0 || height<=0) return false;
+    SetProps(id,{});
+    for(auto& l:layers_) if(l.id==id) {
+        if(!l.texture || l.w==l.tex_w) l.w=width;
+        if(!l.texture || l.h==l.tex_h) l.h=height;
+        l.texture=kHostTexture; l.tex_w=width; l.tex_h=height;
+        l.glyphs.clear(); l.text.clear(); return true;
+    }
+    return false;
+}
 uint32_t Compositor::CreateTexture(const uint8_t *, int, int) { return 0; }
 bool Compositor::LoadImage(const std::string &id, const std::string &file) {
     ++revision_;
