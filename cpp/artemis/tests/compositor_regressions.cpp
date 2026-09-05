@@ -556,6 +556,26 @@ int main() {
     decoded=stbi_load_from_memory(png.data(),int(png.size()),&png_width,&png_height,&channels,4);
     Check(decoded && decoded[0]==255 && decoded[2]==0 && decoded[3]==128,"thumbnail interpolation cannot leak colors from transparent pixels");
     stbi_image_free(decoded);
+    const auto save_directory=path.string()+"-saves";std::filesystem::create_directory(save_directory);
+    messages.SetSaveDir(save_directory);
+    Check(emote_scene.Render(c,"30",5,{{"expression",10}},emote_error),emote_error.c_str());c.Draw();
+    Check(messages.DoString("e:tag{'takess'}","capture save point"),"capture through script tag");
+    c.DeleteLayer("30");c.SetPixels("1",blue,1,1);c.SetProps("1",{{"w","32"},{"h","32"}});c.Draw();
+    Check(messages.DoString(R"(
+        e:tag{'savess',file='scene',width=16,height=16}
+        local file=e:var('s.savepath')..'/scene.png'
+        assert(e:isFileExists(file) and e:file(file):sub(1,4)=='\137PNG')
+        e:tag{'lyc',id='40',file=e:var('s.savepath')..'/scene'}
+    )","save thumbnail"),"write the retained scene after the menu changes");
+    c.Draw();
+    Check(c.GetLayerInfo("40").width==16 && At(6,3)[1]>200,"save page displays the captured scene, not the later blue menu");
+    std::ifstream thumbnail(save_directory+"/scene.png",std::ios::binary);
+    const std::vector<uint8_t> before((std::istreambuf_iterator<char>(thumbnail)),{});
+    Check(messages.DoString("e:tag{'savess',file='scene',width=0,height=16}","reject invalid save size"),"invalid size is handled");
+    std::ifstream unchanged(save_directory+"/scene.png",std::ios::binary);
+    Check(std::vector<uint8_t>((std::istreambuf_iterator<char>(unchanged)),{})==before,"invalid thumbnail request preserves the previous file");
+    Check(messages.DoString("assert(e:file('scene.png'):sub(1,4)=='\\137PNG')","read saved PNG"),"script file reads include authorized saved images");
+    std::filesystem::remove_all(save_directory);
     std::filesystem::remove(path);
     c.Shutdown();
     Check(glGetError()==GL_NO_ERROR, "resource cleanup");

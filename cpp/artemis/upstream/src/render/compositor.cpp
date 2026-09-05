@@ -24,6 +24,7 @@
 #include <set>
 #include <cstdio>
 #include <limits>
+#include "script/save_storage.h"
 
 namespace artc {
 
@@ -776,7 +777,7 @@ bool Compositor::LoadImage(const std::string &id, const std::string &file) {
     std::string resolved;
     for (const char *ext : kExtensions) {
         resolved = file + ext;
-        if (packs_->Read(resolved, bytes)) break;
+        if (packs_->Read(resolved, bytes) || ReadSaveFile(SavePath(save_directory_,resolved),bytes)) break;
     }
     if (bytes.empty()) {
         Log(kLogWarn, "lyc: image not found: " + file);

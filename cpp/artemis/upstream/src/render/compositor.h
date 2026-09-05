@@ -74,6 +74,7 @@ public:
 
     // Tag handlers (called from the Lua bridge on the engine thread).
     void SetPackManager(PackManager *packs) { packs_ = packs; }
+    void SetSaveDirectory(const std::string& directory) { save_directory_=directory; }
     bool LoadImage(const std::string &id, const std::string &file);
     bool LoadShader(const std::string& id, const std::string& file);
     bool SetPixels(const std::string& id, const uint8_t* rgba, int width, int height);
@@ -236,6 +237,7 @@ private:
 
     int stage_w_ = 1280, stage_h_ = 720;
     LayerShaders shaders_;
+    std::string save_directory_;
     struct MaskTexture {uint32_t texture=0;int width=0,height=0;};
     std::map<std::string,MaskTexture> masks_;
     void LoadMask(const std::string& file);

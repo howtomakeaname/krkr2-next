@@ -16,6 +16,7 @@
 
 #include <cstring>
 #include <chrono>
+#include <cmath>
 #include <ctime>
 #include <cstdlib>
 #include <fstream>
@@ -156,6 +157,7 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
                      Compositor *compositor) {
     packs_ = packs;
     compositor_ = compositor;
+    if(compositor_)compositor_->SetSaveDirectory(save_dir_);
     audio_ = new Audio();
     audio_->Init(packs);
     sounds_ = new AudioChannels(*audio_);
@@ -614,6 +616,28 @@ int LuaEngine::l_tag(lua_State *L) {
         if (m.count("file")) inst->LoadSnapshot(m.at("file"));
         return 0;
     }
+    if(tagname=="takess" && inst) {
+        inst->save_image_={};
+        if(!inst->compositor_ || !inst->compositor_->Snapshot(inst->save_image_))
+            Log(kLogWarn,"takess: no retained scene to capture");
+        return 0;
+    }
+    if(tagname=="savess" && inst) {
+        auto file=m["file"];
+        if(file.empty()) {Log(kLogError,"savess: missing file");return 0;}
+        if(file.size()<4 || file.substr(file.size()-4)!=".png")file+=".png";
+        auto dimension=[&](const char* name,int fallback) {
+            auto p=m.find(name);if(p==m.end())return fallback;
+            char* end=nullptr;const double n=std::strtod(p->second.c_str(),&end);
+            return end==p->second.c_str()+p->second.size() && std::isfinite(n) && n>=1 && n<=8192 && n==std::floor(n)?int(n):0;
+        };
+        const int width=dimension("width",inst->save_image_.width),height=dimension("height",inst->save_image_.height);
+        const auto path=SavePath(inst->save_dir_,file);std::vector<uint8_t> png;
+        if(path.empty() || !inst->save_image_.EncodePng(width,height,png) || !WriteSaveFile(path,png))
+            Log(kLogError,"savess: cannot save scene thumbnail "+file);
+        else Log(kLogInfo,"savess: wrote "+file+" "+std::to_string(width)+"x"+std::to_string(height));
+        return 0;
+    }
     if (tagname == "lyshader" && inst && inst->compositor_) {
         if(m.count("id") && m.count("file"))
             inst->compositor_->LoadShader(m.at("id"),inst->ResolvePackPath(m.at("file")));
@@ -977,8 +1001,8 @@ int LuaEngine::l_file(lua_State *L) {
     const std::string resolved = self->ResolvePackPath(path);
 
     std::vector<uint8_t> bytes;
-    if (!packs || !packs->Read(resolved, bytes)) {
-        Log(kLogWarn, "file: not found in packs: " + resolved);
+    if ((!packs || !packs->Read(resolved, bytes)) && !ReadSaveFile(SavePath(self->save_dir_,resolved),bytes)) {
+        Log(kLogWarn, "file: not found in packs or save directory: " + resolved);
         lua_pushnil(L);
         return 1;
     }
@@ -1727,6 +1751,7 @@ bool LuaEngine::LoadSnapshot(const std::string& file) {
         if(prefix!="g." && prefix!="s." && prefix!="t.")vars_[v.first]=std::move(v.second);
     }
     tag_queue_.clear();SuspendWait();SetAutoMode(false);
+    save_image_={};
     videos_.clear();audio_->StopAll();delete sounds_;sounds_=new AudioChannels(*audio_);
     onsoundfinish_.clear();pending_click_=false;drag_id_.clear();lyevents_.clear();
     if(script_runner_)script_runner_->DiscardFlow();

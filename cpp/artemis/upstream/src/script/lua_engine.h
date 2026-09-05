@@ -171,7 +171,10 @@ public:
     // persist the script-visible variables (set via e:tag{"var", name, data})
     // so a [reset] reboot can restore sys/conf/gscr. The host loop provides
     // the game directory (pack location) through SetSaveDir.
-    void SetSaveDir(const std::string &dir) { save_dir_ = dir; }
+    void SetSaveDir(const std::string &dir) {
+        save_dir_=dir;sysvals_["savepath"]=dir;
+        if(compositor_)compositor_->SetSaveDirectory(dir);
+    }
     const std::string &SaveDir() const { return save_dir_; }
     // Persist / restore the script variable bank (fsave_pluto values) around
     // the [save] tag / a [reset] reboot.
@@ -309,6 +312,7 @@ private:
     bool exit_requested_ = false;
     bool saving_ = false;
     std::string save_dir_;   // game directory for system.dat / saves
+    SnapshotImage save_image_;
     InputState input_;
     bool pending_click_ = false;
     bool advanced_this_frame_ = false;
