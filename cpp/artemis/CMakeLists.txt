@@ -59,6 +59,27 @@ target_include_directories(artemis_core
         ${ARTC_UPSTREAM}/src/render
         ${ARTC_UPSTREAM}/third_party)
 target_link_libraries(artemis_core PUBLIC artemis_lua51)
+
+# The application already supplies FFmpeg through vcpkg. Standalone host
+# regressions can use the system libraries without changing the app manifest.
+option(ARTC_ENABLE_FFMPEG "Decode Artemis movies with FFmpeg" ON)
+if(ARTC_ENABLE_FFMPEG)
+    if(FFMPEG_FOUND)
+        target_include_directories(artemis_core PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(artemis_core PUBLIC ${FFMPEG_LIBRARIES})
+        target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+    elseif(NOT CMAKE_CROSSCOMPILING)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(ARTC_FFMPEG QUIET IMPORTED_TARGET
+                libavformat libavcodec libavutil libswresample libswscale)
+            if(ARTC_FFMPEG_FOUND)
+                target_link_libraries(artemis_core PUBLIC PkgConfig::ARTC_FFMPEG)
+                target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+            endif()
+        endif()
+    endif()
+endif()
 # The upstream code is -Wall -Wextra clean modulo a few unused-variable
 # nits; silence those so the OHOS build log stays readable.
 target_compile_options(artemis_core PRIVATE
