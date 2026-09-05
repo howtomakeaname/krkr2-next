@@ -271,7 +271,7 @@ private:
     AudioChannels *sounds_ = nullptr;
     // message pipeline: chgmsg-selected layer + accumulated print text
     std::string msg_layer_;
-    std::string msg_text_;
+    std::map<std::string, std::string> msg_text_;
     // `font` tag state: face load-once + per-layer text-area rects.
     // Official semantics: a `font` tag restyles the layer selected by the
     // LAST chgmsg (font_of_), so each message slot keeps its own rect.

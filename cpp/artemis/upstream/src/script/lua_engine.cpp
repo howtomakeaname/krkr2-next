@@ -674,6 +674,11 @@ int LuaEngine::l_tag(lua_State *L) {
             // lyevent keep receiving hit-test hits inside the story.
             const std::string lid = m["id"];
             const std::string pre = lid + ".";
+            for (auto it = inst->msg_text_.begin(); it != inst->msg_text_.end();) {
+                if (it->first == lid || it->first.compare(0, pre.size(), pre) == 0)
+                    it = inst->msg_text_.erase(it);
+                else ++it;
+            }
             for (auto it = inst->lyevents_.begin(); it != inst->lyevents_.end();) {
                 if (it->first == lid ||
                     it->first.compare(0, pre.size(), pre) == 0)
@@ -755,16 +760,20 @@ int LuaEngine::l_tag(lua_State *L) {
         if (tagname == "chgmsg" && inst) {
             auto it = m.find("id");
             inst->msg_layer_ = it == m.end() ? std::string() : it->second;
-            inst->msg_text_.clear();
             return 0;
         }
         if (tagname == "/chgmsg" && inst) {
             inst->msg_layer_.clear();
-            inst->msg_text_.clear();
+            return 0;
+        }
+        if (tagname == "rp" && !inst->msg_layer_.empty()) {
+            inst->msg_text_.erase(inst->msg_layer_);
+            inst->compositor_->SetText(inst->msg_layer_, "", 40, 0xffffff);
             return 0;
         }
         if (tagname == "print" && inst && !inst->msg_layer_.empty()) {
-            inst->msg_text_ += m["data"];
+            auto& text = inst->msg_text_[inst->msg_layer_];
+            text += m["data"];
             // font resolution: the rect registered for THIS layer via
             // chgmsg+font pairing wins; otherwise the last visible-area font.
             static const std::map<std::string, std::string> kEmpty;
@@ -801,11 +810,12 @@ int LuaEngine::l_tag(lua_State *L) {
                                   std::to_string((int)size));
             }
             inst->compositor_->SetText(
-                    inst->msg_layer_, inst->msg_text_, size, color, wrap, fr);
+                    inst->msg_layer_, text, size, color, wrap, fr);
             return 0;
         }
-        if (tagname == "rt" && inst) {
-            inst->msg_text_ += '\n';
+        if (tagname == "rt" && !inst->msg_layer_.empty()) {
+            auto& text = inst->msg_text_[inst->msg_layer_];
+            if (m["omitblankline"] != "1" || (!text.empty() && text.back() != '\n')) text += '\n';
             return 0;
         }
 

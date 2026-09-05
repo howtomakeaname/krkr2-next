@@ -1,5 +1,6 @@
 #include "render/compositor.h"
 #include "pack/pack_manager.h"
+#include "script/lua_engine.h"
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <array>
@@ -118,6 +119,23 @@ int main() {
           "ruby spacing leaves a gap and text origin composes with layer translation");
     Check(c.SetText("2","",10,0xffffff,30), "clear empty message");c.Draw();
     Check(At(7,7)[0]==0 && At(7,7)[2]==255, "empty print removes previous glyph pixels");
+    artc::LuaEngine messages;
+    artc::Ini ini;
+    Check(messages.Init(&packs,ini,"android",32,32,&c), "message engine init");
+    Check(messages.DoString("e:tag{'chgmsg',id='2'}; e:tag{'font',face='font.ttf',size=10,width=30}; "
+        "e:tag{'print',data='A'}; e:tag{'/chgmsg'}; e:tag{'chgmsg',id='4'}; "
+        "e:tag{'font',face='font.ttf',size=10,width=30}; e:tag{'print',data='A'}; "
+        "e:tag{'chgmsg',id='2'}; e:tag{'print',data='A'}; e:tag{'/chgmsg'}; e:tag{'lydel',id='4'}",
+        "append pages"), "selecting a message layer preserves its page");
+    c.SetProps("2",{{"left","0"},{"top","0"}}); c.Draw();
+    Check(At(9,4)[0]==255, "appended second glyph survives switching message layers");
+    Check(messages.DoString("e:tag{'chgmsg',id='2'}; e:tag{'rp'}; e:tag{'print',data='A'}", "clear page"),
+          "rp clears the selected page"); c.Draw();
+    Check(At(9,4)[0]==0 && At(3,4)[0]==255, "rp replaces the old page instead of appending");
+    Check(messages.DoString("e:tag{'lydel',id='2'}; e:tag{'chgmsg',id='2'}; e:tag{'print',data='A'}",
+        "recreate message"), "delete message layer"); c.Draw();
+    Check(At(9,4)[0]==0, "deleting a layer clears its saved page");
+    c.DeleteLayer("2");
     c.SetProps("3",{{"left","4"},{"top","3"},{"xscale","200"},{"yscale","200"}});
     Check(c.LoadImage("3.1","small.tga"),"load first expression");
     c.SetProps("3.1",{{"left","5"},{"top","4"}});
