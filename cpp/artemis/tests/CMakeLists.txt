@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(artemis_regressions LANGUAGES C CXX)
+enable_testing()
+set(ARTC_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data" CACHE PATH "Runtime location of synthetic test fixtures")
+add_subdirectory(.. engine)
+add_executable(runtime_regressions runtime_regressions.cpp)
+target_link_libraries(runtime_regressions PRIVATE artemis_core)
+add_test(NAME runtime_regressions COMMAND runtime_regressions)
