@@ -1,4 +1,5 @@
 #include "render/compositor.h"
+#include "render/layer_shader.h"
 #include "pack/pack_manager.h"
 #include "script/lua_engine.h"
 #include "render/video_player.h"
@@ -39,6 +40,42 @@ int main() {
     EGLint ca[] = {EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE};
     EGLContext ctx = eglCreateContext(d,cfg,EGL_NO_CONTEXT,ca);
     Check(eglMakeCurrent(d,surface,surface,ctx), "make current");
+    {
+        artc::LayerShaders shaders;
+        const std::string shader=R"(
+            precision mediump float;
+            varying vec2 resultCoord1;
+            uniform sampler2D textureFore;
+            uniform float red;
+            uniform float weights[2];
+            void main(){ vec4 c=texture2D(textureFore,resultCoord1);
+                gl_FragColor=vec4(c.r*red+weights[0],weights[1],c.b,c.a); }
+        )";
+        Check(shaders.Load("custom",shader),"compile mobile GLSL interface");
+        Check(!shaders.Load("custom","invalid shader"),"failed replacement keeps the previous shader");
+        artc::LayerEffect effect;effect.Set({{"shader","custom"},{"red","0.5"},{"weights","0.25,0.125"}});
+        glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,32,32);
+        glClearColor(0,0,1,1);glClear(GL_COLOR_BUFFER_BIT);
+        Check(shaders.Begin(0,32,32,0,false)!=0,"allocate intermediate layer");
+        glClearColor(0.5,0,0,0.5);glClear(GL_COLOR_BUFFER_BIT); // premultiplied red
+        Check(shaders.End(0,effect,0,false,1,{}),"apply native GLSL uniforms");
+        auto pixel=Pixel();
+        Check(abs(pixel[0]-96)<=2 && abs(pixel[1]-16)<=2 && abs(pixel[2]-128)<=2,
+              "unpremultiply before custom shader, then composite once");
+        // Parameter state belongs to the layer, even when two layers share a program.
+        effect.parameters.clear();
+        glBindFramebuffer(GL_FRAMEBUFFER,0);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+        shaders.Begin(0,32,32,0,false);glClearColor(1,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+        shaders.End(0,effect,0,false,1,{});pixel=Pixel();
+        Check(pixel[0]==0 && pixel[1]==0,"shader parameters never leak between layers");
+        // CPU shader sources survive context/resource recreation, as on native load.
+        shaders.ReleaseGl();
+        glBindFramebuffer(GL_FRAMEBUFFER,0);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+        shaders.Begin(0,32,32,0,false);glClearColor(1,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+        effect.Set({{"red","1"}});shaders.End(0,effect,0,false,1,{});
+        Check(Pixel()[0]==255,"recompile retained shader after GL release");
+        shaders.ReleaseGl();
+    }
     artc::Compositor c; c.Init(32,32);
     // Synthetic pixels only: no game assets in this regression suite.
     GLuint tex; glGenTextures(1,&tex); glBindTexture(GL_TEXTURE_2D,tex);
