@@ -7,6 +7,7 @@
 #include "audio/audio_channels.h"
 #include "pack/pack_manager.h"
 #include "script/pluto_lua.h"
+#include "script/pluto_codec.h"
 #include "log/logger.h"
 
 #include <cstring>
@@ -151,6 +152,8 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
         Log(kLogError, std::string("pluto registration failed: ") + lua_tostring(L_, -1));
         lua_pop(L_, 1);
     }
+
+    RegisterPlutoCodec(L_);
 
     // expose engine instance + packs to the C closures via the registry
     lua_pushlightuserdata(L_, reinterpret_cast<void *>(&kEngineKey));

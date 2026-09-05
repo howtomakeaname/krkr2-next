@@ -311,5 +311,25 @@ int main() {
     runner.EndEvent(paused);
     Check(script.IsWaiting(), "app pause also freezes the wait suspended below a menu event");
     std::filesystem::remove(path);
+    Check(script.DoString(R"(
+        local t={x=2, s="a\0b", empty={}, yes=true}
+        t.self=t; t.same=t.empty; t[t.empty]="key"
+        local data=pluto.persist({},t)
+        assert(data:byte(1)==1)
+        local copy=pluto.unpersist({},data)
+        assert(copy.x==2 and copy.s=="a\0b" and copy.yes)
+        assert(copy.self==copy and copy.same==copy.empty and copy[copy.empty]=="key")
+        assert(pluto.unpersist({},pluto.persist({},nil))==nil)
+        assert(pluto.unpersist({},pluto.persist({},false))==false)
+        assert(not pcall(pluto.persist,{},function()end))
+        for i=1,#data-1 do assert(not pcall(pluto.unpersist,{},data:sub(1,i))) end
+        assert(not pcall(pluto.unpersist,{},data.."x"))
+        local object={}; local inverse={known=object}
+        assert(pluto.unpersist(inverse,pluto.persist({[object]="known"},object))==object)
+        -- Hand-encoded 32-bit native Pluto string, independent of the writer.
+        local s32=string.char(1,0,0,0,1,0,0,0,4,0,0,0,3,0,0,0).."a\0b"
+        assert(pluto.unpersist({},s32)=="a\0b")
+        assert(pluto.unpersist({},"t1 = {}\nt1[\"x\"] = 7\nreturn t1").x==7)
+    )","native Pluto value codec"),"native Pluto graphs, 32-bit lengths and malformed input");
     std::cout << "audio channels and wait regressions passed\n";
 }
