@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/ui_colors.dart';
 import '../theme/ui_metrics.dart';
+import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
+import 'ui_glass.dart';
 
 /// 按钮视觉变体。
 enum UiButtonVariant {
@@ -95,18 +98,29 @@ class UiButton extends StatefulWidget {
 
 class _UiButtonState extends State<UiButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
+  late final AnimationController _controller = AnimationController.unbounded(
     vsync: this,
-    duration: UiDuration.fast,
-    lowerBound: 0,
-    upperBound: 1,
   );
-  late final Animation<double> _scale = Tween<double>(
-    begin: 1,
-    end: 0.96,
-  ).chain(CurveTween(curve: UiCurves.standard)).animate(_controller);
 
   bool get _enabled => widget.onPressed != null && !widget.loading;
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  void _animateTo(double target) {
+    if (_reduceMotion) {
+      _controller.value = target;
+      return;
+    }
+    _controller.animateWith(
+      SpringSimulation(
+        UiSprings.press,
+        _controller.value,
+        target,
+        _controller.velocity,
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -116,14 +130,15 @@ class _UiButtonState extends State<UiButton>
 
   void _handleTapDown(TapDownDetails _) {
     if (!_enabled) return;
-    _controller.forward();
+    _animateTo(1);
   }
 
-  void _handleTapCancel() => _controller.reverse();
+  void _handleTapCancel() => _animateTo(0);
+
+  void _handleTapUp(TapUpDetails _) => _animateTo(0);
 
   void _handleTap() {
     if (!_enabled) return;
-    _controller.reverse();
     if (widget.enableHaptic) {
       HapticFeedback.lightImpact();
     }
@@ -190,21 +205,27 @@ class _UiButtonState extends State<UiButton>
         behavior: HitTestBehavior.opaque,
         onTapDown: _handleTapDown,
         onTapCancel: _handleTapCancel,
-        onTapUp: (_) => _handleTap(),
+        onTapUp: _handleTapUp,
+        onTap: _enabled ? _handleTap : null,
         onLongPress: _enabled ? widget.onLongPress : null,
-        child: ScaleTransition(
-          scale: _scale.drive(Tween<double>(begin: 1, end: 1))
-            ..addListener(() {}),
-          child: AnimatedBuilder(
-            animation: _scale,
-            builder: (context, child) {
-              return Opacity(
-                opacity: _enabled ? 1 : 0.6,
-                child: Transform.scale(scale: _scale.value, child: child),
-              );
-            },
-            child: button,
-          ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final progress = _controller.value.clamp(0.0, 1.0);
+            return Opacity(
+              opacity: _enabled ? 1 - (0.06 * progress) : 0.6,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.diagonal3Values(
+                  1 - (0.025 * progress),
+                  1 - (0.055 * progress),
+                  1,
+                ),
+                child: child,
+              ),
+            );
+          },
+          child: button,
         ),
       ),
     );
@@ -358,6 +379,8 @@ class UiBarIconButton extends StatelessWidget {
     this.onPressed,
     this.variant = UiButtonVariant.ghost,
     this.loading = false,
+    this.contained = true,
+    this.enableBlur,
   });
 
   static const double extent = UiNavigationMetrics.buttonExtent;
@@ -368,22 +391,31 @@ class UiBarIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final UiButtonVariant variant;
   final bool loading;
+  final bool contained;
+  final bool? enableBlur;
 
   @override
   Widget build(BuildContext context) {
     return Align(
       widthFactor: 1,
       heightFactor: 1,
-      child: SizedBox.square(
-        dimension: extent,
-        child: UiButton.icon(
-          icon: icon,
-          semanticLabel: semanticLabel,
-          size: UiButtonSize.navigation,
-          variant: variant,
-          loading: loading,
-          onPressed: onPressed,
-        ),
+      child: UiGlassIconButton(
+        icon: icon,
+        semanticLabel: semanticLabel,
+        size: extent,
+        iconSize: iconSize,
+        contained: contained,
+        enableBlur: enableBlur,
+        loading: loading,
+        foregroundColor: switch (variant) {
+          UiButtonVariant.danger => context.uiColors.danger,
+          _ => context.uiColors.brand,
+        },
+        tint: switch (variant) {
+          UiButtonVariant.danger => context.uiColors.danger,
+          _ => null,
+        },
+        onPressed: onPressed,
       ),
     );
   }

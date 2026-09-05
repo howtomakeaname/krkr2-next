@@ -4,16 +4,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/prefs_keys.dart';
 import '../models/game_info.dart';
+import '../models/play_session.dart';
 
 /// Manages persisted game list using SharedPreferences.
 class GameManager {
   static const String _storageKey = 'krkr2_game_list';
   static const int _maxSessionSeconds = 86400; // 24h cap per session
   static const int _maxSettledSessionIds = 64;
+  static const int _maxPlaySessions = 512;
+  static const Duration _playSessionRetention = Duration(days: 90);
 
   List<GameInfo> _games = [];
+  List<PlaySession> _playSessions = [];
 
   List<GameInfo> get games => List.unmodifiable(_games);
+  List<PlaySession> get playSessions => List.unmodifiable(_playSessions);
 
   /// Load the game list from persistent storage.
   /// Call [applyPendingPlaySession] after this to credit play time if the app was last closed while in a game.
@@ -22,6 +27,13 @@ class GameManager {
     final String? raw = prefs.getString(_storageKey);
     if (raw != null && raw.isNotEmpty) {
       _games = GameInfo.listFromJsonString(raw);
+    }
+    final history = prefs.getString(PrefsKeys.playSessionHistory);
+    if (history != null && history.isNotEmpty) {
+      _playSessions = _prunedSessions(
+        PlaySession.listFromJsonString(history),
+        DateTime.now(),
+      );
     }
   }
 
@@ -56,7 +68,7 @@ class GameManager {
     final sessionId = data['sessionId'] as String?;
     if (sessionId != null && sessionId.isNotEmpty) {
       final settledIds = _readSettledSessionIds(prefs);
-      if (settledIds.contains(sessionId)) {
+      if (settledIds.contains(sessionId) || _hasPlaySession(sessionId)) {
         await prefs.remove(PrefsKeys.pendingPlaySession);
         return;
       }
@@ -74,6 +86,15 @@ class GameManager {
       }
       if (seconds > 0) {
         await addPlayDuration(path, seconds);
+        await _appendPlaySession(
+          prefs,
+          PlaySession(
+            id: sessionId,
+            gamePath: path,
+            endedAt: DateTime.now(),
+            durationSeconds: seconds,
+          ),
+        );
       }
       await _appendSettledSessionId(prefs, sessionId);
       await prefs.remove(PrefsKeys.pendingPlaySession);
@@ -103,12 +124,13 @@ class GameManager {
   Future<void> recordPlaySession(
     String path,
     int seconds,
-    String sessionId,
-  ) async {
+    String sessionId, {
+    DateTime? endedAt,
+  }) async {
     if (sessionId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final settledIds = _readSettledSessionIds(prefs);
-    if (settledIds.contains(sessionId)) return;
+    if (settledIds.contains(sessionId) || _hasPlaySession(sessionId)) return;
 
     int safeSeconds = seconds;
     if (safeSeconds > _maxSessionSeconds) {
@@ -116,6 +138,15 @@ class GameManager {
     }
     if (safeSeconds > 0) {
       await addPlayDuration(path, safeSeconds);
+      await _appendPlaySession(
+        prefs,
+        PlaySession(
+          id: sessionId,
+          gamePath: path,
+          endedAt: endedAt ?? DateTime.now(),
+          durationSeconds: safeSeconds,
+        ),
+      );
     }
     await _appendSettledSessionId(prefs, sessionId);
   }
@@ -140,7 +171,9 @@ class GameManager {
   /// Remove a game by path.
   Future<void> removeGame(String path) async {
     _games.removeWhere((g) => g.path == path);
+    _playSessions.removeWhere((session) => session.gamePath == path);
     await _save();
+    await _savePlaySessions();
   }
 
   /// Update the lastPlayed timestamp for a game.
@@ -253,6 +286,45 @@ class GameManager {
       PrefsKeys.settledPlaySessionIds,
       ids.sublist(start),
     );
+  }
+
+  bool _hasPlaySession(String sessionId) {
+    return _playSessions.any((session) => session.id == sessionId);
+  }
+
+  Future<void> _appendPlaySession(
+    SharedPreferences prefs,
+    PlaySession session,
+  ) async {
+    if (_hasPlaySession(session.id)) return;
+    _playSessions = _prunedSessions(<PlaySession>[
+      ..._playSessions,
+      session,
+    ], session.endedAt);
+    await prefs.setString(
+      PrefsKeys.playSessionHistory,
+      PlaySession.listToJsonString(_playSessions),
+    );
+  }
+
+  Future<void> _savePlaySessions() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      PrefsKeys.playSessionHistory,
+      PlaySession.listToJsonString(_playSessions),
+    );
+  }
+
+  List<PlaySession> _prunedSessions(
+    Iterable<PlaySession> sessions,
+    DateTime now,
+  ) {
+    final cutoff = now.subtract(_playSessionRetention);
+    final retained =
+        sessions.where((session) => !session.endedAt.isBefore(cutoff)).toList()
+          ..sort((a, b) => a.endedAt.compareTo(b.endedAt));
+    if (retained.length <= _maxPlaySessions) return retained;
+    return retained.sublist(retained.length - _maxPlaySessions);
   }
 
   int _toInt(dynamic value) {

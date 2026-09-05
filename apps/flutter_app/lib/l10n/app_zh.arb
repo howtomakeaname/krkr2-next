@@ -20,6 +20,83 @@
   "gamesDirectory": "游戏目录：Games/",
   "gotIt": "知道了",
 
+  "tabHome": "首页",
+  "tabExplore": "探索",
+  "tabManage": "管理",
+  "tabProfile": "我的",
+  "search": "搜索",
+  "searchGamesHint": "搜索游戏",
+  "searchNoResults": "没有找到匹配的游戏",
+  "searchComingSoon": "搜索功能正在准备中",
+  "help": "帮助",
+  "profilePlayTimeTitle": "游玩时间",
+  "profileLifetime": "累计游玩",
+  "profileLast7Days": "近 7 天",
+  "profileTrackingHint": "游玩趋势将从现在开始记录",
+  "profileActiveDays": "活跃天数",
+  "profileGamesPlayed": "玩过的游戏",
+  "profileAverageSession": "单次平均",
+  "profileTopGames": "常玩游戏",
+  "profileStatistics": "游玩统计",
+  "profileViewStatistics": "查看详细统计",
+  "profileHonorTitle": "称号",
+  "profileHonorNewcomer": "初来乍到",
+  "profileHonorStoryTraveler": "剧情旅人",
+  "profileHonorImmersedReader": "沉浸读者",
+  "profileHonorVeteran": "资深玩家",
+  "profileHonorCollector": "游戏藏家",
+  "profileHonorCurator": "典藏家",
+  "profileHonorNext": "下一档 · {title}",
+  "@profileHonorNext": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "profileHonorRemainingBoth": "还差 {duration}和 {count} 款游戏",
+  "@profileHonorRemainingBoth": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "profileHonorRemainingTime": "还差 {duration}",
+  "@profileHonorRemainingTime": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
+  "profileHonorRemainingGames": "还差 {count} 款游戏",
+  "@profileHonorRemainingGames": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "profileHonorHighest": "已经到最高档",
+  "profileGameRecords": "游戏记录",
+  "profileRecentGame": "最近游玩",
+  "profileNoHistory": "暂无记录",
+  "profilePlaySummary": "已玩 {duration} · {count} 个游戏",
+  "@profilePlaySummary": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "playTimeLessThanMinute": "不足 1 分钟",
+  "playTimeMinutes": "{minutes} 分钟",
+  "@playTimeMinutes": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "playTimeHours": "{hours} 小时",
+  "@playTimeHours": {
+    "placeholders": { "hours": { "type": "int" } }
+  },
+  "playTimeHoursMinutes": "{hours} 小时 {minutes} 分钟",
+  "@playTimeHoursMinutes": {
+    "placeholders": {
+      "hours": { "type": "int" },
+      "minutes": { "type": "int" }
+    }
+  },
+  "helpImportTitle": "导入游戏",
+  "helpImportBody": "将完整游戏文件夹或 XP3 / PFS 封包导入游戏库；HarmonyOS 也可以把文件夹放入应用的公共游戏目录后下拉刷新。",
+  "helpLaunchTitle": "启动与快捷操作",
+  "helpLaunchBody": "点按游戏卡片查看详情；长按卡片可以直接启动、刮削信息、重命名或移除。",
+
   "removeGame": "移除游戏",
   "removeGameConfirm": "从列表中移除「{title}」？\n这不会删除游戏文件。",
   "cancel": "取消",

@@ -20,6 +20,83 @@
   "gamesDirectory": "ゲームディレクトリ：Games/",
   "gotIt": "了解",
 
+  "tabHome": "ホーム",
+  "tabExplore": "見つける",
+  "tabManage": "管理",
+  "tabProfile": "マイページ",
+  "search": "検索",
+  "searchGamesHint": "ゲームを検索",
+  "searchNoResults": "一致するゲームがありません",
+  "searchComingSoon": "検索機能は準備中です",
+  "help": "ヘルプ",
+  "profilePlayTimeTitle": "プレイ時間",
+  "profileLifetime": "累計プレイ",
+  "profileLast7Days": "直近7日間",
+  "profileTrackingHint": "プレイ傾向はこれから記録されます",
+  "profileActiveDays": "プレイ日数",
+  "profileGamesPlayed": "プレイしたゲーム",
+  "profileAverageSession": "平均プレイ時間",
+  "profileTopGames": "よく遊ぶゲーム",
+  "profileStatistics": "プレイ統計",
+  "profileViewStatistics": "詳しい統計を見る",
+  "profileHonorTitle": "称号",
+  "profileHonorNewcomer": "はじめの一歩",
+  "profileHonorStoryTraveler": "物語の旅人",
+  "profileHonorImmersedReader": "没入する読者",
+  "profileHonorVeteran": "ベテランプレイヤー",
+  "profileHonorCollector": "ゲームコレクター",
+  "profileHonorCurator": "物語の蒐集家",
+  "profileHonorNext": "次 · {title}",
+  "@profileHonorNext": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "profileHonorRemainingBoth": "あと{duration}と{count}本",
+  "@profileHonorRemainingBoth": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "profileHonorRemainingTime": "あと{duration}",
+  "@profileHonorRemainingTime": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
+  "profileHonorRemainingGames": "あと{count}本",
+  "@profileHonorRemainingGames": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "profileHonorHighest": "最高ランクです",
+  "profileGameRecords": "ゲーム記録",
+  "profileRecentGame": "最近プレイしたゲーム",
+  "profileNoHistory": "記録はありません",
+  "profilePlaySummary": "プレイ時間 {duration} · {count}本",
+  "@profilePlaySummary": {
+    "placeholders": {
+      "duration": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "playTimeLessThanMinute": "1分未満",
+  "playTimeMinutes": "{minutes}分",
+  "@playTimeMinutes": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "playTimeHours": "{hours}時間",
+  "@playTimeHours": {
+    "placeholders": { "hours": { "type": "int" } }
+  },
+  "playTimeHoursMinutes": "{hours}時間{minutes}分",
+  "@playTimeHoursMinutes": {
+    "placeholders": {
+      "hours": { "type": "int" },
+      "minutes": { "type": "int" }
+    }
+  },
+  "helpImportTitle": "ゲームをインポート",
+  "helpImportBody": "ゲームフォルダ全体、または XP3 / PFS パックをライブラリに追加します。HarmonyOS では公開ゲームフォルダに配置してから、下に引いて更新することもできます。",
+  "helpLaunchTitle": "起動とクイック操作",
+  "helpLaunchBody": "ゲームカードをタップすると詳細を表示します。長押しすると、起動、情報取得、名前変更、削除ができます。",
+
   "removeGame": "ゲームを削除",
   "removeGameConfirm": "リストから「{title}」を削除しますか？\nゲームファイルは削除されません。",
   "cancel": "キャンセル",
