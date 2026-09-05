@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     artc::PackManager slot_packs;
     artc::LuaEngine slot_engine;slot_engine.SetSaveDir(slot_dir.string());
     Check(slot_engine.Init(&slot_packs,artc::Ini{},"android",32,32,nullptr),"initialize slot importer");
-    Check(!slot_engine.LoadNativeSnapshot("slot.dat"),"native import requires an onLoad restorer");
+    Check(!slot_engine.LoadSnapshot("slot.dat"),"native import requires an onLoad restorer");
     Check(slot_engine.DoString(R"(
         restored=0
         function restore_slot(e,p)
@@ -108,14 +108,29 @@ int main(int argc, char** argv) {
         e:enqueueTag{"exit"}
     )","slot callback"),"configure native restorer");
     slot_engine.SetTimedWait(60000);
-    Check(slot_engine.LoadNativeSnapshot("slot.dat"),"import native slot with onLoad");
+    Check(slot_engine.LoadSnapshot("slot.dat"),"import native slot with onLoad");
     Check(slot_engine.DoString("assert(restored==1)","restored"),"onLoad fires once after variables");
     Check(!slot_engine.HasQueuedTag() && !slot_engine.IsWaiting(),
           "load discards the previous queue and wait");
-    Check(!slot_engine.LoadNativeSnapshot("../slot.dat"),"slot cannot escape save directory");
+    Check(!slot_engine.LoadSnapshot("../slot.dat"),"slot cannot escape save directory");
     {std::ofstream f(slot_dir/"slot.dat",std::ios::binary);f.write(reinterpret_cast<const char*>(native.data()),12);}
-    Check(!slot_engine.LoadNativeSnapshot("slot.dat"),"broken snapshot rejected before mutation");
+    Check(!slot_engine.LoadSnapshot("slot.dat"),"broken snapshot rejected before mutation");
     Check(slot_engine.DoString("assert(restored==1 and e:var('scr')=='a\\0b')","failed load"),"failed load leaves variables and callback untouched");
+    Check(slot_engine.DoString(R"(
+        function checkpoint_save(e,p)
+            e:tag{"var",name="scr",data=pluto.persist({},{slot=p.file})}
+        end
+        function checkpoint_load(e,p)
+            assert(pluto.unpersist({},e:var("scr")).slot==p.file)
+            restored=restored+1
+        end
+        e:setEventHandler{onSave="checkpoint_save",onLoad="checkpoint_load"}
+        e:tag{"save",file="one.dat"};e:tag{"save",file="two.dat"}
+        assert(e:isFileExists(e:var('s.savepath')..'/one.dat'))
+        assert(e:isFileExists(e:var('s.savepath')..'/two.dat'))
+    )","checkpoint slots"),"save honors distinct slot filenames and onSave preparation");
+    Check(slot_engine.LoadSnapshot("one.dat") && slot_engine.LoadSnapshot("two.dat"),"each checkpoint reloads its own graph");
+    Check(slot_engine.DoString("assert(restored==3)","checkpoint callbacks"),"checkpoint load callbacks complete");
     std::filesystem::remove_all(slot_dir);
     // Optional private, read-only original snapshots; never included in fixtures.
     for(int i=1;i<argc;++i) {

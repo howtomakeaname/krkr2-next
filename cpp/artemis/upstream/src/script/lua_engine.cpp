@@ -9,6 +9,7 @@
 #include "script/pluto_lua.h"
 #include "script/pluto_codec.h"
 #include "script/native_save.h"
+#include "script/save_storage.h"
 #include <filesystem>
 #include "log/logger.h"
 
@@ -167,6 +168,7 @@ bool LuaEngine::Init(PackManager *packs, const Ini &systemIni,
 
     // engine settings used by the `var` tag
     sysvals_["os"] = osName;
+    sysvals_["savepath"] = save_dir_;
     sysvals_["screen_width"] = std::to_string(screenWidth);
     sysvals_["screen_height"] = std::to_string(screenHeight);
     sysvals_["engineversion"] = "3.00";
@@ -574,11 +576,12 @@ int LuaEngine::l_tag(lua_State *L) {
     // the script variable bank (fsave_pluto values) to disk so a [reset]
     // reboot can restore them (language config, system data, …).
     if (tagname == "save" && inst) {
-        inst->SaveSystemData();
+        if(m.count("file") && !m.at("file").empty())inst->SaveSnapshot(m.at("file"));
+        else inst->SaveSystemData();
         return 0;
     }
     if (tagname == "load" && inst) {
-        if (m.count("file")) inst->LoadNativeSnapshot(m.at("file"));
+        if (m.count("file")) inst->LoadSnapshot(m.at("file"));
         return 0;
     }
     if (tagname == "lyshader" && inst && inst->compositor_) {
@@ -958,7 +961,12 @@ int LuaEngine::l_isFileExists(lua_State *L) {
     PackManager *packs = static_cast<PackManager *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
     const char *path = luaL_checkstring(L, 2);
-    lua_pushboolean(L, packs && packs->Exists(self->ResolvePackPath(path)) ? 1 : 0);
+    bool exists=packs && packs->Exists(self->ResolvePackPath(path));
+    if(!exists) {
+        const auto save=SavePath(self->save_dir_,path);std::error_code error;
+        exists=!save.empty() && std::filesystem::is_regular_file(save,error);
+    }
+    lua_pushboolean(L,exists);
     return 1;
 }
 
@@ -1600,86 +1608,58 @@ void LuaEngine::PollSoundFinish() {
     }
 }
 
-// [save] persistence: length-prefixed {key,value} pairs in <game>/system.dat.
-// Transient t.* variables are skipped. Restored by LoadSystemData before the
-// framework's fload_pluto runs (so e:var returns the pluto blobs).
-void LuaEngine::SaveSystemData() {
-    if (save_dir_.empty()) {
-        Log(kLogWarn, "save: no save dir set; skipped");
-        return;
+// System banks retain the early compatibility encoding for migration. A whole
+// bank validates before commit, and atomic replacement preserves the old file
+// if a write is interrupted.
+bool LuaEngine::SaveSystemData() {
+    VariableBank items;for(const auto& kv:vars_)if(kv.first.rfind("t.",0)!=0)items.insert(kv);
+    std::vector<uint8_t> bytes;const auto path=SavePath(save_dir_,"system.dat");
+    if(!EncodeVariableBank(items,false,bytes) || !WriteSaveFile(path,bytes)) {
+        Log(kLogError,"save: cannot write system bank "+path);return false;
     }
-    std::string path = save_dir_;
-    if (path.back() != '/') path += '/';
-    path += "system.dat";
-    std::ofstream of(path, std::ios::binary | std::ios::trunc);
-    if (!of) {
-        Log(kLogWarn, "save: cannot write " + path);
-        return;
-    }
-    std::vector<std::pair<std::string, std::string>> items;
-    for (const auto &kv : vars_)
-        if (kv.first.rfind("t.", 0) != 0) items.push_back(kv);
-    const uint32_t n = static_cast<uint32_t>(items.size());
-    of.write(reinterpret_cast<const char *>(&n), sizeof(n));
-    for (const auto &kv : items) {
-        const uint32_t kl = static_cast<uint32_t>(kv.first.size());
-        const uint32_t vl = static_cast<uint32_t>(kv.second.size());
-        of.write(reinterpret_cast<const char *>(&kl), sizeof(kl));
-        of.write(kv.first.data(), kv.first.size());
-        of.write(reinterpret_cast<const char *>(&vl), sizeof(vl));
-        of.write(kv.second.data(), kv.second.size());
-    }
-    Log(kLogInfo, "save: " + std::to_string(items.size()) + " vars -> " + path);
+    return true;
 }
-
 void LuaEngine::LoadSystemData() {
-    if (save_dir_.empty()) return;
-    std::string path = save_dir_;
-    if (path.back() != '/') path += '/';
-    path += "system.dat";
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return;   // no save yet — first boot
-    uint32_t n = 0;
-    if (!in.read(reinterpret_cast<char *>(&n), sizeof(n))) return;
-    if (n > 65536) {   // guard against garbage
-        Log(kLogWarn, "save: bogus entry count in " + path);
-        return;
+    VariableBank next;std::vector<uint8_t> bytes;const auto path=SavePath(save_dir_,"system.dat");
+    if(!ReadSaveFile(path,bytes))return;
+    if(!DecodeVariableBank(bytes,false,next)) {Log(kLogError,"save: invalid system bank "+path);return;}
+    for(auto& kv:next)vars_[kv.first]=std::move(kv.second);
+    Log(kLogInfo,"save: restored variables from "+path);
+}
+bool LuaEngine::SaveSnapshot(const std::string& file) {
+    const auto path=SavePath(save_dir_,file);
+    const auto handler=event_handlers_.find("onSave");
+    if(path.empty() || saving_ || handler==event_handlers_.end() || handler->second.empty()) {
+        Log(kLogError,"save: checkpoint needs a valid slot and onSave callback");return false;
     }
-    for (uint32_t i = 0; i < n; ++i) {
-        uint32_t kl = 0, vl = 0;
-        if (!in.read(reinterpret_cast<char *>(&kl), sizeof(kl))) break;
-        if (kl > 1 << 20) break;
-        std::string k(kl, '\0');
-        if (!in.read(&k[0], kl)) break;
-        if (!in.read(reinterpret_cast<char *>(&vl), sizeof(vl))) break;
-        if (vl > 1 << 24) break;
-        std::string v(vl, '\0');
-        if (!in.read(&v[0], vl)) break;
-        vars_[std::move(k)] = std::move(v);
+    saving_=true;const bool ready=CallEvent(handler->second,{{"file",file}},false);saving_=false;
+    if(!ready)return false;
+    VariableBank items;
+    for(const auto& v:vars_) {
+        const auto prefix=v.first.substr(0,2);
+        if(prefix!="g." && prefix!="s." && prefix!="t.")items.insert(v);
     }
-    Log(kLogInfo, "save: restored variables from " + path);
+    std::vector<uint8_t> bytes;
+    if(!EncodeVariableBank(items,true,bytes) || !WriteSaveFile(path,bytes)) {
+        Log(kLogError,"save: checkpoint write failed "+file);return false;
+    }
+    const bool system=SaveSystemData();
+    Log(system?kLogInfo:kLogError,"save: checkpoint "+file+(system?" committed":" saved; system bank failed"));
+    return system;
 }
 
-bool LuaEngine::LoadNativeSnapshot(const std::string& file) {
+bool LuaEngine::LoadSnapshot(const std::string& file) {
     auto handler=event_handlers_.find("onLoad");
     if(handler==event_handlers_.end() || handler->second.empty()) {
         Log(kLogError,"load: native snapshot requires the game's onLoad restorer");return false;
     }
-    namespace fs=std::filesystem;
-    const auto base=fs::path(save_dir_).lexically_normal();
-    const auto path=(base/fs::path(file)).lexically_normal();
-    const auto relative=path.lexically_relative(base);
-    if(save_dir_.empty() || relative.empty() || *relative.begin()=="..") {
-        Log(kLogError,"load: file outside save directory");return false;
-    }
-    std::ifstream in(path,std::ios::binary|std::ios::ate);
-    if(!in || in.tellg()<0 || in.tellg()>64*1024*1024) {
-        Log(kLogError,"load: cannot read "+path.string());return false;
-    }
-    std::vector<uint8_t> bytes(static_cast<size_t>(in.tellg()));in.seekg(0);
-    if(!in.read(reinterpret_cast<char*>(bytes.data()),bytes.size()))return false;
+    const auto path=SavePath(save_dir_,file);
+    std::vector<uint8_t> bytes;
+    if(path.empty() || !ReadSaveFile(path,bytes)) {Log(kLogError,"load: cannot read slot "+file);return false;}
     NativeSave snapshot;std::string error;
-    if(!DecodeNativeSave(bytes,snapshot,error)) {Log(kLogError,"load: "+error);return false;}
+    const bool native=bytes.size()>=4 && std::memcmp(bytes.data(),"BOWS",4)==0;
+    const bool decoded=native ? DecodeNativeSave(bytes,snapshot,error) : DecodeVariableBank(bytes,true,snapshot.variables);
+    if(!decoded) {Log(kLogError,"load: invalid snapshot "+file+": "+error);return false;}
     // Validate native Pluto blobs before touching the running state. Raw scalar
     // variables remain strings; closures/VM pointers fail explicitly.
     for(const auto& v:snapshot.variables) {
@@ -1700,7 +1680,10 @@ bool LuaEngine::LoadNativeSnapshot(const std::string& file) {
         const auto prefix=it->first.substr(0,2);
         if(prefix!="g." && prefix!="s.")it=vars_.erase(it);else ++it;
     }
-    for(auto& v:snapshot.variables)vars_[v.first]=std::move(v.second);
+    for(auto& v:snapshot.variables) {
+        const auto prefix=v.first.substr(0,2);
+        if(prefix!="g." && prefix!="s." && prefix!="t.")vars_[v.first]=std::move(v.second);
+    }
     tag_queue_.clear();SuspendWait();SetAutoMode(false);
     videos_.clear();audio_->StopAll();delete sounds_;sounds_=new AudioChannels(*audio_);
     onsoundfinish_.clear();pending_click_=false;drag_id_.clear();lyevents_.clear();
@@ -1714,7 +1697,7 @@ bool LuaEngine::LoadNativeSnapshot(const std::string& file) {
     // The registered framework callback reconstructs message pages, audio and
     // the scenario cursor from its restored scr/log/btn graph (quickjump).
     if(!CallEvent(handler->second,{{"file",file}},false)) return false;
-    Log(kLogInfo,"load: native snapshot restored via onLoad: "+file+
+    Log(kLogInfo,std::string("load: ")+(native?"native snapshot":"checkpoint")+" restored via onLoad: "+file+
         " layers="+std::to_string(snapshot.layers.size()));
     return true;
 }

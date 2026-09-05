@@ -175,9 +175,10 @@ public:
     const std::string &SaveDir() const { return save_dir_; }
     // Persist / restore the script variable bank (fsave_pluto values) around
     // the [save] tag / a [reset] reboot.
-    void SaveSystemData();
+    bool SaveSystemData();
+    bool SaveSnapshot(const std::string& file);
     void LoadSystemData();
-    bool LoadNativeSnapshot(const std::string& file);
+    bool LoadSnapshot(const std::string& file);
 
     lua_State *state() const { return L_; }
     // KrKr2-Next: engine clock in ms (same base as e:now()).
@@ -306,6 +307,7 @@ private:
                          std::vector<std::pair<std::string, std::string>>>> tag_queue_;
     bool reset_requested_ = false;
     bool exit_requested_ = false;
+    bool saving_ = false;
     std::string save_dir_;   // game directory for system.dat / saves
     InputState input_;
     bool pending_click_ = false;
