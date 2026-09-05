@@ -1,4 +1,5 @@
 #pragma once
+#include "audio/pcm_stream.h"
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -11,18 +12,18 @@ namespace artc {
 // Platform-independent Vorbis source. Keeps compressed bytes, decodes only the
 // requested PCM block, and joins Artemis's _a intro to its _b loop sample.
 // Open on the engine thread; ReadStereo on one audio callback thread at a time.
-class VorbisStream {
+class VorbisStream : public PcmStream {
 public:
     using Reader = std::function<bool(const std::string&, std::vector<uint8_t>&)>;
     VorbisStream();
-    ~VorbisStream();
+    ~VorbisStream() override;
     VorbisStream(const VorbisStream&) = delete;
     VorbisStream& operator=(const VorbisStream&) = delete;
     bool Open(const Reader& read, const std::string& file, bool loop);
-    size_t ReadStereo(int16_t* output, size_t frames);
-    int SampleRate() const;
-    uint64_t FrameCount() const; // total non-looping playback length (intro + body)
-    bool Ended() const;
+    size_t ReadStereo(int16_t* output, size_t frames) override;
+    int SampleRate() const override;
+    uint64_t FrameCount() const override; // total non-looping playback length (intro + body)
+    bool Ended() const override;
     bool HasLoopSegment() const;
 private:
     struct Impl;
