@@ -233,6 +233,7 @@ bool AsbRunner::ExecuteLine(LuaEngine& lua) {
         return ok;
     } else if (line.command == "stop" && line.attrs.empty()) {
         Halt();
+        lua.NotifyScriptStop();
         return true;
     } else if (line.command == "return") {
         if (!Return()) Halt();

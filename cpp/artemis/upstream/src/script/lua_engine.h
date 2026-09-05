@@ -134,6 +134,7 @@ public:
     void SetWaiting(bool w);
     void SetTimedWait(int ms, bool accept_input = false);
     bool IsWaiting();
+    void NotifyScriptStop() { if (auto_stop_stop_) SetAutoMode(false); }
     // A layer/key handler executes above the interrupted script. Suspend its
     // wait without emitting a click-wait exit; restore it when the handler returns.
     struct WaitState {
