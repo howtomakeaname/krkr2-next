@@ -124,12 +124,12 @@ int main() {
         "frame completion removes overrides and preserves physical held keys");
     lua.PushKeyUp(13);lua.EndFrame();
     lua.DispatchTag("wait", {{"time", "10000"}, {"input", "0"}});
-    lua.ClickAt(20, 20);
+    lua.ClickAt(20, 20); lua.RunEnterFrame();
     Check(lua.IsWaiting(), "mandatory wait must survive pointer input");
     Check(lua.DoString("assert(e:getScriptWaitReason().time)", "wait reason"), "time wait reason");
     lua.SetWaiting(false);
     lua.DispatchTag("wait", {{"time", "10000"}, {"input", "1"}});
-    lua.ClickAt(20, 20);
+    lua.ClickAt(20, 20); lua.RunEnterFrame();
     Check(!lua.IsWaiting(), "skippable timed wait accepts a tap");
     lua.DispatchTag("wait", {{"input", "1"}});
     Check(!lua.IsWaiting(), "input permission without a time/animation must not create a click barrier");
@@ -138,8 +138,21 @@ int main() {
     lua.DispatchTag("@", {});
     Check(lua.IsWaiting(), "click wait starts");
     Check(lua.DoString("assert(next(e:getScriptWaitReason()) == nil)", "click reason"), "click wait has no timer reason");
-    lua.ClickAt(20, 20);
+    lua.ClickAt(20, 20); lua.RunEnterFrame();
     Check(!lua.IsWaiting(), "click wait ends");
+
+    Check(lua.DoString("function mask(e) e:overrideKey{status=0} end; "
+        "e:setEventHandler{onEnterFrame='mask'}", "mask input"),"install frame input filter");
+    lua.SetWaiting(true);lua.ClickAt(20,20);lua.RunEnterFrame();
+    Check(lua.IsWaiting(),"vsync can suppress a queued tap before it advances the scenario");
+    lua.EndFrame();
+    Check(lua.DoString("e:tag{'keyconfig',role=0,keys='124'}; "
+        "function mask(e) e:overrideKey{status=0}; e:overrideKey{key=124,status=32} end",
+        "virtual input"),"configure virtual confirm role");
+    lua.RunEnterFrame();
+    Check(!lua.IsWaiting(),"a virtual Decide key advances the configured click role");
+    lua.EndFrame();
+    Check(lua.DoString("e:setEventHandler{onEnterFrame=''}", "remove filter"),"remove frame filter");
 
     artc::Compositor compositor;
     compositor.SetProps("500.1", {{"w", "100"}, {"h", "100"}});
@@ -152,10 +165,10 @@ int main() {
                           "e:tag{'lyevent',id='500.1',type='click',handler='calllua',['function']='button'}",
                           "event setup"), "set filtered layer event");
     events.SetWaiting(true);
-    events.ClickAt(50,50);
+    events.ClickAt(50,50); events.RunEnterFrame();
     Check(events.IsWaiting(), "filtered button must not release the script wait");
     Check(events.DoString("assert(calls==0); e:setEventFilter(nil)", "filter consumed"), "filter suppresses action");
-    events.ClickAt(50,50);
+    events.ClickAt(50,50); events.RunEnterFrame();
     Check(events.DoString("assert(calls==1)", "filter cleared"), "clearing filter restores action exactly once");
     Check(events.IsWaiting(), "button action must not release the scenario wait");
     Check(events.DoString("nested={callbacks={tick=function(e) end}}", "nested callback"), "define dotted callback");

@@ -47,6 +47,9 @@ public:
         // The reference aliases the first touch key (138) to mouse/tap (1).
         return value || (key==1 && Query(138,flag));
     }
+    bool Overridden(int key) const {
+        return key>=0 && key<Count && keys_[key].override_bits!=0;
+    }
     void EndFrame() {
         for (auto& k:keys_) {
             k.push=k.down_edge=k.up_edge=false;

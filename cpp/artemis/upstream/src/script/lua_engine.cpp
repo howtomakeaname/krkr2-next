@@ -118,12 +118,14 @@ bool LuaEngine::RunEnterFrame() {
     if (sounds_) sounds_->Update(NowMs());
     PollSoundFinish();
     const auto it = event_handlers_.find("onEnterFrame");
-    if (it == event_handlers_.end() || it->second.empty()) return false;
-    // rate-limit error spam: a broken vsync would otherwise log at frame rate
-    const bool quiet = enterframe_failures_ > 0 && enterframe_failures_ % 600 != 0;
-    const bool ok = CallGlobalInternal(it->second, quiet);
-    if (ok) enterframe_failures_ = 0;
-    else ++enterframe_failures_;
+    bool ok=true;
+    if (it != event_handlers_.end() && !it->second.empty()) {
+        const bool quiet=enterframe_failures_>0 && enterframe_failures_%600!=0;
+        ok=CallGlobalInternal(it->second,quiet);
+        if (ok) enterframe_failures_=0;
+        else ++enterframe_failures_;
+    }
+    DispatchFrameInput();
     return ok;
 }
 
@@ -399,6 +401,23 @@ int LuaEngine::l_tag(lua_State *L) {
             }
             lua_pop(L, 1);
         }
+    }
+    if (inst && tagname=="keyconfig") {
+        auto& keys=inst->key_roles_[std::atoi(m["role"].c_str())];
+        keys.clear();
+        const auto& list=m["keys"];
+        size_t start=0;
+        while(start<list.size()) {
+            const size_t end=list.find(',',start);
+            const auto item=list.substr(start,end==std::string::npos ? end : end-start);
+            char* tail=nullptr;
+            const long key=std::strtol(item.c_str(),&tail,10);
+            if(tail!=item.c_str() && *tail=='\0' && key>=0 && key<InputState::Count)
+                keys.insert(static_cast<int>(key));
+            if(end==std::string::npos) break;
+            start=end+1;
+        }
+        return 0;
     }
     if (inst && IsClickWaitTag(tagname)) {
         inst->SetWaiting(true);   // pause the native runner until the next tap
@@ -1068,8 +1087,43 @@ bool LuaEngine::FindLayerEvent(const std::string &id, const std::string &type,
 }
 
 void LuaEngine::ClickAt(float x, float y) {
+    pending_click_=true;click_x_=x;click_y_=y;
+}
+
+void LuaEngine::AdvanceByInput() {
+    if (wait_accept_input_) SetWaiting(false);
+}
+
+void LuaEngine::DispatchFrameInput() {
+    const bool click=pending_click_ ||
+        (input_.Overridden(1) && input_.Query(1,InputState::Decide));
+    const float x=pending_click_ ? click_x_ : mouse_x_;
+    const float y=pending_click_ ? click_y_ : mouse_y_;
+    pending_click_=false;
+    if (click && (!input_.Overridden(1) || input_.Query(1,InputState::Decide)))
+        DispatchClick(x,y);
+    // Key callbacks can alter their registrations, enqueue scripts, or emit
+    // another virtual key. Iterate key ids, then evaluate the click role once.
+    for (int key=2;key<InputState::Count;++key) {
+        const auto it=onpush_.find(key);
+        if (it==onpush_.end()) continue;
+        bool repeat=false;
+        for(const auto& kv:it->second) if(kv.first=="keyrepeat") repeat=kv.second=="1";
+        if (input_.Query(key,InputState::Decide) || (repeat && input_.Query(key,InputState::Push)))
+            FireOnPush(key);
+    }
+    const auto role=key_roles_.find(0);
+    if(role!=key_roles_.end()) {
+        for(int key:role->second) if(input_.Query(key,InputState::Decide)) {
+            AdvanceByInput();break;
+        }
+    } else if(input_.Query(13,InputState::Decide)) AdvanceByInput();
+}
+
+void LuaEngine::DispatchClick(float x, float y) {
     if (!compositor_) {
-        if (wait_accept_input_) SetWaiting(false);
+        if (onpush_.count(1)) FireOnPush(1);
+        else AdvanceByInput();
         return;
     }
     // KrKr2-Next: the real engine dispatches a click to the frontmost layer
@@ -1086,7 +1140,8 @@ void LuaEngine::ClickAt(float x, float y) {
                       (FindLayerEvent(id, "click", nullptr) ? "yes" : "no"));
     std::vector<std::pair<std::string, std::string>> attrs;
     if (id.empty() || !FindLayerEvent(id, "click", &attrs)) {
-        if (wait_accept_input_) SetWaiting(false);
+        if (onpush_.count(1)) FireOnPush(1);
+        else AdvanceByInput();
         return;
     }
     if (!FilterEvent("lyevent", attrs)) return;
@@ -1136,11 +1191,13 @@ void LuaEngine::FireOnPush(int key) {
     if (it == onpush_.end()) return;
     const auto attrs = it->second;   // copy: handler may re-enter
     if (!FilterEvent("setonpush", attrs)) return;
+    const uint64_t event=script_runner_ ? script_runner_->BeginEvent(*this) : 0;
     for (const auto &kv : attrs)
         if (kv.first == "function" && !kv.second.empty()) {
             CallEvent(kv.second, attrs, false);
             break;
         }
+    if (script_runner_) script_runner_->EndEvent(event);
 }
 
 // ---- draggable layers (framework slider pins) ----

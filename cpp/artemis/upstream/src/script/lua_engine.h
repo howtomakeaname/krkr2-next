@@ -111,8 +111,8 @@ public:
         stop_handler_ = std::move(cb);
     }
 
-    // Touch hit-test: topmost layer with a lyevent handler fires its
-    // over+click Lua handlers (framework button model).
+    // Queue a completed tap. RunEnterFrame applies the script's input
+    // overrides before hit-testing/dispatching it.
     void ClickAt(float x, float y);
     // Draggable-layer state machine (framework slider pins). The host frame
     // loop feeds: BeginDrag on key-1 down when the hit layer is draggable,
@@ -199,6 +199,9 @@ private:
                      const std::vector<std::pair<std::string, std::string>>& attrs);
     int event_filter_ref_ = -2; // LUA_NOREF
     static int l_overrideKey(lua_State *L);
+    void DispatchFrameInput();
+    void DispatchClick(float x, float y);
+    void AdvanceByInput();
     static int l_enqueueTag(lua_State *L);
     static int l_random(lua_State *L);
     static int l_getScriptStack(lua_State *L);
@@ -281,6 +284,9 @@ private:
     bool exit_requested_ = false;
     std::string save_dir_;   // game directory for system.dat / saves
     InputState input_;
+    bool pending_click_ = false;
+    float click_x_ = 0, click_y_ = 0;
+    std::map<int,std::set<int>> key_roles_;
     float mouse_x_ = 0, mouse_y_ = 0;
     int touch_count_ = 0;
     int debug_mode_ = 0;
