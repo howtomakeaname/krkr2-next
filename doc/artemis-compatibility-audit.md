@@ -12,7 +12,15 @@
 | 动画 / shader | `tweenset`、旋转/翻转和父级变换；游戏原生移动端 GLSL、递归图层中间缓冲及纹理/常量绑定；新增随父级变换的中间层蒙版和裁剪；本游戏 19 个 GLSL 全部编译，实际场景灰度＋双向模糊验证通过 | HLSL、所有原版中间缓冲缓存模式及更多组合、普通图片 `mask` 和蒙版命中检测；原版 `anime` 图集指令仍未实现 |
 | 按键 / 自动阅读 | override 各输入状态位和恢复、逐帧边沿、帧回调后的输入派发；自动阅读等文字和指定语音结束，再计算阅读间隔；点击/stop 停止自动阅读 | 完整快进 / 已读策略、更多 key role、脚本状态 get/set |
 | 原版存档快照 | BOWS/1003 和 Pluto 值图通过游戏 `onLoad` 恢复；新增首次启动 BOWG 配置/槽位索引导入，宿主可从原 LOAD 菜单加载并继续剧情；新 ARCV 槽位支持重启回读，新增场景 PNG 缩略图写出和读取 | 完整 VM/线程/闭包、自定义 userdata、原版已读集合应用、内嵌截图导入，以及可被原版读回的 BOWS/BOWG 写出 |
-| E-mote | PSB/MDF、RL/raw/CI8 贴图和变量/时间轴元数据；新增 C++ 图片/布局/子动作场景求值与 GLES 绘制，合成身体/表情的位移、差分换图和 GL 重建通过像素回归 | **尚不能播放完整 E-mote 立绘**：Lua 播放接口、复杂继承/深度/混合、网格/蒙版、控制器、物理与加密 PSB 待接通 |
+| E-mote | PSB/MDF、RL/raw/CI8 贴图和变量/时间轴元数据；新增 C++ 图片/布局/子动作场景求值与 GLES 绘制，合成身体/表情的位移、差分换图和 GL 重建通过像素回归；新增 `EmotePlayer` 播放器（帧时钟、顺序/并行队列、淡入淡出、hold-end、skip/pass、变量过渡）并接通 `createEmoteLayer/getEmoteLayer` Lua 桥与代理方法，含 PSB 回写夹具与合成模型回归 | **尚不能播放完整 E-mote 立绘**：复杂继承/深度/混合、网格/stencil、物理（startWind 等为记录式占位）、加密 PSB 与公开复杂模型仍拒绝或未实现；本测试游戏没有 E-mote 模型，播放面仅由合成夹具覆盖 |
+
+### E-mote 播放器与 Lua 桥接
+
+- 3 个提交：`f9320bc` `EmotePlayer`/`EmoteScene::Remove`，`3a4b739` Lua 桥（`lua_engine.cpp/.h`），`6fab8ba` 回归（`emote_scene_fixture.h`、`emote_regressions.cpp`、`runtime_regressions.cpp`）。实现均在 Artemis 公共引擎层，未改 Flutter/鸿蒙专用代码。
+- 播放器语义（对照原 `EmotePlayer` 绑定重写，非照抄空实现）：60fps 帧时钟（毫秒 ×0.06，60 秒上限）；主时间轴（循环）与差分时间轴（叠加）双通道，基础动作独立推进、循环用 `loopBegin+fmod` 回绕；顺序播放排队、并行重播就地重启；结束的非循环时间轴保持末姿态；`fadeIn/out` 淡入淡出、零混合自动移除、手动 `setTimelineBlendRatio` 取消淡出；`setTimeline(loop=false)` 停在循环末端；`skip` 完成过渡并把有限时间轴跳到末帧、释放队列，`pass` 只完成过渡/混合；变量过渡按 `ease>=0 ? ease+1 : 1/(1-ease)` 加权；`Load` 失败保持原播放器原状（原子性）。
+- Lua 桥：`e:createEmoteLayer{id,files,...}`（缺 id/无文件/多文件/缺包文件/无合成器/模型损坏逐条显式报 nil，替换同 id 旧层）、`e:getEmoteLayer`、`e:getEmoteVersion()` 返回 `3.9.8`；代理方法按原 camelCase/PascalCase 双拼写注册，未注册的物理/命中测试方法（`startWind` 等）落到记录式占位并明确不伪造 SDK 行为；`lydel` 同步拆除场景子树并使旧代理报 `E-mote layer removed`；每帧 `UpdateEmotes` 推进并渲染。宽高/`progress` 参数仅作调用兼容。
+- 测试侧新增 PSB 编码夹具（按解码器契约重写：first-fit 名字 trie、terminal 序键索引、对象双数组布局），`DecodePsb(EncodePsb(...))` 先行往返自证；合成模型约 40 条播放器断言（帧时钟、队列、淡变、hold-end、skip/pass、差分 vs 插值混合经参数化表情图标观测、Load 原子性），Lua 桥约 20 条断言（契约失败路径 + PF8 合成包全链路 + 代理失效）。宿主回归 4/4 通过。
+- 边界同前：目标测试包没有 E-mote 模型，以上播放面为面向后续模型的引擎能力；网格/stencil、物理、加密 PSB 与公开复杂模型（blend/depth 等）仍显式拒绝或不支持，不声称完整 SDK 等价。
 
 ### 全局存档、蒙版与场景渲染续修
 

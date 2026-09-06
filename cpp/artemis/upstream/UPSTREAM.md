@@ -180,16 +180,28 @@ standalone `lua.c` / `luac.c` interpreters are removed.
   changes, sprite origins and hierarchical transforms. Validate all reachable
   frames before accepting a model; reject unsupported blend/depth, inheritance,
   mesh/stencil and control semantics. Synthetic GPU fixtures exercise body/face
-  alignment and resource recreation. Lua player integration, SDK timeline
-  controllers, physics and encrypted PSB remain absent; complex public models
-  still require unsupported rendering features.
+  alignment and resource recreation. SDK timeline controllers, physics and
+  encrypted PSB remain absent (player integration: see emote_player below);
+  complex public models still require unsupported rendering features.
+- `src/render/emote_player.*`, `emote_scene.*`, `lua_engine.*` — E-mote playback
+  on the bounded scene renderer: 60 fps frame clock with loop wrapping, main vs
+  difference timelines, sequential queueing with in-place parallel restart,
+  hold-end poses, fades with auto-stop and manual blend override, skip/pass,
+  eased variable transitions and atomic reload. `e:createEmoteLayer` /
+  `e:getEmoteLayer` expose the reference proxy surface (dual camelCase/PascalCase
+  spellings); every load failure path reports explicitly, `lydel` tears the
+  subtree down and invalidates stale proxies, and unregistered physics/hit-test
+  methods fall through to a logging stub instead of faking SDK behavior.
+  Physics, mesh/stencil deformation, encrypted PSB and complex public models
+  remain unsupported; the test game ships no E-mote models, so the playback
+  surface is covered by synthetic fixtures only.
 - `src/render/snapshot_image.*`, `compositor.*`, `lua_engine.*` — `takess` retains
   a top-down scene framebuffer snapshot; `savess` writes an atomically replaced
   PNG with alpha-correct resizing. Saved images can be read through script file
   APIs and layer creation within the authorized save directory. Captures survive
   subsequent menu drawing; original embedded-thumbnail import is not implemented.
 
-Full key roles/skip, all shader semantics, E-mote playback, complex typography
-and complete native snapshot interchange remain incomplete.
+Full key roles/skip, all shader semantics, complete E-mote SDK parity, complex
+typography and complete native snapshot interchange remain incomplete.
 See `doc/artemis-compatibility-audit.md` at the repository root for validation
 scope and the distinction between host and signed HarmonyOS device tests.

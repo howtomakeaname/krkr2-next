@@ -228,4 +228,10 @@ bool EmoteScene::Render(Compositor& c,const std::string& id,double frame,
     }
     installed_layers_=std::move(current);return true;
 }
+void EmoteScene::Remove(Compositor& c,const std::string& id) {
+    // DeleteLayer on a dotted child cascades to its own descendants; keys here
+    // are already full dotted paths, but the loop stays O(installed).
+    for(const auto& key:installed_layers_)c.DeleteLayer(key);
+    installed_layers_.clear();installed_.clear();
+}
 }

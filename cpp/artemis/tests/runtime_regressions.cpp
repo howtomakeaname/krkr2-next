@@ -6,6 +6,7 @@
 #include "script/expression.h"
 #include "script/native_save.h"
 #include "script/save_storage.h"
+#include "emote_scene_fixture.h"
 #include <zlib.h>
 #include "render/compositor.h"
 #include <chrono>
@@ -15,6 +16,9 @@
 #include <iostream>
 #include <map>
 #include <thread>
+#if defined(ARTC_HAS_GLES)
+#include <EGL/egl.h>
+#endif
 
 static void Check(bool ok, const char* why) {
     if (!ok) { std::cerr << why << '\n'; std::exit(1); }
@@ -41,6 +45,22 @@ public:
 };
 
 int main(int argc, char** argv) {
+#if defined(ARTC_HAS_GLES)
+    // The E-mote Lua block renders through SetPixels, which uploads through
+    // real GL; OHOS builds the compositor with GLES unconditionally, so give
+    // the binary a pbuffer context before any engine sees a compositor.
+    EGLDisplay display=eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    Check(eglInitialize(display,nullptr,nullptr),"initialize EGL");
+    EGLint cfg_attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,
+                        EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_NONE};
+    EGLConfig config;EGLint count=0;
+    Check(eglChooseConfig(display,cfg_attrs,&config,1,&count)&&count,"choose EGL config");
+    EGLint pb_attrs[]={EGL_WIDTH,32,EGL_HEIGHT,32,EGL_NONE};
+    EGLSurface surface=eglCreatePbufferSurface(display,config,pb_attrs);
+    EGLint ctx_attrs[]={EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE};
+    EGLContext context=eglCreateContext(display,config,EGL_NO_CONTEXT,ctx_attrs);
+    Check(eglMakeCurrent(display,surface,surface,context),"make EGL context current");
+#endif
     {
     {
         artc::VariableBank input={{"binary",std::string("a\0b",3)},{"empty",""}},output;
@@ -524,6 +544,75 @@ int main(int argc, char** argv) {
     runner.EndEvent(paused);
     Check(script.IsWaiting(), "app pause also freezes the wait suspended below a menu event");
     std::filesystem::remove(path);
+
+    // ---- E-mote Lua surface: contract failures, then a full synthetic model ----
+    Check(events.DoString("assert(e:getEmoteVersion()=='3.9.8')", "version"),
+          "E-mote version string");
+    Check(events.DoString("assert(e:createEmoteLayer{id='x'}==nil)", "no files"),
+          "createEmoteLayer without files fails");
+    Check(events.DoString("assert(e:createEmoteLayer{files={'a.psb'}}==nil)", "no id"),
+          "createEmoteLayer without id fails");
+    Check(events.DoString("assert(e:createEmoteLayer{id='x',files={'a.psb','b.psb'}}==nil)", "multi"),
+          "multi-file archives fail explicitly");
+    Check(events.DoString("assert(e:createEmoteLayer{id='x',files={'missing.psb'}}==nil)", "missing"),
+          "absent model files fail");
+    Check(events.DoString("assert(e:getEmoteLayer('x')==nil)", "absent"),
+          "getEmoteLayer of an absent layer is nil");
+    Check(lua.DoString("assert(e:createEmoteLayer{id='x',files={'missing.psb'}}==nil)", "no compositor"),
+          "createEmoteLayer needs a compositor");
+
+    // A synthetic PSB inside its own pack drives the full success path.
+    const std::map<std::string,std::vector<uint8_t>> emote_files = {
+        {"emote.psb", emote_fixture::EncodePsb(emote_fixture::PlayerDocument())}
+    };
+    std::vector<unsigned char> emote_pack;
+    auto eu32=[&](uint32_t v){ for(int i=0;i<4;++i) emote_pack.push_back((v>>(i*8))&255); };
+    uint32_t emote_index=4;
+    for(const auto& f:emote_files) emote_index+=16+f.first.size();
+    emote_pack.insert(emote_pack.end(),{'p','f','8'});eu32(emote_index);eu32(emote_files.size());
+    uint32_t emote_offset=7+emote_index;
+    for(const auto& f:emote_files) {
+        eu32(f.first.size());emote_pack.insert(emote_pack.end(),f.first.begin(),f.first.end());
+        eu32(0);eu32(emote_offset);eu32(f.second.size());emote_offset+=f.second.size();
+    }
+    for(const auto& f:emote_files) emote_pack.insert(emote_pack.end(),f.second.begin(),f.second.end());
+    const auto emote_path=std::filesystem::temp_directory_path()/
+        ("artemis-emote-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".pfs");
+    { std::ofstream f(emote_path,std::ios::binary); f.write(reinterpret_cast<const char*>(emote_pack.data()),emote_pack.size()); }
+    artc::PackManager emote_packs;
+    Check(emote_packs.OpenChain(emote_path.string(),{0}), "open synthetic E-mote pack");
+    artc::Compositor emote_compositor;
+    artc::LuaEngine emote;
+    Check(emote.Init(&emote_packs,ini,"android",1280,720,&emote_compositor), "E-mote engine init");
+    Check(emote.DoString(R"(
+        local m=e:createEmoteLayer{id='m1',files={'emote.psb'},width=1280,height=720,progress=false}
+        assert(m)
+        assert(e:getEmoteLayer('m1'))
+        assert(m:countMainTimelines()==2)
+        assert(m:getDiffTimelineLabelAt(0)=='delta')
+        assert(m:countVariables()==1 and m:getVariableLabelAt(0)=='expression')
+        assert(m:playTimeline('once'))
+        assert(m:isTimelinePlaying('once') and not m:isTimelinePlaying('delta'))
+        assert(m:getTimelineTotalFrameCount('once')==60)
+        assert(m:PlayTimeline('delta',2))            -- sequential: queued behind "once"
+        assert(m:countPlayingTimelines()==1)
+        m:progress(1200)                             -- 72 frames: once ends, delta starts
+        assert(m:isTimelinePlaying('delta'))
+        assert(m:setVariable('expression',5) and m:getVariable('expression')==5)
+        local ok,err=m:setVariable('missing',1);assert(ok==false and err)
+        m:startWind(1,2,3)                           -- unregistered physics: stub, no error
+        stale=m
+    )","emote lua"),"E-mote proxy playback through the bridge");
+    emote.RunEnterFrame();  // UpdateEmotes renders every live player
+    Check(emote_compositor.GetLayerInfo("m1").found, "frame tick renders the E-mote layer subtree");
+    Check(emote.DoString(R"(
+        e:tag{'lydel',id='m1'}
+        assert(e:getEmoteLayer('m1')==nil)
+        local ok,err=stale:isTimelinePlaying('delta')
+        assert(ok==nil and err=='E-mote layer removed')
+        assert(select('#',stale:getVariable('expression'))==2)
+    )","stale"),"lydel invalidates live proxies");
+    std::filesystem::remove(emote_path);
     Check(script.DoString(R"(
         assert(pluto.unpersist({},"")==nil)
         local t={x=2, s="a\0b", empty={}, yes=true}

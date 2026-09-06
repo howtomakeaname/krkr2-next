@@ -16,6 +16,7 @@
 #include "script/auto_read.h"
 #include "render/compositor.h"
 #include "render/video_player.h"
+#include "render/emote_player.h"
 
 #include "lua.hpp"
 #include <chrono>
@@ -187,6 +188,10 @@ public:
     bool LoadSnapshot(const std::string& file);
 
     lua_State *state() const { return L_; }
+    // E-mote proxies resolve their layer through the live registry so a
+    // stale handle (after lydel or a same-id replace) fails soft instead
+    // of dangling.
+    EmotePlayer *FindEmote(const std::string &id);
     // KrKr2-Next: engine clock in ms (same base as e:now()).
     double NowMs() const;
     // KrKr2-Next: fire due setonsoundfinish callbacks (called per frame).
@@ -218,6 +223,11 @@ private:
     void AdvanceByInput();
     void SetAutoMode(bool enabled);
     void UpdateVideos();
+    void UpdateEmotes();
+    // e:createEmoteLayer{...} / e:getEmoteLayer(id) / e:getEmoteVersion()
+    static int l_createEmoteLayer(lua_State *L);
+    static int l_getEmoteLayer(lua_State *L);
+    static int l_getEmoteVersion(lua_State *L);
     static int l_enqueueTag(lua_State *L);
     static int l_random(lua_State *L);
     static int l_getScriptStack(lua_State *L);
@@ -287,6 +297,9 @@ private:
     Audio *audio_ = nullptr;
     AudioChannels *sounds_ = nullptr;
     std::map<std::string, std::unique_ptr<VideoPlayer>> videos_;
+    // E-mote layers by id (e:createEmoteLayer); ticked every frame, never
+    // auto-expired (the model's base motion keeps them animating).
+    std::map<std::string, std::unique_ptr<EmotePlayer>> emotes_;
     std::string video_wait_;
     int video_skip_ = 0;
     // message pipeline: chgmsg-selected layer + accumulated print text

@@ -209,6 +209,22 @@ public:
         EnsureBlitResources();
 
         auto& egl = krkr::GetEngineEGLContext();
+        // Current render-target generation — compared against what the
+        // static-frame gate last presented (see the gate below).
+        const uint64_t target_gen = egl.GetRenderTargetGeneration();
+        if (seen_target_gen_ != target_gen) {
+            // New target: force several re-presents, not just one. The
+            // embedder's buffer-queue geometry can land a few frames
+            // after the resize call returns; a single forced present
+            // could otherwise capture a stale-geometry buffer and the
+            // gate would freeze that (wrongly scaled) image forever.
+            seen_target_gen_ = target_gen;
+            target_grace_frames_ = kRenderTargetGraceFrames;
+        }
+        const bool force_present = target_grace_frames_ > 0;
+        if (target_grace_frames_ > 0) {
+            --target_grace_frames_;
+        }
 
         // Start of the GL work section (skipped entirely by the
         // static-frame gate when the composited bitmap is unchanged).
@@ -264,6 +280,15 @@ public:
             // When the bitmap is unchanged since the last upload, skip
             // the GL work entirely — the frame-dirty flag then stays
             // clear and engine_tick skips its glReadPixels readback too.
+            //
+            // EXCEPTION: the render target's identity/geometry. When the
+            // host surface is recreated or resized (orientation change on
+            // Flutter/OHOS re-attaches the native window), the new EGL
+            // surface's back buffer is uninitialized and has never been
+            // swapped. Skipping the blit there leaves the consumer with
+            // no buffer at all — the Texture widget goes permanently
+            // black while the engine keeps composing frames. So a target
+            // generation change always forces one full blit.
             {
                 const auto cmp_t0 = std::chrono::steady_clock::now();
                 // The scanline fallback above packs rows contiguously
@@ -273,7 +298,8 @@ public:
                         ? static_cast<tjs_int>(tw * 4)
                         : pitch;
                 const size_t row_bytes = static_cast<size_t>(tw) * 4;
-                bool identical = last_frame_w_ == tw && last_frame_h_ == th &&
+                bool identical = !force_present &&
+                    last_frame_w_ == tw && last_frame_h_ == th &&
                     last_frame_.size() == row_bytes * th;
                 if (identical) {
                     const uint8_t *src = static_cast<const uint8_t *>(pixelData);
@@ -467,6 +493,9 @@ public:
         // double-buffer flicker (alternating between current and stale
         // back-buffer contents).
         egl.MarkFrameDirty();
+        // The target generation presented by this blit is tracked via
+        // seen_target_gen_ above; the grace countdown drives any extra
+        // re-presents. Nothing to record here.
 
         const auto blit_gl_t1 = std::chrono::steady_clock::now();
         if (blit_gl_timed) {
@@ -663,6 +692,11 @@ private:
     std::vector<uint8_t> last_frame_;
     tjs_uint last_frame_w_ = 0;
     tjs_uint last_frame_h_ = 0;
+    // Render-target generation the current grace window was armed for,
+    // and how many forced re-presents remain in it.
+    static constexpr int kRenderTargetGraceFrames = 5;
+    uint64_t seen_target_gen_ = 0;
+    int target_grace_frames_ = 0;
 };
 
 // ---------------------------------------------------------------------------
