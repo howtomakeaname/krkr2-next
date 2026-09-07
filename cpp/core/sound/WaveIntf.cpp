@@ -882,7 +882,12 @@ tjs_error tTJSNI_BaseWaveSoundBuffer::Construct(tjs_int numparams,
 
 //---------------------------------------------------------------------------
 void tTJSNI_BaseWaveSoundBuffer::Invalidate() {
-    // invalidate wave flags object
+    // Invalidate retained script views before the native buffer goes away.
+    if(WaveFlagsObject) {
+        WaveFlagsObject->Invalidate(0, nullptr, nullptr, WaveFlagsObject);
+        WaveFlagsObject->Release();
+        WaveFlagsObject = nullptr;
+    }
     RecreateWaveLabelsObject();
 
     // release filter arrays
@@ -1777,6 +1782,15 @@ iTJSDispatch2 *TVPCreateWaveFlagsObject(iTJSDispatch2 *buffer) {
 
         ~tHolder() { Obj->Release(); }
     } static waveflagsclass;
+
+    // This class is initialized lazily by game scripts, so host project
+    // cleanup invalidates it. Do not reuse that cleared class in a new game.
+    if(waveflagsclass.Obj->IsValid(0, nullptr, nullptr,
+                                   waveflagsclass.Obj) != TJS_S_TRUE) {
+        iTJSDispatch2 *replacement = new tTJSNC_WaveFlags();
+        waveflagsclass.Obj->Release();
+        waveflagsclass.Obj = replacement;
+    }
 
     iTJSDispatch2 *out;
     tTJSVariant param(buffer);

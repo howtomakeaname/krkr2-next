@@ -371,6 +371,8 @@ public:
 };
 
 extern iTJSDispatch2 *TVPCreateNativeClass_KAGParser();
+// Drop script text retained under project-relative scenario names.
+extern void TVPClearScnearioCache();
 
 
 #endif
