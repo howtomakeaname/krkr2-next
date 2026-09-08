@@ -1056,6 +1056,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
+    // Only bytes this flow appends may be rolled back on failure. The
+    // destination can pre-date the import — a completed archive from a
+    // previous run, or an unrelated file sharing the name — and on any
+    // download error it must survive byte-for-byte. Remember the on-entry
+    // state; the error path truncates back to it instead of deleting
+    // (deleting once destroyed a complete on-device archive).
+    var preexisting = false;
+    var initialLength = 0;
     String? error;
     try {
       // The rport tunnel can drop the connection mid-stream and Dart's
@@ -1066,7 +1074,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       var total = 0;
       // Resume a partially-downloaded file from a previous import: probe
       // with a Range offset instead of restarting 2.7 GB from scratch.
-      var received = (await dest.exists()) ? await dest.length() : 0;
+      preexisting = await dest.exists();
+      initialLength = preexisting ? await dest.length() : 0;
+      var received = initialLength;
       for (var attempt = 1; attempt <= kMaxAttempts; attempt++) {
         final client = http.Client();
         try {
@@ -1157,9 +1167,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (error != null) {
       // Never leave a partial file behind — a truncated .xp3 registers as a
-      // valid game but corrupts engine startup.
+      // valid game but corrupts engine startup. But only the bytes this
+      // flow appended may be rolled back: a destination that pre-existed
+      // the import is restored to its on-entry length, never deleted.
       try {
-        if (await dest.exists()) await dest.delete();
+        if (await dest.exists()) {
+          if (preexisting) {
+            final raf = await dest.open(mode: FileMode.append);
+            try {
+              if (await raf.length() > initialLength) {
+                await raf.truncate(initialLength);
+              }
+            } finally {
+              await raf.close();
+            }
+          } else {
+            await dest.delete();
+          }
+        }
       } catch (_) {}
       if (mounted) {
         UiSnackbar.show(

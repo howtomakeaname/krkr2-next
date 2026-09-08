@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../engine/engine_bridge.dart';
 import '../engine/flutter_engine_bridge_adapter.dart';
+import '../engine/virtual_input_controller.dart';
 import '../constants/prefs_keys.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
@@ -21,6 +22,7 @@ import '../services/game_manager.dart';
 import '../widgets/engine_surface.dart';
 import '../ui/ui.dart';
 import '../widgets/performance_overlay.dart';
+import '../widgets/virtual_game_controls.dart';
 
 /// The game running page — full-screen engine surface with auto-start flow.
 class GamePage extends StatefulWidget {
@@ -42,8 +44,7 @@ class GamePage extends StatefulWidget {
   final EngineBridgeBuilder engineBridgeBuilder;
 
   /// Initial screen orientation while the game runs: one of
-  /// [PrefsKeys.gameOrientationValues]. The in-game overlay can rotate
-  /// between landscape and portrait at runtime.
+  /// [PrefsKeys.gameOrientationValues], configured in the settings page.
   final String orientation;
 
   /// If set, play duration is recorded when leaving this page.
@@ -106,6 +107,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   final GlobalKey<EngineSurfaceState> _surfaceKey =
       GlobalKey<EngineSurfaceState>();
+  late final _virtualInput = VirtualInputController(
+    send: (event) async => _surfaceKey.currentState?.sendVirtualInput(event),
+    onError: (error) => _log('Virtual input failed: $error'),
+  );
+  bool _showVirtualControls = false;
 
   Ticker? _ticker;
   // Fallback driver used only if the OHOS DisplaySync callback does not start.
@@ -134,7 +140,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       GlobalKey<EnginePerformanceOverlayState>();
 
   // Orientation currently applied to the window (landscape / portrait / auto).
-  late String _orientation = widget.orientation;
+  late final String _orientation = widget.orientation;
 
   // Which native runtime this entry runs on (drives preflight + the
   // `engine` option handed to the bridge).
@@ -282,6 +288,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _virtualInput.dispose();
     if (widget.gameManager != null) {
       unawaited(_finalizePlaySession());
     }
@@ -1068,6 +1075,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     if (wasTicking) _stopTickLoop();
 
     try {
+      await _virtualInput.setEnabled(false);
       final int result = await _bridge.enginePause();
       if (result == _engineResultOk && mounted) {
         _autoPausedByLifecycle = true;
@@ -1160,19 +1168,6 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     } catch (e) {
       _log('setPreferredOrientations($_orientation) failed: $e');
     }
-  }
-
-  /// Runtime toggle from the in-game overlay: landscape ↔ portrait. "Follow
-  /// system" counts as landscape for the purpose of the flip.
-  void _toggleOrientation() {
-    final next = _orientation == PrefsKeys.gameOrientationPortrait
-        ? PrefsKeys.gameOrientationLandscape
-        : PrefsKeys.gameOrientationPortrait;
-    setState(() {
-      _orientation = next;
-    });
-    _log('Orientation → $next');
-    unawaited(_applyOrientation());
   }
 
   void _restoreOrientation() {
@@ -1286,6 +1281,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   // --- UI ---
 
   void _toggleOverlay() {
+    unawaited(_virtualInput.setEnabled(false));
     setState(() => _showOverlay = !_showOverlay);
   }
 
@@ -1295,7 +1291,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   /// the game. Loading and error screens retain their normal cancel behavior.
   void _handleSystemBack() {
     if (_phase == _EnginePhase.running) {
-      setState(() => _showOverlay = !_showOverlay);
+      _toggleOverlay();
       return;
     }
     unawaited(
@@ -1314,8 +1310,9 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       case _GameMenuAction.pause:
         unawaited(_togglePause());
         break;
-      case _GameMenuAction.rotate:
-        _toggleOrientation();
+      case _GameMenuAction.virtualControls:
+        unawaited(_virtualInput.setEnabled(false));
+        setState(() => _showVirtualControls = !_showVirtualControls);
         break;
       case _GameMenuAction.exit:
         unawaited(_exitGame());
@@ -1325,6 +1322,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
 
   Future<void> _togglePause() async {
     if (_isTicking) {
+      await _virtualInput.setEnabled(false);
       _stopTickLoop();
       await _bridge.enginePause();
       _log('User paused');
@@ -1363,6 +1361,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   Future<void> _parkRuntime({bool canResume = true}) async {
     if (_runtimeParked) return;
     _runtimeParked = true;
+    await _virtualInput.setEnabled(false);
     _stopTickLoop(notify: false);
     // A conflict page does not own the in-process runtime — leave the
     // parked session (other game) untouched.
@@ -1393,6 +1392,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   Future<void> _exitGame({bool runtimeTerminated = false}) async {
     if (_exitInFlight) return;
     _exitInFlight = true;
+    await _virtualInput.setEnabled(false);
     _stopTickLoop(notify: false);
     _restoreOrientation();
     if (widget.gameManager != null) {
@@ -1507,9 +1507,22 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                         externalTickDriven: _isTicking,
                         onLog: (msg) => _log('surface: $msg'),
                         onError: (msg) => _log('surface error: $msg'),
+                        onPointerPosition: _virtualInput.syncCursor,
                       )
                     : _buildBootLogView(),
               ),
+
+              if (_showVirtualControls && _phase == _EnginePhase.running)
+                Positioned.fill(
+                  child: VirtualGameControls(
+                    controller: _virtualInput,
+                    enabled: _isTicking &&
+                        !_showOverlay &&
+                        !_showDebug &&
+                        !_exitInFlight &&
+                        !_autoPausedByLifecycle,
+                  ),
+                ),
 
               // Performance overlay (top-left)
               if (_showPerfOverlay && _phase == _EnginePhase.running)
@@ -1547,18 +1560,20 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                     expanded: _showOverlay,
                     debugVisible: _showDebug,
                     ticking: _isTicking,
-                    showRotate: PrefsKeys.orientationSupported,
+                    virtualControlsVisible: _showVirtualControls,
                     showDebugLabel: _showDebug
                         ? l10n.hideDebug
                         : l10n.showDebug,
                     pauseLabel: _isTicking ? l10n.pause : l10n.resume,
-                    rotateLabel: l10n.rotateScreen,
+                    virtualControlsLabel: _showVirtualControls
+                        ? l10n.hideVirtualControls
+                        : l10n.showVirtualControls,
                     exitLabel: l10n.exitGame,
                     onToggle: _toggleOverlay,
                     onDebug: () => _selectGameMenuAction(_GameMenuAction.debug),
                     onPause: () => _selectGameMenuAction(_GameMenuAction.pause),
-                    onRotate: () =>
-                        _selectGameMenuAction(_GameMenuAction.rotate),
+                    onVirtualControls: () =>
+                        _selectGameMenuAction(_GameMenuAction.virtualControls),
                     onExit: () => _selectGameMenuAction(_GameMenuAction.exit),
                   ),
                 ),
@@ -1912,7 +1927,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
   }
 }
 
-enum _GameMenuAction { debug, pause, rotate, exit }
+enum _GameMenuAction { debug, pause, virtualControls, exit }
 
 class _GameDebugSheetContent extends StatefulWidget {
   const _GameDebugSheetContent({
@@ -2059,30 +2074,30 @@ class _GameControls extends StatefulWidget {
     required this.expanded,
     required this.debugVisible,
     required this.ticking,
-    required this.showRotate,
+    required this.virtualControlsVisible,
     required this.showDebugLabel,
     required this.pauseLabel,
-    required this.rotateLabel,
+    required this.virtualControlsLabel,
     required this.exitLabel,
     required this.onToggle,
     required this.onDebug,
     required this.onPause,
-    required this.onRotate,
+    required this.onVirtualControls,
     required this.onExit,
   });
 
   final bool expanded;
   final bool debugVisible;
   final bool ticking;
-  final bool showRotate;
+  final bool virtualControlsVisible;
   final String showDebugLabel;
   final String pauseLabel;
-  final String rotateLabel;
+  final String virtualControlsLabel;
   final String exitLabel;
   final VoidCallback onToggle;
   final VoidCallback onDebug;
   final VoidCallback onPause;
-  final VoidCallback onRotate;
+  final VoidCallback onVirtualControls;
   final VoidCallback onExit;
 
   @override
@@ -2114,7 +2129,7 @@ class _GameControlsState extends State<_GameControls>
     0.60,
     curve: Curves.easeOutCubic,
   );
-  static const Curve _rotateReveal = Interval(
+  static const Curve _virtualControlsReveal = Interval(
     0.22,
     0.66,
     curve: Curves.easeOutCubic,
@@ -2193,10 +2208,9 @@ class _GameControlsState extends State<_GameControls>
           final contentProgress = reduceMotion
               ? (widget.expanded ? 1.0 : 0.0)
               : _contentController.value;
-          final expandedWidth = widget.showRotate ? _expandedWidth : 140.0;
           final width =
               _collapsedSize +
-              ((expandedWidth - _collapsedSize) * elasticProgress);
+              ((_expandedWidth - _collapsedSize) * elasticProgress);
           final height =
               _collapsedSize +
               ((_expandedHeight - _collapsedSize) * elasticProgress);
@@ -2293,22 +2307,22 @@ class _GameControlsState extends State<_GameControls>
                             ),
                           ),
                         ),
-                        if (widget.showRotate)
-                          Positioned(
-                            left: 92,
-                            top: 4,
-                            width: _collapsedSize,
-                            height: _collapsedSize,
-                            child: _ControlReveal(
-                              progress: reveal(_rotateReveal),
-                              horizontalOffset: 4,
-                              child: _GlassIconAction(
-                                icon: LucideIcons.rotateCw,
-                                label: widget.rotateLabel,
-                                onTap: widget.onRotate,
-                              ),
+                        Positioned(
+                          left: 92,
+                          top: 4,
+                          width: _collapsedSize,
+                          height: _collapsedSize,
+                          child: _ControlReveal(
+                            progress: reveal(_virtualControlsReveal),
+                            horizontalOffset: 4,
+                            child: _GlassIconAction(
+                              icon: LucideIcons.gamepad2,
+                              label: widget.virtualControlsLabel,
+                              selected: widget.virtualControlsVisible,
+                              onTap: widget.onVirtualControls,
                             ),
                           ),
+                        ),
                         Positioned(
                           left: 12,
                           right: 12,

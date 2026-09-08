@@ -595,6 +595,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get rotateScreen => '画面を回転';
 
   @override
+  String get showVirtualControls => 'バーチャル操作を表示';
+
+  @override
+  String get hideVirtualControls => 'バーチャル操作を隠す';
+
+  @override
+  String get virtualTouchpad => 'タッチパッド・タップでクリック';
+
+  @override
+  String get virtualMouseLeft => '左クリック';
+
+  @override
+  String get virtualMouseRight => '右クリック';
+
+  @override
+  String get virtualConfirm => '決定（Enter）';
+
+  @override
+  String get virtualBack => '戻る（Esc）';
+
+  @override
+  String get virtualAdvance => '進む（Space）';
+
+  @override
+  String get virtualSkip => '長押しでスキップ（Ctrl）';
+
+  @override
+  String get virtualUp => '上';
+
+  @override
+  String get virtualDown => '下';
+
+  @override
+  String get virtualLeft => '左';
+
+  @override
+  String get virtualRight => '右';
+
+  @override
   String get gameStarting => '起動中';
 
   @override

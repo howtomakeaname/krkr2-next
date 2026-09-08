@@ -103,12 +103,16 @@ int HostKeyToArtemis(int32_t key_code) {
     case 0x0d:   // enter
       return 13;
     case 0x304:  // arrowUp
+    case 0x26:   // VK_UP (virtual controls)
       return 38;
     case 0x301:  // arrowDown
+    case 0x28:   // VK_DOWN
       return 40;
     case 0x302:  // arrowLeft
+    case 0x25:   // VK_LEFT
       return 37;
     case 0x303:  // arrowRight
+    case 0x27:   // VK_RIGHT
       return 39;
     case 0x08:   // backspace
       return kKeyBack;
@@ -116,6 +120,10 @@ int HostKeyToArtemis(int32_t key_code) {
       return 27;
     case 0x20:   // space
       return 32;
+    case 0x11:   // VK_CONTROL
+    case 0x100:  // Flutter controlLeft
+    case 0x101:  // Flutter controlRight
+      return 17;
     default:
       return -1;
   }
@@ -286,20 +294,13 @@ bool ArtemisRuntime::Impl::Boot(std::string* error) {
 
   runner = artc::AsbRunner();
   runner.SetPackSource(&packs);
+  lua->SetScriptRunner(&runner);
   artc::AsbRunner* r = &runner;
   artc::LuaEngine* l = lua.get();
   lua->SetJumpHandler([this, r](const std::string& file, const std::string& label) {
-    if (r->Returning()) {
-      Log("asb: skip jump while returning: " + label);
-      return;
-    }
     r->Jump(file, label);
   });
   lua->SetCallHandler([this, r](const std::string& file, const std::string& label) {
-    if (r->Returning()) {
-      Log("asb: skip call while returning: " + label);
-      return;
-    }
     r->Call(file, label);
   });
   lua->SetStopHandler([this, r](const std::string& tag) {
@@ -398,11 +399,8 @@ void ArtemisRuntime::Impl::DrainQueuedTags() {
         if (kv.first == "file") file = kv.second;
         else if (kv.first == "label") label = kv.second;
       }
-      if (runner.Returning()) {
-        Log("asb: skip queued [" + name + "] while returning");
-      } else {
-        runner.Jump(file, label);
-      }
+      if (name == "call") runner.Call(file, label);
+      else runner.Jump(file, label);
     } else {
       lua->DispatchTag(name, attrs);
     }
@@ -453,6 +451,13 @@ void ArtemisRuntime::Impl::ProcessInput() {
       continue;
     }
     lua->SetMousePoint(sx, sy);
+    if (ev.key != kKeyTap) {
+      // Mouse right/middle buttons are independent keys, not left taps:
+      // they must not activate a layer button or start a drag.
+      if (ev.down) lua->PushKeyDown(ev.key);
+      else lua->PushKeyUp(ev.key);
+      continue;
+    }
     if (ev.down) {
       lua->PushKeyDown(kKeyTap);
       touch_count = 1;
@@ -478,41 +483,7 @@ void ArtemisRuntime::Impl::StepScript() {
   if (!lua) return;
   if (runner.Loaded() && !runner.Halted() && !lua->IsWaiting()) {
     for (int steps = 0; steps < 4 && runner.Loaded() && !runner.Halted(); ++steps) {
-      runner.ClearReturning();  // a return was resolved last line
-      const artc::AsbLine& ln = runner.Current();
-      if (ln.is_label) {
-        runner.Advance();
-      } else if (ln.command == "\x02LUA") {
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "code") lua->DoString(kv.second, "asb:lua");
-        runner.Advance();
-      } else if (ln.command == "calllua") {
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "function") lua->CallGlobal(kv.second);
-        runner.Advance();
-      } else if (ln.command == "jump") {
-        std::string lbl;
-        for (const auto& kv : ln.attrs)
-          if (kv.first == "label") lbl = kv.second;
-        runner.JumpTo(lbl);
-      } else if (ln.command == "stop" && ln.attrs.empty()) {
-        // Halt in place; the call frame (if any) stays for the [return]
-        // that the resuming flow issues later (select_exit / dialog).
-        runner.Halt();
-        Log("asb: [stop] reached (halt)");
-      } else if (ln.command == "stop") {
-        // `[stop exskip]` (script.asb *movie_play) stops the fast-forward
-        // mode, not the script — nothing to do natively.
-        runner.Advance();
-      } else if (ln.command == "return") {
-        if (!runner.Return()) {
-          runner.Halt();
-          Log("asb: [return] reached (halt)");
-        }
-      } else {
-        lua->DispatchTag(ln.command, ln.attrs);
-        runner.Advance();
-      }
+      runner.ExecuteLine(*lua);
       // command-boundary queue processing (estag chains)
       DrainQueuedTags();
       if (lua->IsWaiting()) break;
@@ -664,6 +635,7 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
 void ArtemisRuntime::QueueInput(const engine_input_event_t& event) {
   Impl& s = *impl_;
   Impl::RawInput ev;
+  ev.key = event.button == 1 ? 2 : event.button == 2 ? 4 : kKeyTap;
   switch (event.type) {
     case ENGINE_INPUT_EVENT_POINTER_DOWN:
       ev.down = true;

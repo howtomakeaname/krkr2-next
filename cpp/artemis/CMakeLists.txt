@@ -12,7 +12,9 @@
 # Platform notes:
 #   * OHOS: GLES2 compositor enabled (ARTC_HAS_GLES), OHAudio voice backend,
 #     hilog output. Consumers must make an EGL context current before
-#     calling into the compositor.
+#     calling into the compositor; ARTC_OHOS_NO_GLES swaps in the math-only
+#     compositor so the regressions can run from a shell (shell-spawned
+#     processes cannot obtain an EGL display).
 #   * other hosts: compositor is math-only and audio is a silent stub — the
 #     library still builds so the bridge can be unit-tested off-device.
 cmake_minimum_required(VERSION 3.16)
@@ -48,7 +50,9 @@ else()
     list(APPEND ARTC_CORE_SOURCES ${ARTC_UPSTREAM}/src/audio/audio.cpp)
 endif()
 
-add_library(artemis_core STATIC ${ARTC_CORE_SOURCES})
+add_library(artemis_core STATIC ${ARTC_CORE_SOURCES}
+    ${ARTC_UPSTREAM}/src/audio/audio_channels.cpp
+    ${ARTC_UPSTREAM}/src/audio/vorbis_stream.cpp)
 target_compile_features(artemis_core PUBLIC cxx_std_17)
 target_include_directories(artemis_core
     PUBLIC
@@ -56,18 +60,48 @@ target_include_directories(artemis_core
     PRIVATE
         ${ARTC_UPSTREAM}/src/render
         ${ARTC_UPSTREAM}/third_party)
-target_link_libraries(artemis_core PUBLIC artemis_lua51)
+find_package(ZLIB REQUIRED)
+target_link_libraries(artemis_core PUBLIC artemis_lua51 ZLIB::ZLIB)
+
+# The application already supplies FFmpeg through vcpkg. Standalone host
+# regressions can use the system libraries without changing the app manifest.
+option(ARTC_ENABLE_FFMPEG "Decode Artemis movies with FFmpeg" ON)
+if(ARTC_ENABLE_FFMPEG)
+    if(FFMPEG_FOUND)
+        target_include_directories(artemis_core PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(artemis_core PUBLIC ${FFMPEG_LIBRARIES})
+        target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+    elseif(NOT CMAKE_CROSSCOMPILING)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(ARTC_FFMPEG QUIET IMPORTED_TARGET
+                libavformat libavcodec libavutil libswresample libswscale)
+            if(ARTC_FFMPEG_FOUND)
+                target_link_libraries(artemis_core PUBLIC PkgConfig::ARTC_FFMPEG)
+                target_compile_definitions(artemis_core PUBLIC ARTC_HAS_FFMPEG=1)
+            endif()
+        endif()
+    endif()
+endif()
 # The upstream code is -Wall -Wextra clean modulo a few unused-variable
 # nits; silence those so the OHOS build log stays readable.
 target_compile_options(artemis_core PRIVATE
     -Wno-unused-variable -Wno-unused-parameter -Wno-unused-const-variable
     -Wno-unused-function)
 
+# Shell-spawned processes on an OHOS image cannot obtain an EGL display (the
+# default display connection only exists inside an app's render session), so
+# the regressions can also run there against the math-only compositor that the
+# desktop headless build uses. The OHAudio backend and hilog logging stay on.
+option(ARTC_OHOS_NO_GLES "Build the OHOS engine without the GLES compositor for shell-run regressions" OFF)
 if(OHOS)
-    target_compile_definitions(artemis_core PUBLIC ARTC_HAS_GLES=1)
     target_link_libraries(artemis_core PUBLIC
-        EGL
-        GLESv2
         ohaudio
         hilog_ndk.z)
+    if(NOT ARTC_OHOS_NO_GLES)
+        target_compile_definitions(artemis_core PUBLIC ARTC_HAS_GLES=1)
+        target_link_libraries(artemis_core PUBLIC
+            EGL
+            GLESv2)
+    endif()
 endif()

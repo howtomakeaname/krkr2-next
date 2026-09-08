@@ -1168,6 +1168,84 @@ abstract class AppLocalizations {
   /// **'Rotate Screen'**
   String get rotateScreen;
 
+  /// No description provided for @showVirtualControls.
+  ///
+  /// In en, this message translates to:
+  /// **'Show virtual controls'**
+  String get showVirtualControls;
+
+  /// No description provided for @hideVirtualControls.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide virtual controls'**
+  String get hideVirtualControls;
+
+  /// No description provided for @virtualTouchpad.
+  ///
+  /// In en, this message translates to:
+  /// **'Touchpad · tap to click'**
+  String get virtualTouchpad;
+
+  /// No description provided for @virtualMouseLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Left click'**
+  String get virtualMouseLeft;
+
+  /// No description provided for @virtualMouseRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Right click'**
+  String get virtualMouseRight;
+
+  /// No description provided for @virtualConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm (Enter)'**
+  String get virtualConfirm;
+
+  /// No description provided for @virtualBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back (Esc)'**
+  String get virtualBack;
+
+  /// No description provided for @virtualAdvance.
+  ///
+  /// In en, this message translates to:
+  /// **'Advance (Space)'**
+  String get virtualAdvance;
+
+  /// No description provided for @virtualSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to skip (Ctrl)'**
+  String get virtualSkip;
+
+  /// No description provided for @virtualUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Up'**
+  String get virtualUp;
+
+  /// No description provided for @virtualDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Down'**
+  String get virtualDown;
+
+  /// No description provided for @virtualLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Left'**
+  String get virtualLeft;
+
+  /// No description provided for @virtualRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Right'**
+  String get virtualRight;
+
   /// No description provided for @gameStarting.
   ///
   /// In en, this message translates to:

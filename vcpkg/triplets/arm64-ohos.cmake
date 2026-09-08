@@ -12,7 +12,18 @@ set(VCPKG_CRT_LINKAGE dynamic)
 set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_CMAKE_SYSTEM_NAME OHOS)
 set(VCPKG_CMAKE_SYSTEM_VERSION 20)
-set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-linux-ohos")
+# GNU config.sub does not recognize the OHOS OS name. OHOS uses Linux/musl;
+# this configure alias leaves clang's aarch64-linux-ohos target and SDK intact.
+set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-linux-musl")
+
+# The bundled legacy Meson helper decides cross-compilation from CPU family
+# and a platform allowlist. ARM macOS -> ARM OHOS otherwise becomes a native
+# build and configure tries to execute OHOS ELF programs on the Mac. Reuse
+# its generated target machine file explicitly as a cross file for all ports.
+if(DEFINED CURRENT_BUILDTREES_DIR AND DEFINED TARGET_TRIPLET)
+    set(VCPKG_MESON_CROSS_FILE_DEBUG "${CURRENT_BUILDTREES_DIR}/meson-${TARGET_TRIPLET}-dbg.log")
+    set(VCPKG_MESON_CROSS_FILE_RELEASE "${CURRENT_BUILDTREES_DIR}/meson-${TARGET_TRIPLET}-rel.log")
+endif()
 
 if(NOT DEFINED ENV{OHOS_NATIVE_SDK})
     message(FATAL_ERROR "arm64-ohos triplet requires the OHOS_NATIVE_SDK env var pointing at the HarmonyOS 'native' SDK dir")

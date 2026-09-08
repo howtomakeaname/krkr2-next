@@ -50,12 +50,13 @@
     },
     "ffmpeg",
     "fmt",
+    "freetype",
     "jxrlib",
     "libarchive",
     "libxml2",
     {
       "name": "libgdiplus",
-      "platform": "!windows"
+      "platform": "linux | osx | ios | android"
     },
     "libjpeg-turbo",
     {

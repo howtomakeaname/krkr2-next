@@ -507,14 +507,16 @@ std::thread DetachStartupWorker(engine_handle_s* impl) {
 
 bool EnsureEngineRuntimeInitialized(uint32_t width, uint32_t height,
                                     krkr::AngleBackend backend = krkr::AngleBackend::OpenGLES) {
-  if (g_engine_bootstrapped) {
-    return true;
+  if (!g_engine_bootstrapped) {
+    if (!TVPEngineBootstrap::Initialize(width, height, backend)) {
+      return false;
+    }
+    g_engine_bootstrapped = true;
   }
-  if (!TVPEngineBootstrap::Initialize(width, height, backend)) {
-    return false;
-  }
-  g_engine_bootstrapped = true;
-  return true;
+  // Bootstrap is process-wide, but EGL currentness belongs to the calling
+  // thread. Every startup worker must acquire the retained context before
+  // the startup script creates textures, including after a game is closed.
+  return krkr::GetEngineEGLContext().MakeCurrent();
 }
 
 struct FrameReadbackLayout {
@@ -1177,7 +1179,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
     // release every project-owned object before mounting another game.
     // TVPSystemUninit is deliberately not called here: it consumes the
     // one-shot at-exit registry and cannot be followed by a second project.
-    AndroidInfoLog("engine_destroy: resetting KiriKiri project runtime");
+    spdlog::info("engine_destroy: resetting KiriKiri project runtime");
     auto& egl = krkr::GetEngineEGLContext();
     if (egl.IsValid()) {
       try {
@@ -1229,7 +1231,7 @@ engine_result_t engine_destroy(engine_handle_t handle) {
     if (egl.IsValid()) {
       egl.ReleaseCurrent();
     }
-    AndroidInfoLog("engine_destroy: KiriKiri project runtime reset complete");
+    spdlog::info("engine_destroy: KiriKiri project runtime reset complete");
   }
 
   delete impl;

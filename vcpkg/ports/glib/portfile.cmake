@@ -19,6 +19,14 @@ if(VCPKG_TARGET_IS_OSX OR VCPKG_TARGET_IS_IOS)
 endif()
 
 vcpkg_list(SET OPTIONS)
+if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+    # OHOS clang defines __linux__, which enables GLib's Unix journal helpers
+    # in C. Select the matching source set in Meson as well.
+    vcpkg_replace_string("${SOURCE_PATH}/meson.build"
+        "host_system = host_machine.system()"
+        "host_system = host_machine.system()\nif host_system == 'ohos'\n  host_system = 'linux'\nendif")
+
+endif()
 if (selinux IN_LIST FEATURES)
     if(NOT EXISTS "/usr/include/selinux")
         message(WARNING "SELinux was not found in its typical system location. Your build may fail. You can install SELinux with \"apt-get install selinux libselinux1-dev\".")

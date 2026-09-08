@@ -318,6 +318,8 @@ bool EGLContextManager::CreateSurface(uint32_t width, uint32_t height) {
     }
     width_ = width;
     height_ = height;
+    // New pbuffer identity — cached frames must be re-presented.
+    ++target_generation_;
     return true;
 }
 
@@ -454,6 +456,8 @@ bool EGLContextManager::AttachIOSurface(uint32_t iosurface_id,
     iosurface_width_ = width;
     iosurface_height_ = height;
     iosurface_id_ = iosurface_id;
+    // New IOSurface target — cached frames must be re-presented.
+    ++target_generation_;
 
     spdlog::info("AttachIOSurface: success (id={}, {}x{}, fbo={}, tex={}, target=0x{:x})",
                  iosurface_id, width, height, fbo, tex, glTextureTarget);
@@ -490,6 +494,11 @@ void EGLContextManager::BindRenderTarget() {
 }
 
 void EGLContextManager::DestroyIOSurfaceResources() {
+    if (iosurface_fbo_ != 0 || iosurface_texture_ != 0 ||
+        iosurface_pbuffer_ != EGL_NO_SURFACE) {
+        // Render target identity is about to change back to the pbuffer.
+        ++target_generation_;
+    }
     if (iosurface_fbo_ != 0) {
         glDeleteFramebuffers(1, &iosurface_fbo_);
         iosurface_fbo_ = 0;
@@ -732,6 +741,10 @@ bool EGLContextManager::AttachNativeWindow(void* window,
     native_window_ = nativeWindow;
     window_width_ = width;
     window_height_ = height;
+    // New window surface identity — cached frames must be re-presented,
+    // otherwise the freshly created surface never receives a buffer
+    // (the Flutter Texture widget would stay black after re-attach).
+    ++target_generation_;
 
     spdlog::info("AttachNativeWindow: success {}x{}", width, height);
     return true;
@@ -752,6 +765,8 @@ void EGLContextManager::DetachNativeWindow() {
 void EGLContextManager::DestroyNativeWindowResources() {
 #if defined(__ANDROID__) || defined(__OHOS__)
     if (native_window_) {
+        // Render target identity is about to change (detach or re-attach).
+        ++target_generation_;
         // Revert to Pbuffer surface if available
         if (surface_ != EGL_NO_SURFACE && display_ != EGL_NO_DISPLAY && context_ != EGL_NO_CONTEXT) {
             eglMakeCurrent(display_, surface_, surface_, context_);

@@ -11,17 +11,6 @@ import 'package:flutter/services.dart';
 import '../engine/engine_bridge.dart';
 import '../ui/theme/ui_theme.dart';
 
-class EngineInputEventType {
-  static const int pointerDown = 1;
-  static const int pointerMove = 2;
-  static const int pointerUp = 3;
-  static const int pointerScroll = 4;
-  static const int keyDown = 5;
-  static const int keyUp = 6;
-  static const int textInput = 7;
-  static const int back = 8;
-}
-
 /// True on the OpenHarmony Flutter fork. The fork reports 'ohos' through
 /// Platform.operatingSystem but the standard SDK has no Platform.isOhos,
 /// so compare the string directly.
@@ -48,6 +37,7 @@ class EngineSurface extends StatefulWidget {
     this.externalTickDriven = false,
     this.onLog,
     this.onError,
+    this.onPointerPosition,
   });
 
   final EngineBridge bridge;
@@ -60,6 +50,7 @@ class EngineSurface extends StatefulWidget {
   final bool externalTickDriven;
   final ValueChanged<String>? onLog;
   final ValueChanged<String>? onError;
+  final ValueChanged<Offset>? onPointerPosition;
 
   @override
   EngineSurfaceState createState() => EngineSurfaceState();
@@ -763,6 +754,27 @@ class EngineSurfaceState extends State<EngineSurface> {
     double? deltaX,
     double? deltaY,
   }) {
+    return _mapPointerEventData(EngineInputEventData(
+      type: type,
+      timestampMicros: event.timeStamp.inMicroseconds,
+      x: event.localPosition.dx,
+      y: event.localPosition.dy,
+      deltaX: deltaX ?? event.delta.dx,
+      deltaY: deltaY ?? event.delta.dy,
+      pointerId: event.pointer,
+      button: _flutterButtonsToEngineButton(event.buttons),
+    ));
+  }
+
+  /// Synthetic controls use the same logical viewport and letterbox mapping
+  /// as direct input. Keyboard codes are already native virtual key codes.
+  Future<void> sendVirtualInput(EngineInputEventData event) async {
+    if (!widget.active || _renderTargetsReleased) return;
+    await _sendInputEvent(event.type <= EngineInputEventType.pointerScroll
+        ? _mapPointerEventData(event) : event);
+  }
+
+  EngineInputEventData _mapPointerEventData(EngineInputEventData event) {
     // Map pointer position from Listener's logical coordinate space
     // to the engine surface's physical pixel coordinates.
     //
@@ -773,10 +785,10 @@ class EngineSurfaceState extends State<EngineSurface> {
     // The C++ side (DrawDevice::TransformToPrimaryLayerManager)
     // then maps these surface coordinates → primary layer coordinates.
     final double dpr = _devicePixelRatio > 0 ? _devicePixelRatio : 1.0;
-    double x = event.localPosition.dx * dpr;
-    double y = event.localPosition.dy * dpr;
-    double dX = (deltaX ?? event.delta.dx) * dpr;
-    double dY = (deltaY ?? event.delta.dy) * dpr;
+    double x = event.x * dpr;
+    double y = event.y * dpr;
+    double dX = event.deltaX * dpr;
+    double dY = event.deltaY * dpr;
 
     // Software RawImage path: the displayed image is letterboxed inside the
     // widget (RawImage fit: BoxFit.contain) while the engine keeps its frame
@@ -808,14 +820,15 @@ class EngineSurfaceState extends State<EngineSurface> {
     }
 
     return EngineInputEventData(
-      type: type,
-      timestampMicros: event.timeStamp.inMicroseconds,
+      type: event.type,
+      timestampMicros: event.timestampMicros,
       x: x,
       y: y,
       deltaX: dX,
       deltaY: dY,
-      pointerId: event.pointer,
-      button: _flutterButtonsToEngineButton(event.buttons),
+      pointerId: event.pointerId,
+      button: event.button,
+      modifiers: event.modifiers,
     );
   }
 
@@ -837,6 +850,7 @@ class EngineSurfaceState extends State<EngineSurface> {
     if (!widget.active) {
       return;
     }
+    widget.onPointerPosition?.call(event.localPosition);
     unawaited(
       _sendInputEvent(
         _buildPointerEventData(
@@ -853,6 +867,7 @@ class EngineSurfaceState extends State<EngineSurface> {
     if (!widget.active) {
       return;
     }
+    widget.onPointerPosition?.call(event.localPosition);
     _pendingPointerMoveEvent = _buildPointerEventData(
       type: EngineInputEventType.pointerMove,
       event: event,

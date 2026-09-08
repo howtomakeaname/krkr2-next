@@ -7,6 +7,10 @@ vcpkg_from_github(
         0001-android-ffmpeg.patch
         0001-operand-shr-error.patch
         0001-fixed-mac.patch
+        # FFmpeg 3.3.9's NEON unscaled converters write the frame but return
+        # zero instead of the number of output rows. Callers of sws_scale
+        # then reject valid video as an empty frame on ARM64.
+        0002-aarch64-swscale-output-height.patch
 )
 
 if(SOURCE_PATH MATCHES " ")

@@ -608,6 +608,9 @@ void TVPResetScriptEngineForHost() {
         TVPScriptEngine->Release();
         TVPScriptEngine = nullptr;
     }
+    // KAG caches short names such as first.ks. A new project's identical
+    // name must resolve against its own archives, not the previous game.
+    TVPClearScnearioCache();
     TVPScriptEngineInit = false;
     TVPScriptEngineUninit = false;
 }

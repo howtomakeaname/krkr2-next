@@ -166,9 +166,28 @@ public:
      * UpdateDrawBuffer() calculates the correct letterbox viewport.
      */
     void UpdateNativeWindowSize(uint32_t w, uint32_t h) {
-        window_width_ = w;
-        window_height_ = h;
+        if (w != window_width_ || h != window_height_) {
+            window_width_ = w;
+            window_height_ = h;
+            // The back buffer of the resized surface must be re-painted.
+            ++target_generation_;
+        }
     }
+
+    /**
+     * @return a counter that increments every time the render target is
+     * recreated or resized (window surface attach/detach, IOSurface
+     * attach/detach, pbuffer resize).
+     *
+     * Consumers that cache presented-frame state (e.g. the static-frame
+     * skip gate in FlutterWindowLayer::UpdateDrawBuffer) must compare this
+     * value against what they last presented: a brand-new EGL surface has
+     * an uninitialized back buffer, so even a byte-identical composited
+     * bitmap must be re-blitted and re-swapped at least once, or the
+     * consumer (Flutter SurfaceTexture) never receives a buffer and the
+     * Texture widget goes permanently black.
+     */
+    uint64_t GetRenderTargetGeneration() const { return target_generation_; }
 
     /**
      * Mark the current frame as dirty (new content rendered).
@@ -244,6 +263,11 @@ private:
     // UpdateDrawBuffer() was not called, avoiding double-buffer
     // flicker (alternating between current and stale back-buffer).
     bool       frame_dirty_         = false;
+
+    // Bumped on every render-target recreation/resize (see
+    // GetRenderTargetGeneration). Lets frame-cache owners detect that
+    // they must repaint even when the composited bitmap is unchanged.
+    uint64_t   target_generation_   = 0;
 };
 
 /**
