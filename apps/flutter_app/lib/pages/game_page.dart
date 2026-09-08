@@ -18,6 +18,7 @@ import '../engine/virtual_input_controller.dart';
 import '../constants/prefs_keys.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
+import '../services/engine_runtime_guard.dart';
 import '../services/game_manager.dart';
 import '../widgets/engine_surface.dart';
 import '../ui/ui.dart';
@@ -31,6 +32,7 @@ class GamePage extends StatefulWidget {
     required this.gamePath,
     this.title,
     this.coverPath,
+    this.saveDirectoryName,
     this.ffiLibraryPath,
     this.engineBridgeBuilder = createEngineBridge,
     this.orientation = PrefsKeys.gameOrientationLandscape,
@@ -40,6 +42,7 @@ class GamePage extends StatefulWidget {
   final String gamePath;
   final String? title;
   final String? coverPath;
+  final String? saveDirectoryName;
   final String? ffiLibraryPath;
   final EngineBridgeBuilder engineBridgeBuilder;
 
@@ -60,6 +63,19 @@ class GamePage extends StatefulWidget {
 /// instant. Switching games destroys the parked project session and mounts the
 /// new one on the retained process-wide renderer without restarting Flutter.
 _EngineRuntimeSession? _activeEngineRuntime;
+
+Future<void> _destroyParkedEngineRuntime() async {
+  final parked = _activeEngineRuntime;
+  if (parked == null) return;
+  try {
+    await parked.bridge.engineDestroy();
+  } finally {
+    if (identical(_activeEngineRuntime, parked)) {
+      _activeEngineRuntime = null;
+    }
+    GameRuntimeBinding.clearParked(parked.gamePath);
+  }
+}
 
 class _EngineRuntimeSession {
   _EngineRuntimeSession({
@@ -188,9 +204,11 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
     }
     final session = _activeEngineRuntime;
     final normalizedPath = _normalizeGamePath(widget.gamePath);
+    GameRuntimeBinding.enter(normalizedPath);
     if (session != null &&
         session.canResume &&
         session.gamePath == normalizedPath) {
+      GameRuntimeBinding.clearParked(normalizedPath);
       _bridge = session.bridge;
       _reuseRuntime = true;
     } else if (session != null) {
@@ -311,6 +329,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       }
     }
     _restoreOrientation();
+    GameRuntimeBinding.leave(_normalizeGamePath(widget.gamePath));
     super.dispose();
   }
 
@@ -591,6 +610,17 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
       value: _engine.id,
     );
 
+    final saveDirectory = widget.saveDirectoryName?.trim();
+    if (saveDirectory != null &&
+        saveDirectory.isNotEmpty &&
+        !saveDirectory.contains('/') &&
+        !saveDirectory.contains('\\')) {
+      await _bridge.engineSetOption(
+        key: PrefsKeys.optionSaveDir,
+        value: saveDirectory,
+      );
+    }
+
     if (!mounted) return;
     setState(() => _phase = _EnginePhase.opening);
     _stopStartupPolling();
@@ -651,6 +681,7 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         if (identical(_activeEngineRuntime, parked)) {
           _activeEngineRuntime = null;
         }
+        GameRuntimeBinding.clearParked(parked.gamePath);
       }
       if (!mounted) return;
       _bridge = widget.engineBridgeBuilder(
@@ -1382,11 +1413,13 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
         _log('engine_pause threw while parking: $e');
       }
     }
+    final parkedPath = _normalizeGamePath(widget.gamePath);
     _activeEngineRuntime = _EngineRuntimeSession(
       bridge: _bridge,
-      gamePath: _normalizeGamePath(widget.gamePath),
+      gamePath: parkedPath,
       canResume: parkedCleanly,
     );
+    GameRuntimeBinding.park(parkedPath, _destroyParkedEngineRuntime);
   }
 
   Future<void> _exitGame({bool runtimeTerminated = false}) async {
@@ -1516,7 +1549,8 @@ class _GamePageState extends State<GamePage> with WidgetsBindingObserver {
                 Positioned.fill(
                   child: VirtualGameControls(
                     controller: _virtualInput,
-                    enabled: _isTicking &&
+                    enabled:
+                        _isTicking &&
                         !_showOverlay &&
                         !_showDebug &&
                         !_exitInFlight &&
@@ -2220,9 +2254,7 @@ class _GameControlsState extends State<_GameControls>
           final materialPulse = reduceMotion
               ? 0.0
               : (4 * contentProgress * (1 - contentProgress)).clamp(0.0, 1.0);
-          final glassRadius = BorderRadius.circular(
-            22 + (4 * visualProgress),
-          );
+          final glassRadius = BorderRadius.circular(22 + (4 * visualProgress));
 
           return Semantics(
             container: true,
@@ -2238,132 +2270,132 @@ class _GameControlsState extends State<_GameControls>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    top: 0,
-                    height: 0.5,
-                    child: ColoredBox(
-                      color: mediaForeground.withValues(
-                        alpha: 0.14 + (0.14 * visualProgress),
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Opacity(
-                        opacity: 0.16 * materialPulse,
-                        child: const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: Alignment(0.82, -0.86),
-                              radius: 1.05,
-                              colors: [
-                                Color(0xB8FFFFFF),
-                                Color(0x24FFFFFF),
-                                Color(0x00FFFFFF),
-                              ],
-                              stops: [0, 0.34, 0.78],
-                            ),
-                          ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      top: 0,
+                      height: 0.5,
+                      child: ColoredBox(
+                        color: mediaForeground.withValues(
+                          alpha: 0.14 + (0.14 * visualProgress),
                         ),
                       ),
                     ),
-                  ),
-                  IgnorePointer(
-                    ignoring: !widget.expanded,
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          left: 4,
-                          top: 4,
-                          width: _collapsedSize,
-                          height: _collapsedSize,
-                          child: _ControlReveal(
-                            progress: reveal(_debugReveal),
-                            horizontalOffset: 10,
-                            child: _GlassIconAction(
-                              icon: LucideIcons.bug,
-                              label: widget.showDebugLabel,
-                              selected: widget.debugVisible,
-                              onTap: widget.onDebug,
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.16 * materialPulse,
+                          child: const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                center: Alignment(0.82, -0.86),
+                                radius: 1.05,
+                                colors: [
+                                  Color(0xB8FFFFFF),
+                                  Color(0x24FFFFFF),
+                                  Color(0x00FFFFFF),
+                                ],
+                                stops: [0, 0.34, 0.78],
+                              ),
                             ),
                           ),
                         ),
-                        Positioned(
-                          left: 48,
-                          top: 4,
-                          width: _collapsedSize,
-                          height: _collapsedSize,
-                          child: _ControlReveal(
-                            progress: reveal(_pauseReveal),
-                            horizontalOffset: 7,
-                            child: _GlassIconAction(
-                              icon: widget.ticking
-                                  ? LucideIcons.pause
-                                  : LucideIcons.play,
-                              label: widget.pauseLabel,
-                              onTap: widget.onPause,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 92,
-                          top: 4,
-                          width: _collapsedSize,
-                          height: _collapsedSize,
-                          child: _ControlReveal(
-                            progress: reveal(_virtualControlsReveal),
-                            horizontalOffset: 4,
-                            child: _GlassIconAction(
-                              icon: LucideIcons.gamepad2,
-                              label: widget.virtualControlsLabel,
-                              selected: widget.virtualControlsVisible,
-                              onTap: widget.onVirtualControls,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 12,
-                          right: 12,
-                          top: 52,
-                          child: Opacity(
-                            opacity: reveal(_dividerReveal).clamp(0.0, 1.0),
-                            child: Divider(
-                              height: 0.5,
-                              thickness: 0.5,
-                              color: mediaForeground.withValues(alpha: 0.14),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 4,
-                          right: 4,
-                          top: 56,
-                          height: 44,
-                          child: _ControlReveal(
-                            progress: reveal(_exitReveal),
-                            verticalOffset: 5,
-                            child: _GlassExitAction(
-                              label: widget.exitLabel,
-                              onTap: widget.onExit,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    right: 4 * visualProgress,
-                    top: 4 * visualProgress,
-                    width: _collapsedSize,
-                    height: _collapsedSize,
-                    child: _MorphingMenuButton(
-                      progress: contentProgress,
-                      expanded: widget.expanded,
-                      onTap: widget.onToggle,
+                    IgnorePointer(
+                      ignoring: !widget.expanded,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 4,
+                            top: 4,
+                            width: _collapsedSize,
+                            height: _collapsedSize,
+                            child: _ControlReveal(
+                              progress: reveal(_debugReveal),
+                              horizontalOffset: 10,
+                              child: _GlassIconAction(
+                                icon: LucideIcons.bug,
+                                label: widget.showDebugLabel,
+                                selected: widget.debugVisible,
+                                onTap: widget.onDebug,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 48,
+                            top: 4,
+                            width: _collapsedSize,
+                            height: _collapsedSize,
+                            child: _ControlReveal(
+                              progress: reveal(_pauseReveal),
+                              horizontalOffset: 7,
+                              child: _GlassIconAction(
+                                icon: widget.ticking
+                                    ? LucideIcons.pause
+                                    : LucideIcons.play,
+                                label: widget.pauseLabel,
+                                onTap: widget.onPause,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 92,
+                            top: 4,
+                            width: _collapsedSize,
+                            height: _collapsedSize,
+                            child: _ControlReveal(
+                              progress: reveal(_virtualControlsReveal),
+                              horizontalOffset: 4,
+                              child: _GlassIconAction(
+                                icon: LucideIcons.gamepad2,
+                                label: widget.virtualControlsLabel,
+                                selected: widget.virtualControlsVisible,
+                                onTap: widget.onVirtualControls,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 12,
+                            right: 12,
+                            top: 52,
+                            child: Opacity(
+                              opacity: reveal(_dividerReveal).clamp(0.0, 1.0),
+                              child: Divider(
+                                height: 0.5,
+                                thickness: 0.5,
+                                color: mediaForeground.withValues(alpha: 0.14),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 4,
+                            right: 4,
+                            top: 56,
+                            height: 44,
+                            child: _ControlReveal(
+                              progress: reveal(_exitReveal),
+                              verticalOffset: 5,
+                              child: _GlassExitAction(
+                                label: widget.exitLabel,
+                                onTap: widget.onExit,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      right: 4 * visualProgress,
+                      top: 4 * visualProgress,
+                      width: _collapsedSize,
+                      height: _collapsedSize,
+                      child: _MorphingMenuButton(
+                        progress: contentProgress,
+                        expanded: widget.expanded,
+                        onTap: widget.onToggle,
+                      ),
+                    ),
                   ],
                 ),
               ),

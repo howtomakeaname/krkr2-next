@@ -100,6 +100,522 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @managerAuthorize.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize Folder'**
+  String get managerAuthorize;
+
+  /// No description provided for @managerAuthorizationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select this app’s folder inside Downloads. Other folders cannot be managed.'**
+  String get managerAuthorizationHint;
+
+  /// No description provided for @managerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is empty'**
+  String get managerEmpty;
+
+  /// No description provided for @managerNewFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'New Folder'**
+  String get managerNewFolder;
+
+  /// No description provided for @managerSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get managerSelect;
+
+  /// No description provided for @managerSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get managerSelectAll;
+
+  /// No description provided for @managerDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get managerDone;
+
+  /// No description provided for @managerCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get managerCancel;
+
+  /// No description provided for @managerCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get managerCopy;
+
+  /// No description provided for @managerMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get managerMove;
+
+  /// No description provided for @managerRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get managerRename;
+
+  /// No description provided for @managerRenameExtensionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the file extension?'**
+  String get managerRenameExtensionTitle;
+
+  /// No description provided for @managerRenameExtensionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Changing the extension from {from} to {to} may change how this file is classified (preview, extract, game data). Only continue if you meant to do that.'**
+  String managerRenameExtensionMessage(String from, String to);
+
+  /// No description provided for @managerRenameExtensionContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get managerRenameExtensionContinue;
+
+  /// No description provided for @managerNoExtension.
+  ///
+  /// In en, this message translates to:
+  /// **'no extension'**
+  String get managerNoExtension;
+
+  /// No description provided for @managerTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to Recently Deleted'**
+  String get managerTrash;
+
+  /// No description provided for @managerRecentlyDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently Deleted'**
+  String get managerRecentlyDeleted;
+
+  /// No description provided for @managerTrashHint.
+  ///
+  /// In en, this message translates to:
+  /// **'These items still use storage. Nothing is deleted automatically.'**
+  String get managerTrashHint;
+
+  /// No description provided for @managerTrashConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Move selected items to Recently Deleted?'**
+  String get managerTrashConfirm;
+
+  /// No description provided for @managerTrashExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'You can restore them later. Game history and private saves will be kept.'**
+  String get managerTrashExplanation;
+
+  /// No description provided for @managerRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get managerRestore;
+
+  /// No description provided for @managerDeletePermanently.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Permanently'**
+  String get managerDeletePermanently;
+
+  /// No description provided for @managerPermanentConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently delete this item?'**
+  String get managerPermanentConfirm;
+
+  /// No description provided for @managerPermanentExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone. Private game saves are not included.'**
+  String get managerPermanentExplanation;
+
+  /// No description provided for @managerChooseDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Destination'**
+  String get managerChooseDestination;
+
+  /// No description provided for @managerUseFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Use This Folder'**
+  String get managerUseFolder;
+
+  /// No description provided for @managerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get managerName;
+
+  /// No description provided for @managerExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract'**
+  String get managerExtract;
+
+  /// No description provided for @managerExtractTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract Archive'**
+  String get managerExtractTitle;
+
+  /// No description provided for @managerPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password (if required)'**
+  String get managerPassword;
+
+  /// No description provided for @managerEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy Filename Encoding'**
+  String get managerEncoding;
+
+  /// No description provided for @managerExtractHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract to a new folder and keep the archive. Unicode names in the archive take priority.'**
+  String get managerExtractHint;
+
+  /// No description provided for @managerWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Working…'**
+  String get managerWorking;
+
+  /// No description provided for @managerCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get managerCompleted;
+
+  /// No description provided for @managerRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Again'**
+  String get managerRetry;
+
+  /// No description provided for @managerErrorCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation cancelled.'**
+  String get managerErrorCancelled;
+
+  /// No description provided for @managerErrorBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait for the current file operation to finish.'**
+  String get managerErrorBusy;
+
+  /// No description provided for @managerErrorInvalidName.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a valid name without path separators or reserved characters.'**
+  String get managerErrorInvalidName;
+
+  /// No description provided for @managerErrorOutsideRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Only this app’s dedicated Downloads folder can be managed.'**
+  String get managerErrorOutsideRoot;
+
+  /// No description provided for @managerErrorProtectedDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is reserved. Manage the items inside it instead.'**
+  String get managerErrorProtectedDirectory;
+
+  /// No description provided for @managerErrorUnsupportedLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Links and special files cannot be processed.'**
+  String get managerErrorUnsupportedLink;
+
+  /// No description provided for @managerErrorNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The file or destination folder no longer exists.'**
+  String get managerErrorNotFound;
+
+  /// No description provided for @managerErrorConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'An item with that name already exists. Nothing was overwritten.'**
+  String get managerErrorConflict;
+
+  /// No description provided for @managerErrorRecursiveTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'An item cannot be placed inside itself.'**
+  String get managerErrorRecursiveTarget;
+
+  /// No description provided for @managerErrorTrashCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'This Recently Deleted record could not be read. No files were removed.'**
+  String get managerErrorTrashCorrupt;
+
+  /// No description provided for @managerErrorPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access is unavailable. Check folder authorization and permissions.'**
+  String get managerErrorPermissionDenied;
+
+  /// No description provided for @managerErrorNoSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough storage. Free up space and try again.'**
+  String get managerErrorNoSpace;
+
+  /// No description provided for @managerErrorReadOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'This location is read-only.'**
+  String get managerErrorReadOnly;
+
+  /// No description provided for @managerErrorPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This archive requires a password.'**
+  String get managerErrorPasswordRequired;
+
+  /// No description provided for @managerErrorWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'The password is incorrect, or the encrypted header is damaged.'**
+  String get managerErrorWrongPassword;
+
+  /// No description provided for @managerErrorMissingVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'A volume is missing. Keep all volumes together with their original numbering.'**
+  String get managerErrorMissingVolume;
+
+  /// No description provided for @managerErrorUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'This archive format is not supported or could not be recognized.'**
+  String get managerErrorUnsupportedFormat;
+
+  /// No description provided for @managerErrorUnsupportedMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'This archive uses an unsupported compression method.'**
+  String get managerErrorUnsupportedMethod;
+
+  /// No description provided for @managerErrorCorruptArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'The archive is incomplete or damaged. Check all volumes and the password.'**
+  String get managerErrorCorruptArchive;
+
+  /// No description provided for @managerErrorInvalidEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'The filename encoding could not be decoded. Choose another encoding and try again.'**
+  String get managerErrorInvalidEncoding;
+
+  /// No description provided for @managerErrorUnsafeArchivePath.
+  ///
+  /// In en, this message translates to:
+  /// **'The archive contains unsafe paths. Extraction was stopped.'**
+  String get managerErrorUnsafeArchivePath;
+
+  /// No description provided for @managerErrorArchiveLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'The archive exceeds the file count or expanded size safety limit.'**
+  String get managerErrorArchiveLimit;
+
+  /// No description provided for @managerErrorGameRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit the game before changing its files.'**
+  String get managerErrorGameRunning;
+
+  /// No description provided for @managerErrorUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder access is not available on this platform yet.'**
+  String get managerErrorUnsupportedPlatform;
+
+  /// No description provided for @managerErrorFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation could not be completed. Check the affected items before trying again.'**
+  String get managerErrorFailed;
+
+  /// No description provided for @managerItemsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String managerItemsSelected(int count);
+
+  /// No description provided for @managerDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get managerDetails;
+
+  /// No description provided for @managerDetailKind.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind'**
+  String get managerDetailKind;
+
+  /// No description provided for @managerDetailFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder'**
+  String get managerDetailFolder;
+
+  /// No description provided for @managerDetailFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get managerDetailFile;
+
+  /// No description provided for @managerDetailArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get managerDetailArchive;
+
+  /// No description provided for @managerDetailGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Game'**
+  String get managerDetailGame;
+
+  /// No description provided for @managerDetailImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get managerDetailImage;
+
+  /// No description provided for @managerDetailAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get managerDetailAudio;
+
+  /// No description provided for @managerDetailVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get managerDetailVideo;
+
+  /// No description provided for @managerDetailText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get managerDetailText;
+
+  /// No description provided for @managerDetailGameData.
+  ///
+  /// In en, this message translates to:
+  /// **'Game data'**
+  String get managerDetailGameData;
+
+  /// No description provided for @managerTextEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is empty.'**
+  String get managerTextEmpty;
+
+  /// No description provided for @managerTextTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the first 2 MB of this file.'**
+  String get managerTextTruncated;
+
+  /// No description provided for @managerPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get managerPlay;
+
+  /// No description provided for @managerPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get managerPause;
+
+  /// No description provided for @managerPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get managerPreview;
+
+  /// No description provided for @managerMediaFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be opened.'**
+  String get managerMediaFailed;
+
+  /// No description provided for @managerDetailSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get managerDetailSize;
+
+  /// No description provided for @managerDetailItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} items'**
+  String managerDetailItems(int count);
+
+  /// No description provided for @managerDetailModified.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified'**
+  String get managerDetailModified;
+
+  /// No description provided for @managerDetailLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get managerDetailLocation;
+
+  /// No description provided for @managerCalculating.
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating…'**
+  String get managerCalculating;
+
+  /// No description provided for @managerEncodingUtf8.
+  ///
+  /// In en, this message translates to:
+  /// **'UTF-8'**
+  String get managerEncodingUtf8;
+
+  /// No description provided for @managerEncodingGb18030.
+  ///
+  /// In en, this message translates to:
+  /// **'GB18030'**
+  String get managerEncodingGb18030;
+
+  /// No description provided for @managerEncodingCp932.
+  ///
+  /// In en, this message translates to:
+  /// **'Shift_JIS'**
+  String get managerEncodingCp932;
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/prefs_keys.dart';
@@ -207,11 +208,88 @@ class GameManager {
 
   /// Update a game's path (e.g. when iOS sandbox container UUID changes).
   Future<void> updateGamePath(String oldPath, String newPath) async {
-    final index = _games.indexWhere((g) => g.path == oldPath);
-    if (index >= 0) {
-      _games[index].path = newPath;
-      await _save();
+    await relocateBoundPaths(oldPath, newPath);
+  }
+
+  /// Rewrite every library path that is [from] or strictly inside it.
+  ///
+  /// Uses path boundaries rather than [String.startsWith] so `game` does
+  /// not also match `game-2`. Save directory names stay put so existing
+  /// private KiriKiri saves remain reachable after a folder rename.
+  Future<void> relocateBoundPaths(String from, String to) async {
+    final source = p.normalize(from);
+    final destination = p.normalize(to);
+    if (source == destination) return;
+    var changed = false;
+    for (final game in _games) {
+      if (!_sameOrWithin(game.path, source)) continue;
+      game.path = _rewrite(game.path, source, destination);
+      if (game.coverPath != null && _sameOrWithin(game.coverPath!, source)) {
+        game.coverPath = _rewrite(game.coverPath!, source, destination);
+      }
+      game.available = true;
+      changed = true;
     }
+    _playSessions = [
+      for (final session in _playSessions)
+        _sameOrWithin(session.gamePath, source)
+            ? PlaySession(
+                id: session.id,
+                gamePath: _rewrite(session.gamePath, source, destination),
+                endedAt: session.endedAt,
+                durationSeconds: session.durationSeconds,
+              )
+            : session,
+    ];
+    if (changed) await _save();
+    await _savePlaySessions();
+    await _rewritePendingPlaySession(source, destination);
+  }
+
+  /// File is gone or in Recently Deleted. Keep stats; do not [removeGame].
+  ///
+  /// Applies to [path] and every game inside it, so trashing a folder that
+  /// holds several games hides all of them while a restore brings all back.
+  Future<void> markUnavailable(String path) => _setAvailable(path, false);
+
+  Future<void> markAvailable(String path) => _setAvailable(path, true);
+
+  Future<void> _setAvailable(String path, bool available) async {
+    var changed = false;
+    for (final game in _games) {
+      if (game.available == available || !_sameOrWithin(game.path, path)) {
+        continue;
+      }
+      game.available = available;
+      changed = true;
+    }
+    if (changed) await _save();
+  }
+
+  bool _sameOrWithin(String path, String base) {
+    final left = p.normalize(path);
+    final right = p.normalize(base);
+    return left == right || p.isWithin(right, left);
+  }
+
+  String _rewrite(String path, String from, String to) {
+    final normalized = p.normalize(path);
+    if (normalized == p.normalize(from)) return to;
+    return p.join(to, p.relative(normalized, from: from));
+  }
+
+  Future<void> _rewritePendingPlaySession(String from, String to) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(PrefsKeys.pendingPlaySession);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final data = jsonDecode(raw);
+      if (data is! Map<String, dynamic>) return;
+      final path = data['path'] as String?;
+      if (path == null || !_sameOrWithin(path, from)) return;
+      data['path'] = _rewrite(path, from, to);
+      await prefs.setString(PrefsKeys.pendingPlaySession, jsonEncode(data));
+    } catch (_) {}
   }
 
   /// Set a custom cover image path for a game.

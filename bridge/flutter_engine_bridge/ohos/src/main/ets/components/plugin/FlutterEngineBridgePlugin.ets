@@ -305,6 +305,17 @@ export default class FlutterEngineBridgePlugin
         break;
       }
 
+      case 'ensureManagerRoot': {
+        const ability = this.ability;
+        if (ability == null) {
+          result.error('failed', 'No ability available', null);
+          break;
+        }
+        const prompt = call.argument('prompt') === true;
+        this.ensureManagerRoot(ability.context, result, prompt);
+        break;
+      }
+
       default:
         result.notImplemented();
         break;
@@ -377,6 +388,82 @@ export default class FlutterEngineBridgePlugin
     } catch (e) {
       Log.e(TAG, `ensurePublicGamesDir threw: ${JSON.stringify(e)}`);
       result.success(null);
+    }
+  }
+
+  /**
+   * Resolve Download/<bundleName>/ for the manage tab. Failures return a
+   * stable wire code instead of null so Flutter never treats "no grant"
+   * as an empty sandbox root.
+   */
+  private ensureManagerRoot(
+    context: common.UIAbilityContext,
+    result: MethodResult,
+    promptIfMissing: boolean,
+  ): void {
+    let bundleName = '';
+    try {
+      bundleName = bundleManager.getBundleInfoForSelfSync(
+        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).name;
+    } catch (e) {
+      Log.e(TAG, `ensureManagerRoot: bundle info failed: ${JSON.stringify(e)}`);
+      result.error('failed', 'Unable to resolve the application identity', null);
+      return;
+    }
+
+    const finish = (rootPath: string): void => {
+      try {
+        if (!fs.accessSync(rootPath)) {
+          fs.mkdirSync(rootPath);
+        }
+        const gamesPath = `${rootPath}/games`;
+        if (!fs.accessSync(gamesPath)) {
+          fs.mkdirSync(gamesPath);
+        }
+        Log.i(TAG, `ensureManagerRoot: ${rootPath}`);
+        result.success({
+          root: rootPath,
+          games: gamesPath,
+          display: `Download/${bundleName}`,
+          appId: bundleName,
+        });
+      } catch (e) {
+        Log.e(TAG, `ensureManagerRoot: mkdir failed: ${JSON.stringify(e)}`);
+        result.error('permission_denied', 'Unable to create the games folder', null);
+      }
+    };
+
+    try {
+      const rootUri = `file://docs/storage/Users/currentUser/Download/${bundleName}`;
+      const rootPath = new fileUri.FileUri(rootUri).path;
+      if (fs.accessSync(rootPath)) {
+        finish(rootPath);
+        return;
+      }
+      if (!promptIfMissing) {
+        result.error('permission_denied', 'The application Downloads folder is not authorized', null);
+        return;
+      }
+      const options = new picker.DocumentSaveOptions();
+      options.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+      new picker.DocumentViewPicker(context).save(options)
+        .then((uris: Array<string>) => {
+          if (uris.length === 0) {
+            result.error('cancelled', 'Folder authorization was cancelled', null);
+            return;
+          }
+          // The picker only proves the user authorized Downloads. Always
+          // create Download/<bundleName>/; never treat the saved document
+          // (or another folder) as the manage-tab root.
+          finish(rootPath);
+        })
+        .catch((err: Error) => {
+          Log.e(TAG, `ensureManagerRoot: save failed: ${err.message}`);
+          result.error('permission_denied', 'Folder authorization failed', null);
+        });
+    } catch (e) {
+      Log.e(TAG, `ensureManagerRoot threw: ${JSON.stringify(e)}`);
+      result.error('failed', 'Unable to resolve the Downloads folder', null);
     }
   }
 

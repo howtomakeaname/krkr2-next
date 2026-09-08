@@ -22,6 +22,7 @@ export 'src/ffi/engine_ffi.dart'
         EngineFrameInfo,
         EngineInputEventData,
         EngineMemoryStatsData;
+export 'src/ffi/archive_ffi.dart' show ArchiveFfi, ArchiveJobStatus;
 
 import 'flutter_engine_bridge_platform_interface.dart';
 import 'src/ffi/engine_bindings.dart';

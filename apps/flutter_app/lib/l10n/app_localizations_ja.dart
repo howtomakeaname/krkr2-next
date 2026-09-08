@@ -9,6 +9,278 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get managerAuthorize => 'フォルダへのアクセスを許可';
+
+  @override
+  String get managerAuthorizationHint =>
+      'ダウンロード内の本アプリ専用フォルダを選択してください。他のフォルダは管理できません。';
+
+  @override
+  String get managerEmpty => 'このフォルダは空です';
+
+  @override
+  String get managerNewFolder => '新規フォルダ';
+
+  @override
+  String get managerSelect => '選択';
+
+  @override
+  String get managerSelectAll => 'すべて選択';
+
+  @override
+  String get managerDone => '完了';
+
+  @override
+  String get managerCancel => 'キャンセル';
+
+  @override
+  String get managerCopy => 'コピー';
+
+  @override
+  String get managerMove => '移動';
+
+  @override
+  String get managerRename => '名前を変更';
+
+  @override
+  String get managerRenameExtensionTitle => '拡張子を変更しますか？';
+
+  @override
+  String managerRenameExtensionMessage(String from, String to) {
+    return '拡張子を $from から $to に変えると、ファイルの種類（プレビュー・展開・ゲームデータなど）が変わる場合があります。意図した操作のときだけ続けてください。';
+  }
+
+  @override
+  String get managerRenameExtensionContinue => '続ける';
+
+  @override
+  String get managerNoExtension => '拡張子なし';
+
+  @override
+  String get managerTrash => '最近削除した項目に移動';
+
+  @override
+  String get managerRecentlyDeleted => '最近削除した項目';
+
+  @override
+  String get managerTrashHint => 'これらの項目は引き続き容量を使用します。自動削除は行いません。';
+
+  @override
+  String get managerTrashConfirm => '選択した項目を最近削除した項目に移動しますか？';
+
+  @override
+  String get managerTrashExplanation => '後から復元できます。プレイ履歴とアプリ内のセーブデータは保持されます。';
+
+  @override
+  String get managerRestore => '復元';
+
+  @override
+  String get managerDeletePermanently => '完全に削除';
+
+  @override
+  String get managerPermanentConfirm => 'この項目を完全に削除しますか？';
+
+  @override
+  String get managerPermanentExplanation => 'この操作は取り消せません。アプリ内のセーブデータは削除しません。';
+
+  @override
+  String get managerChooseDestination => '移動先を選択';
+
+  @override
+  String get managerUseFolder => 'このフォルダを使用';
+
+  @override
+  String get managerName => '名前';
+
+  @override
+  String get managerExtract => '展開';
+
+  @override
+  String get managerExtractTitle => 'アーカイブを展開';
+
+  @override
+  String get managerPassword => 'パスワード（必要な場合）';
+
+  @override
+  String get managerEncoding => '従来形式のファイル名の文字コード';
+
+  @override
+  String get managerExtractHint =>
+      '新しいフォルダに展開し、元のアーカイブを保持します。アーカイブ内の Unicode 情報を優先します。';
+
+  @override
+  String get managerWorking => '処理中…';
+
+  @override
+  String get managerCompleted => '完了しました';
+
+  @override
+  String get managerRetry => '再試行';
+
+  @override
+  String get managerErrorCancelled => '操作をキャンセルしました。';
+
+  @override
+  String get managerErrorBusy => '現在のファイル操作が完了するまでお待ちください。';
+
+  @override
+  String get managerErrorInvalidName => 'パス区切りや予約文字を含まない有効な名前を指定してください。';
+
+  @override
+  String get managerErrorOutsideRoot => 'ダウンロード内の本アプリ専用フォルダのみ管理できます。';
+
+  @override
+  String get managerErrorProtectedDirectory =>
+      'このフォルダは予約されています。フォルダ内の項目を操作してください。';
+
+  @override
+  String get managerErrorUnsupportedLink => 'リンクや特殊ファイルには対応していません。';
+
+  @override
+  String get managerErrorNotFound => 'ファイルまたは保存先のフォルダが見つかりません。';
+
+  @override
+  String get managerErrorConflict => '同名の項目が存在します。上書きはしていません。';
+
+  @override
+  String get managerErrorRecursiveTarget => '項目をその項目自身や子フォルダ内に配置することはできません。';
+
+  @override
+  String get managerErrorTrashCorrupt => '最近削除した項目の記録を読み込めません。ファイルは削除していません。';
+
+  @override
+  String get managerErrorPermissionDenied =>
+      'アクセスできません。フォルダの許可と読み書き権限を確認してください。';
+
+  @override
+  String get managerErrorNoSpace => '空き容量が不足しています。容量を確保してから再試行してください。';
+
+  @override
+  String get managerErrorReadOnly => 'この場所は読み取り専用です。';
+
+  @override
+  String get managerErrorPasswordRequired => 'このアーカイブにはパスワードが必要です。';
+
+  @override
+  String get managerErrorWrongPassword => 'パスワードが正しくないか、暗号化ヘッダーが破損しています。';
+
+  @override
+  String get managerErrorMissingVolume =>
+      '分割ファイルが不足しています。元の連番を保ち、すべて同じフォルダに置いてください。';
+
+  @override
+  String get managerErrorUnsupportedFormat => 'このアーカイブ形式には対応していないか、形式を認識できません。';
+
+  @override
+  String get managerErrorUnsupportedMethod => 'このアーカイブの圧縮方式には対応していません。';
+
+  @override
+  String get managerErrorCorruptArchive =>
+      'アーカイブが不完全または破損しています。分割ファイルとパスワードを確認してください。';
+
+  @override
+  String get managerErrorInvalidEncoding =>
+      'ファイル名を読み取れません。文字コードを変更して再試行してください。';
+
+  @override
+  String get managerErrorUnsafeArchivePath => 'アーカイブに危険なパスが含まれているため、展開を停止しました。';
+
+  @override
+  String get managerErrorArchiveLimit => 'ファイル数または展開後のサイズが安全上の上限を超えています。';
+
+  @override
+  String get managerErrorGameRunning => 'ゲームを終了してからファイルを変更してください。';
+
+  @override
+  String get managerErrorUnsupportedPlatform =>
+      'このプラットフォームでは、このフォルダへのアクセスはまだ利用できません。';
+
+  @override
+  String get managerErrorFailed => '操作を完了できませんでした。対象の項目を確認してから再試行してください。';
+
+  @override
+  String managerItemsSelected(int count) {
+    return '$count 件を選択中';
+  }
+
+  @override
+  String get managerDetails => '詳細';
+
+  @override
+  String get managerDetailKind => '種類';
+
+  @override
+  String get managerDetailFolder => 'フォルダ';
+
+  @override
+  String get managerDetailFile => 'ファイル';
+
+  @override
+  String get managerDetailArchive => 'アーカイブ';
+
+  @override
+  String get managerDetailGame => 'ゲーム';
+
+  @override
+  String get managerDetailImage => '画像';
+
+  @override
+  String get managerDetailAudio => '音声';
+
+  @override
+  String get managerDetailVideo => '動画';
+
+  @override
+  String get managerDetailText => 'テキスト';
+
+  @override
+  String get managerDetailGameData => 'ゲームデータ';
+
+  @override
+  String get managerTextEmpty => 'このファイルは空です。';
+
+  @override
+  String get managerTextTruncated => 'このファイルの先頭 2 MB のみ表示しています。';
+
+  @override
+  String get managerPlay => '再生';
+
+  @override
+  String get managerPause => '一時停止';
+
+  @override
+  String get managerPreview => 'プレビュー';
+
+  @override
+  String get managerMediaFailed => 'このファイルを開けませんでした。';
+
+  @override
+  String get managerDetailSize => 'サイズ';
+
+  @override
+  String managerDetailItems(int count) {
+    return '$count 項目';
+  }
+
+  @override
+  String get managerDetailModified => '変更日時';
+
+  @override
+  String get managerDetailLocation => '場所';
+
+  @override
+  String get managerCalculating => '計算中…';
+
+  @override
+  String get managerEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get managerEncodingGb18030 => 'GB18030';
+
+  @override
+  String get managerEncodingCp932 => 'Shift_JIS';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override

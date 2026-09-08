@@ -18,7 +18,9 @@ import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../models/game_engine.dart';
 import '../models/game_info.dart';
+import '../services/file_manager_controller.dart';
 import '../services/game_manager.dart';
+import '../services/local_file_service.dart';
 import '../ui/ui.dart';
 import '../widgets/home_game_card.dart';
 import '../widgets/home_profile_tab.dart';
@@ -26,6 +28,7 @@ import 'about_page.dart';
 import 'game_detail_page.dart';
 import 'game_page.dart';
 import 'help_page.dart';
+import 'manager_page.dart';
 import 'play_statistics_page.dart';
 import 'settings_page.dart';
 
@@ -43,6 +46,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final _navBackdropKey = GlobalKey<GlassContentAwareScopeState>();
   final GameManager _gameManager = GameManager();
+  late final FileManagerController _fileManager = FileManagerController(
+    gameManager: _gameManager,
+  );
   final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   bool _loading = true;
   bool _startupScanInProgress = false;
@@ -65,6 +71,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
   bool _restartDeferred = false;
   int _selectedTab = 0;
+  static const _manageTabIndex = 2;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _searchActive = false;
@@ -112,15 +119,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _fileManager.addListener(_onFileManagerChanged);
     _loadGames();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _fileManager.removeListener(_onFileManagerChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _fileManager.dispose();
     super.dispose();
+  }
+
+  void _onFileManagerChanged() {
+    if (!mounted) return;
+    // Progress ticks are the Manage tab's concern; the library only needs
+    // to rebuild once a task finished and paths may have moved.
+    if (_fileManager.task != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -130,7 +150,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed &&
         Platform.operatingSystem == 'ohos' &&
         !_loading &&
-        !_startupScanInProgress) {
+        !_startupScanInProgress &&
+        !_fileManager.blocksLibraryScan) {
       unawaited(_refreshOhosGames(silent: true));
     }
   }
@@ -229,14 +250,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<int> _scanOhosGamesDir() async {
     final dirPath = _ohosGamesDir;
     if (dirPath == null) return 0;
+    if (_fileManager.blocksLibraryScan) return 0;
     final root = Directory(dirPath);
     if (!root.existsSync()) return 0;
 
     for (final game in List<GameInfo>.of(_gameManager.games)) {
-      if (p.isWithin(dirPath, game.path) &&
-          !Directory(game.path).existsSync() &&
-          !File(game.path).existsSync()) {
-        await _gameManager.removeGame(game.path);
+      if (LocalFileService.isPrivatePath(game.path)) continue;
+      if (!p.isWithin(dirPath, game.path) && game.path != dirPath) continue;
+      final exists =
+          Directory(game.path).existsSync() || File(game.path).existsSync();
+      if (!exists) {
+        await _gameManager.markUnavailable(game.path);
+      } else if (!game.available) {
+        await _gameManager.markAvailable(game.path);
       }
     }
 
@@ -1222,6 +1248,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (depth > 3) return;
       try {
         for (final entity in dir.listSync(followLinks: false)) {
+          if (p.basename(entity.path).toLowerCase() ==
+              LocalFileService.privateName) {
+            continue;
+          }
           if (entity is File && entity.path.toLowerCase().endsWith('.xp3')) {
             results.add(entity);
           } else if (entity is Directory) {
@@ -1253,6 +1283,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       for (final entity in entries) {
         if (entity is! Directory) continue;
+        if (p.basename(entity.path).toLowerCase() ==
+            LocalFileService.privateName) {
+          continue;
+        }
         try {
           final looksLikeGame = entity
               .listSync(followLinks: false)
@@ -1431,6 +1465,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           gamePath: game.path,
           title: game.displayTitle,
           coverPath: game.coverPath,
+          saveDirectoryName: game.saveDirectoryName,
           ffiLibraryPath: dylibPath,
           orientation: _gameOrientation,
           gameManager: _gameManager,
@@ -1618,7 +1653,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final allGames = _sortedGames;
-    final games = _filterGames(allGames);
+    final visibleGames = allGames.where((game) => game.available).toList();
+    final games = _filterGames(visibleGames);
     final isDesktop =
         !Platform.isAndroid &&
         !Platform.isIOS &&
@@ -1808,7 +1844,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
 
     final showLibrarySkeleton =
-        _loading || (_startupScanInProgress && allGames.isEmpty);
+        _loading || (_startupScanInProgress && visibleGames.isEmpty);
     Widget content;
     if (showLibrarySkeleton) {
       content = _buildLibrarySkeleton();
@@ -1830,7 +1866,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (games.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: allGames.isEmpty
+              child: visibleGames.isEmpty
                   ? _buildEmptyState(l10n)
                   : UiEmpty(
                       icon: LucideIcons.search,
@@ -1884,7 +1920,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
       _buildPlaceholderTab(title: l10n.tabExplore),
-      _buildPlaceholderTab(title: l10n.tabManage),
+      ManagerPage(
+        controller: _fileManager,
+        active: _selectedTab == _manageTabIndex,
+      ),
       HomeProfileTab(
         games: allGames,
         playSessions: _gameManager.playSessions,

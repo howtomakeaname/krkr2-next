@@ -127,6 +127,17 @@ endif()
 if(BUILD_ENGINE_API)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bridge/engine_api)
 endif()
+# POSIX-only shared library. Windows file-archive support is not in this change.
+# Host engine builds stay off unless SEVENZIP_SOURCE_DIR or vcpkg 7zip is set.
+if(OHOS)
+    set(_FILE_ARCHIVE_DEFAULT ON)
+else()
+    set(_FILE_ARCHIVE_DEFAULT OFF)
+endif()
+option(BUILD_FILE_ARCHIVE "build standalone file_archive library" ${_FILE_ARCHIVE_DEFAULT})
+if(BUILD_FILE_ARCHIVE AND NOT WIN32)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bridge/file_archive)
+endif()
 
 # Link the standalone executable target (not needed on macOS where Flutter is the app shell)
 if(TARGET ${PROJECT_NAME})
