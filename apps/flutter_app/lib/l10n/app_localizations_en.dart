@@ -597,6 +597,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rotateScreen => 'Rotate Screen';
 
   @override
+  String get showVirtualControls => 'Show virtual controls';
+
+  @override
+  String get hideVirtualControls => 'Hide virtual controls';
+
+  @override
+  String get virtualTouchpad => 'Touchpad · tap to click';
+
+  @override
+  String get virtualMouseLeft => 'Left click';
+
+  @override
+  String get virtualMouseRight => 'Right click';
+
+  @override
+  String get virtualConfirm => 'Confirm (Enter)';
+
+  @override
+  String get virtualBack => 'Back (Esc)';
+
+  @override
+  String get virtualAdvance => 'Advance (Space)';
+
+  @override
+  String get virtualSkip => 'Hold to skip (Ctrl)';
+
+  @override
+  String get virtualUp => 'Up';
+
+  @override
+  String get virtualDown => 'Down';
+
+  @override
+  String get virtualLeft => 'Left';
+
+  @override
+  String get virtualRight => 'Right';
+
+  @override
   String get gameStarting => 'Starting';
 
   @override
