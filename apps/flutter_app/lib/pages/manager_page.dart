@@ -229,28 +229,30 @@ class _ManagerPageState extends State<ManagerPage> {
       itemBuilder: (context, index) {
         final entry = controller.entries[index];
         final selected = controller.selected.contains(entry.path);
-        return UiListTile(
-          title: entry.name,
-          subtitle: entry.isDirectory ? null : _sizeLabel(entry),
-          icon: entry.isDirectory ? CupertinoIcons.folder : CupertinoIcons.doc,
-          trailing: controller.selecting
-              ? Icon(
-                  selected
-                      ? CupertinoIcons.checkmark_circle_fill
-                      : CupertinoIcons.circle,
-                  color: selected
-                      ? context.uiColors.brand
-                      : context.uiColors.textTertiary,
-                )
-              : null,
-          onTap: () {
-            if (controller.selecting) {
-              controller.toggle(entry.path);
-            } else if (entry.isDirectory) {
-              controller.open(entry.path);
-            }
-          },
-          onLongPress: () => _showItemMenu(entry, l10n),
+        return Builder(
+          builder: (tileContext) => UiListTile(
+            title: entry.name,
+            subtitle: entry.isDirectory ? null : _sizeLabel(entry),
+            icon: entry.isDirectory ? CupertinoIcons.folder : CupertinoIcons.doc,
+            trailing: controller.selecting
+                ? Icon(
+                    selected
+                        ? CupertinoIcons.checkmark_circle_fill
+                        : CupertinoIcons.circle,
+                    color: selected
+                        ? context.uiColors.brand
+                        : context.uiColors.textTertiary,
+                  )
+                : null,
+            onTap: () {
+              if (controller.selecting) {
+                controller.toggle(entry.path);
+              } else if (entry.isDirectory) {
+                controller.open(entry.path);
+              }
+            },
+            onLongPress: () => _showItemMenu(tileContext, entry, l10n),
+          ),
         );
       },
     );
@@ -290,9 +292,14 @@ class _ManagerPageState extends State<ManagerPage> {
     );
   }
 
-  Future<void> _showItemMenu(LocalFileEntry entry, AppLocalizations l10n) {
+  Future<void> _showItemMenu(
+    BuildContext tileContext,
+    LocalFileEntry entry,
+    AppLocalizations l10n,
+  ) {
     return UiPopupMenu.show<void>(
       context,
+      anchor: UiPopupMenu.rectOf(tileContext),
       items: [
         UiMenuItem(
           label: l10n.managerRename,
