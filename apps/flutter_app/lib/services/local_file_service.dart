@@ -116,8 +116,9 @@ class LocalFileService {
     await for (final entry in Directory(path).list(followLinks: false)) {
       if (p.basename(entry.path).toLowerCase() == privateName) continue;
       if (await FileSystemEntity.type(entry.path, followLinks: false) ==
-          FileSystemEntityType.link)
+          FileSystemEntityType.link) {
         continue;
+      }
       result.add(LocalFileEntry(entry.path, await entry.stat()));
     }
     result.sort((a, b) {
@@ -133,8 +134,9 @@ class LocalFileService {
   }) async {
     await validatePath(destination, internal: internal);
     final parent = Directory(p.dirname(destination));
-    if (!await parent.exists())
+    if (!await parent.exists()) {
       throw const FileOperationException(FileErrorCode.notFound);
+    }
     // Download is case-insensitive. Keep the same collision policy in tests
     // and on other hosts, including for an empty destination directory.
     await for (final entry in parent.list(followLinks: false)) {
@@ -309,22 +311,25 @@ class LocalFileService {
     final items = <DeletedFile>[];
     await for (final work in Directory(trashPath).list(followLinks: false)) {
       if (work is! Directory ||
-          !RegExp(r'^[0-9a-f]{32}$').hasMatch(p.basename(work.path)))
+          !RegExp(r'^[0-9a-f]{32}$').hasMatch(p.basename(work.path))) {
         continue;
+      }
       await validatePath(work.path, internal: true);
       final manifest = p.join(work.path, 'entry.json');
       await validatePath(manifest, internal: true);
       final payload = p.join(work.path, 'item');
       await validatePath(payload, internal: true);
       if (await FileSystemEntity.type(payload, followLinks: false) ==
-          FileSystemEntityType.notFound)
+          FileSystemEntityType.notFound) {
         continue;
+      }
       final data =
           jsonDecode(await File(manifest).readAsString())
               as Map<String, dynamic>;
       final relative = data['path'] as String;
-      if (p.isAbsolute(relative))
+      if (p.isAbsolute(relative)) {
         throw const FileOperationException(FileErrorCode.trashCorrupt);
+      }
       final original = await validatePath(
         p.join(rootPath, relative),
         mutate: true,
@@ -368,8 +373,9 @@ class LocalFileService {
     }
     // Directory.delete does not follow child links. The workspace itself has
     // already been checked and is always a single generated task directory.
-    if (await Directory(normalized).exists())
+    if (await Directory(normalized).exists()) {
       await Directory(normalized).delete(recursive: true);
+    }
   }
 
   /// Native extraction writes only into a newly created task directory. Publish

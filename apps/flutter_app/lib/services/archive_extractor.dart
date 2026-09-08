@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_engine_bridge/flutter_engine_bridge.dart';
 
-import 'file_operation_error.dart';
 import 'local_file_service.dart';
 
 /// Polls the native archive job without blocking the UI isolate on destroy.
