@@ -103,12 +103,16 @@ int HostKeyToArtemis(int32_t key_code) {
     case 0x0d:   // enter
       return 13;
     case 0x304:  // arrowUp
+    case 0x26:   // VK_UP (virtual controls)
       return 38;
     case 0x301:  // arrowDown
+    case 0x28:   // VK_DOWN
       return 40;
     case 0x302:  // arrowLeft
+    case 0x25:   // VK_LEFT
       return 37;
     case 0x303:  // arrowRight
+    case 0x27:   // VK_RIGHT
       return 39;
     case 0x08:   // backspace
       return kKeyBack;
@@ -116,6 +120,10 @@ int HostKeyToArtemis(int32_t key_code) {
       return 27;
     case 0x20:   // space
       return 32;
+    case 0x11:   // VK_CONTROL
+    case 0x100:  // Flutter controlLeft
+    case 0x101:  // Flutter controlRight
+      return 17;
     default:
       return -1;
   }
@@ -443,6 +451,13 @@ void ArtemisRuntime::Impl::ProcessInput() {
       continue;
     }
     lua->SetMousePoint(sx, sy);
+    if (ev.key != kKeyTap) {
+      // Mouse right/middle buttons are independent keys, not left taps:
+      // they must not activate a layer button or start a drag.
+      if (ev.down) lua->PushKeyDown(ev.key);
+      else lua->PushKeyUp(ev.key);
+      continue;
+    }
     if (ev.down) {
       lua->PushKeyDown(kKeyTap);
       touch_count = 1;
@@ -620,6 +635,7 @@ ArtemisRuntime::TickStatus ArtemisRuntime::Tick(std::string* error) {
 void ArtemisRuntime::QueueInput(const engine_input_event_t& event) {
   Impl& s = *impl_;
   Impl::RawInput ev;
+  ev.key = event.button == 1 ? 2 : event.button == 2 ? 4 : kKeyTap;
   switch (event.type) {
     case ENGINE_INPUT_EVENT_POINTER_DOWN:
       ev.down = true;
