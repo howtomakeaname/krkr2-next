@@ -49,6 +49,8 @@ OHOS_NDK="${OHOS_NDK:-$HOME/Library/OpenHarmony/Sdk/20/native}"
 
 export PATH="$FLUTTER_OHOS_DIR/bin:$DEVECO_APP/Contents/tools/ohpm/bin:$DEVECO_APP/Contents/tools/hvigor/bin:$DEVECO_APP/Contents/tools/node/bin:$PATH"
 export DEVECO_SDK_HOME
+# The arm64-ohos vcpkg triplet locates the sysroot through this variable.
+export OHOS_NATIVE_SDK="${OHOS_NATIVE_SDK:-$OHOS_NDK}"
 export NODE_HOME="${NODE_HOME:-$DEVECO_APP/Contents/tools/node}"
 # hvigor's HAP packager is a Java tool; DevEco ships a JBR for exactly this.
 export JAVA_HOME="${JAVA_HOME:-$DEVECO_APP/Contents/jbr/Contents/Home}"
@@ -94,6 +96,10 @@ if [[ -z "$VCPKG_TOOLCHAIN" ]]; then
     done
 fi
 [[ -f "$VCPKG_TOOLCHAIN" ]] || { echo "Error: vcpkg toolchain not found"; exit 1; }
+# The top-level CMakeLists.txt replaces CMAKE_TOOLCHAIN_FILE with
+# $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake for non-Android builds,
+# so derive VCPKG_ROOT from the same file instead of relying on the shell.
+export VCPKG_ROOT="${VCPKG_ROOT:-$(cd "$(dirname "$VCPKG_TOOLCHAIN")/../.." && pwd)}"
 VCPKG_TRIPLET="${VCPKG_TRIPLET:-arm64-ohos}"
 VCPKG_INSTALLED_DIR="${VCPKG_INSTALLED_DIR:-/private/tmp/krkr-artemis-native-build/vcpkg_installed}"
 echo "==> [1/3] building libengine_api.so and libfile_archive.so ($BUILD_TYPE_LOWER)"
