@@ -15,6 +15,13 @@ void main() {
     );
   });
 
+  test('extract folder name keeps a volume group together', () {
+    expect(ArchiveVolumes.extractFolderName('物語.7z.001'), '物語.7z');
+    expect(ArchiveVolumes.extractFolderName('pack.part2.rar'), 'pack');
+    expect(ArchiveVolumes.extractFolderName('游戏.tar.gz'), '游戏');
+    expect(ArchiveVolumes.extractFolderName('中文.zip'), '中文');
+  });
+
   test('keeps rar parts in one group', () {
     const names = ['pack.part1.rar', 'pack.part2.rar', 'pack.rar'];
     expect(ArchiveVolumes.members('pack.part2.rar', names), [

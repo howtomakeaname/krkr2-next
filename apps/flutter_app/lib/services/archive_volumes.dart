@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 /// Split archives are a group. Renaming the first volume alone would leave
 /// the remaining parts unreachable.
 class ArchiveVolumes {
@@ -41,5 +43,21 @@ class ArchiveVolumes {
       return '${toRar.group(1)}.part${memberRar.group(2)}.rar';
     }
     return member == fromName ? toName : member;
+  }
+
+  /// Destination folder next to the archive. Volumes share one folder named
+  /// after the group prefix (`pack.7z.001` → `pack.7z`).
+  static String extractFolderName(String name) {
+    final rar = _rarPart.firstMatch(name);
+    if (rar != null) return rar.group(1)!;
+    final numeric = _numeric.firstMatch(name);
+    if (numeric != null) return numeric.group(1)!;
+    var folder = name;
+    for (final suffix in ['.tar.gz', '.tar.bz2', '.tar.xz', '.tar.zst']) {
+      if (folder.toLowerCase().endsWith(suffix)) {
+        return folder.substring(0, folder.length - suffix.length);
+      }
+    }
+    return p.basenameWithoutExtension(folder);
   }
 }

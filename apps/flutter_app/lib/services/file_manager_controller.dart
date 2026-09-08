@@ -164,11 +164,12 @@ class FileManagerController extends ChangeNotifier {
   }
 
   Future<void> copyTo(String destinationDir) => _run(() async {
+    final progress = _beginTask();
     for (final source in _expand(_targets)) {
       await files!.copy(
         source,
         p.join(destinationDir, p.basename(source)),
-        _beginTask(),
+        progress,
       );
     }
   });
@@ -201,7 +202,7 @@ class FileManagerController extends ChangeNotifier {
   }) {
     final destination = p.join(
       p.dirname(source),
-      p.basenameWithoutExtension(p.basenameWithoutExtension(source)),
+      ArchiveVolumes.extractFolderName(p.basename(source)),
     );
     return _run(() async {
       await runtimeGuard.prepareMutation(source);
