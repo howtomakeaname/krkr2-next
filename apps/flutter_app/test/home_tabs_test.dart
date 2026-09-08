@@ -188,6 +188,57 @@ void main() {
     );
   });
 
+  testWidgets('import menu keeps the library and toolbar layout stable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({
+      'krkr2_game_list': GameInfo.listToJsonString([
+        GameInfo(path: '/games/test', title: '测试游戏'),
+      ]),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: UiTheme.dark(),
+        home: const HomePage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final toolbar = find.byKey(const ValueKey('home-search-toolbar'));
+    final title = find.byKey(const ValueKey('home-app-title'));
+    final toolbarBounds = tester.getRect(toolbar);
+    final titleBounds = tester.getRect(title);
+    final gameBounds = tester.getRect(find.text('测试游戏'));
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await tester.tap(find.bySemanticsLabel('导入游戏'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getRect(title), titleBounds);
+      expect(tester.getRect(toolbar), toolbarBounds);
+      expect(tester.getRect(find.text('测试游戏')), gameBounds);
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      final menu = find.byKey(const ValueKey('ui-popup-menu-material'));
+      expect(menu, findsOneWidget);
+      expect(tester.getRect(menu).right, lessThanOrEqualTo(430));
+      expect(tester.getRect(menu).top, greaterThanOrEqualTo(toolbarBounds.top));
+
+      await tester.tapAt(const Offset(16, 400));
+      await tester.pumpAndSettle();
+      expect(menu, findsNothing);
+      expect(tester.getRect(toolbar), toolbarBounds);
+      expect(tester.getRect(find.text('测试游戏')), gameBounds);
+    }
+  });
+
   testWidgets('search toolbar expands and filters the library', (tester) async {
     tester.view.physicalSize = const Size(430, 932);
     tester.view.devicePixelRatio = 1;

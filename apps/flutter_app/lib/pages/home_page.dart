@@ -1715,10 +1715,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   bottom: 0,
                   duration: UiSprings.materializeDuration,
                   curve: UiSprings.materializeCurve,
-                  child: UiGlassSurface(
+                  child: UiGlassToolbar.custom(
                     key: const ValueKey<String>('home-search-toolbar'),
                     variant: UiGlassVariant.clear,
-                    borderRadius: UiRadius.brPill,
+                    interactive: !_searchActive,
                     padding: const EdgeInsets.all(2),
                     child: AnimatedSwitcher(
                       duration: UiDuration.fast,
