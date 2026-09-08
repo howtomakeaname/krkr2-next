@@ -75,14 +75,23 @@ class _UiPullRefreshState extends State<UiPullRefresh>
   // 否则会叠成双倍位移，看起来像整页被拽走。
   double _overscroll = 0;
 
-  late final AnimationController _settle = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 220),
-  );
+  // 在 initState 里创建而不是惰性初始化：页面从未被下拉就销毁时，
+  // dispose() 是第一个触碰它的地方，此时再去创建 Ticker 会在已卸载的
+  // 元素上查找祖先（TickerMode）而触发断言。
+  late final AnimationController _settle;
 
   // 当前 _settle 上挂载的缓动监听器引用，用于在动画完成后精确移除，
   // 避免多次 _animateTo 叠加监听导致内存泄漏。
   VoidCallback? _settleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _settle = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+  }
 
   @override
   void dispose() {
@@ -218,7 +227,8 @@ class _UiPullRefreshState extends State<UiPullRefresh>
     final typography = context.uiType;
     final accent = widget.accentColor ?? colors.brand;
 
-    final indicatorVisible = _drag > 0 ||
+    final indicatorVisible =
+        _drag > 0 ||
         _mode == _RefreshMode.refreshing ||
         _mode == _RefreshMode.done;
 
@@ -234,8 +244,9 @@ class _UiPullRefreshState extends State<UiPullRefresh>
               height: _drag,
               child: _Indicator(
                 mode: _mode,
-                progress:
-                    (_drag / widget.triggerDistance).clamp(0.0, 1.0).toDouble(),
+                progress: (_drag / widget.triggerDistance)
+                    .clamp(0.0, 1.0)
+                    .toDouble(),
                 accent: accent,
                 backgroundColor: colors.background,
                 typography: typography,
@@ -270,14 +281,15 @@ class _BouncingScrollBehavior extends ScrollBehavior {
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const BouncingScrollPhysics(
-      parent: AlwaysScrollableScrollPhysics(),
-    );
+    return const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
   }
 
   @override
   Widget buildOverscrollIndicator(
-      BuildContext context, Widget child, ScrollableDetails details) {
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
     return child;
   }
 }
@@ -357,34 +369,41 @@ class _IndicatorState extends State<_Indicator>
 
   @override
   Widget build(BuildContext context) {
+    // 指示器的高度跟随下拉距离，刚开始只有几个像素。内容贴底放在一个
+    // 不限高的 OverflowBox 里，从顶部边缘逐渐"露出"（外层 ClipRect 裁掉
+    // 上方溢出），而不是在过小的 Column 里报纵向溢出。
     return Container(
       color: widget.backgroundColor,
-      alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(vertical: UiSpacing.sm),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _Glyph(
-            mode: widget.mode,
-            progress: widget.progress,
-            accent: widget.accent,
-            controller: _ctrl,
-          ),
-          const SizedBox(height: 4),
-          AnimatedSwitcher(
-            duration: UiDuration.fast,
-            transitionBuilder: (c, a) => FadeTransition(opacity: a, child: c),
-            child: Text(
-              _text(),
-              key: ValueKey(_text()),
-              style: widget.typography.caption.copyWith(
-                color: widget.textSecondary,
-                fontSize: 11.5,
+      child: OverflowBox(
+        alignment: Alignment.bottomCenter,
+        minHeight: 0,
+        maxHeight: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _Glyph(
+              mode: widget.mode,
+              progress: widget.progress,
+              accent: widget.accent,
+              controller: _ctrl,
+            ),
+            const SizedBox(height: 4),
+            AnimatedSwitcher(
+              duration: UiDuration.fast,
+              transitionBuilder: (c, a) => FadeTransition(opacity: a, child: c),
+              child: Text(
+                _text(),
+                key: ValueKey(_text()),
+                style: widget.typography.caption.copyWith(
+                  color: widget.textSecondary,
+                  fontSize: 11.5,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
