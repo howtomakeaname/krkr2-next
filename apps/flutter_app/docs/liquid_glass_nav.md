@@ -12,8 +12,11 @@ Package source: https://github.com/sdegenaar/liquid_glass_widgets
 - HarmonyOS already enables Impeller in `ohos/entry/src/main/resources/rawfile/buildinfo.json5`.
 - The bar uses package material, refraction and drag/press springs. Do not add
   a second blurred surface, dark media overlay or custom painted rim around it.
-- Labels use the package's adaptive black/white appearance. Selected state also
-  uses the moving glass indicator, filled icon and stronger label weight.
+- Unselected labels adapt between black and white. The selected icon and label
+  use the app's theme accent, interpolated between its light/dark variants by
+  the same `GlassContentAwareBrightness` consumer that drives the glass. The
+  surface itself is not tinted. Selection also uses the moving indicator,
+  filled icon and stronger label weight.
 - The adapter seeds its local MediaQuery and Cupertino appearance from the app
   theme. Otherwise 1.4.0 initializes labels from the OS theme and can paint black
   labels on a dark bar when the app and system appearance differ.

@@ -145,6 +145,13 @@ void main() {
           find.byIcon(Icons.person_outline).first,
         );
         final labelColor = IconTheme.of(iconContext).color!;
+        final bar = tester.widget<GlassTabBar>(find.byType(GlassTabBar));
+        expect(
+          bar.selectedIconColor,
+          Theme.of(iconContext).colorScheme.primary,
+        );
+        expect(bar.selectedLabelColor, bar.selectedIconColor);
+        expect(bar.unselectedIconColor, isNot(bar.selectedIconColor));
         expect(
           labelColor.computeLuminance(),
           brightness == Brightness.dark ? greaterThan(0.5) : lessThan(0.5),

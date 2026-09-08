@@ -1,8 +1,12 @@
-import 'package:flutter/cupertino.dart' show CupertinoTheme, CupertinoThemeData;
+import 'package:flutter/cupertino.dart'
+    show CupertinoColors, CupertinoTheme, CupertinoThemeData;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../theme/ui_colors.dart';
+import '../theme/ui_theme.dart';
+import '../theme/ui_theme_controller.dart';
 import 'ui_badge.dart';
 
 class UiNavItem {
@@ -60,6 +64,20 @@ class UiNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final height = showLabel ? 64.0 : 52.0;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final brightness = Theme.of(context).brightness;
+    final brand = context.uiColors.brand;
+    final seed =
+        context
+            .dependOnInheritedWidgetOfExactType<UiThemeScope>()
+            ?.notifier
+            ?.seed ??
+        brand;
+    final lightAccent = brightness == Brightness.light
+        ? brand
+        : UiColors.fromSeed(seed, Brightness.light).brand;
+    final darkAccent = brightness == Brightness.dark
+        ? brand
+        : UiColors.fromSeed(seed, Brightness.dark).brand;
 
     return SafeArea(
       top: false,
@@ -90,33 +108,50 @@ class UiNavBar extends StatelessWidget {
                     children: [
                       ExcludeFocus(
                         child: ExcludeSemantics(
-                          child: GlassTabBar.bottom(
-                            tabs: [
-                              for (final item in items)
-                                GlassTab(
-                                  icon: _icon(item),
-                                  activeIcon: _icon(item, active: true),
-                                  label: showLabel ? item.label : null,
-                                  semanticLabel: item.label,
+                          // One sampler drives both the glass appearance and
+                          // the accent; tinting the surface would hide refraction.
+                          child: GlassContentAwareBrightness(
+                            builder: (context, brightness, darkAmount) {
+                              final accent =
+                                  backgroundColor ??
+                                  Color.lerp(
+                                    lightAccent,
+                                    darkAccent,
+                                    darkAmount,
+                                  )!;
+                              final label = Color.lerp(
+                                CupertinoColors.label.color,
+                                CupertinoColors.label.darkColor,
+                                darkAmount,
+                              )!;
+                              return GlassTabBar.bottom(
+                                tabs: [
+                                  for (final item in items)
+                                    GlassTab(
+                                      icon: _icon(item),
+                                      activeIcon: _icon(item, active: true),
+                                      label: showLabel ? item.label : null,
+                                      semanticLabel: item.label,
+                                    ),
+                                ],
+                                selectedIndex: currentIndex,
+                                onTabSelected: _select,
+                                horizontalPadding: 0,
+                                verticalPadding: 0,
+                                barHeight: height,
+                                quality: GlassQuality.premium,
+                                selectedIconColor: accent,
+                                selectedLabelColor: accent,
+                                unselectedIconColor: label,
+                                unselectedLabelColor: label,
+                                selectedLabelStyle: const TextStyle(
+                                  fontWeight: FontWeight.w600,
                                 ),
-                            ],
-                            selectedIndex: currentIndex,
-                            onTabSelected: _select,
-                            horizontalPadding: 0,
-                            verticalPadding: 0,
-                            barHeight: height,
-                            adaptiveBrightness: true,
-                            quality: GlassQuality.premium,
-                            // Null keeps the library's content-aware black/white
-                            // labels, including when artwork changes appearance.
-                            selectedIconColor: backgroundColor,
-                            selectedLabelColor: backgroundColor,
-                            selectedLabelStyle: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            interactionBehavior: reduceMotion
-                                ? GlassInteractionBehavior.none
-                                : GlassInteractionBehavior.full,
+                                interactionBehavior: reduceMotion
+                                    ? GlassInteractionBehavior.none
+                                    : GlassInteractionBehavior.full,
+                              );
+                            },
                           ),
                         ),
                       ),
