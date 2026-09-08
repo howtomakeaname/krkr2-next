@@ -67,7 +67,7 @@ done
 NINJA_BUILD="$PROJECT_ROOT/build/ohos/cmake-build"
 VCPKG_TOOLCHAIN="$PROJECT_ROOT/.devtools/vcpkg/scripts/buildsystems/vcpkg.cmake"
 VCPKG_TRIPLET="${VCPKG_TRIPLET:-arm64-ohos}"
-echo "==> [1/3] building libengine_api.so ($BUILD_TYPE_LOWER)"
+echo "==> [1/3] building libengine_api.so and libfile_archive.so ($BUILD_TYPE_LOWER)"
 cmake -S "$PROJECT_ROOT" -B "$NINJA_BUILD" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
@@ -77,10 +77,12 @@ cmake -S "$PROJECT_ROOT" -B "$NINJA_BUILD" \
     -DOHOS_PLATFORM=OHOS \
     -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
     -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE="$TOOLCHAIN_FILE"
-cmake --build "$NINJA_BUILD" --target engine_api
+cmake --build "$NINJA_BUILD" --target engine_api file_archive
 
 ENGINE_SO="$NINJA_BUILD/bridge/engine_api/libengine_api.so"
+ARCHIVE_SO="$NINJA_BUILD/bridge/file_archive/libfile_archive.so"
 [[ -f "$ENGINE_SO" ]] || { echo "Error: $ENGINE_SO not built"; exit 1; }
+[[ -f "$ARCHIVE_SO" ]] || { echo "Error: $ARCHIVE_SO not built"; exit 1; }
 
 # ============================================================
 # 2. Stage native libraries for the HAP
@@ -88,6 +90,7 @@ ENGINE_SO="$NINJA_BUILD/bridge/engine_api/libengine_api.so"
 echo "==> [2/3] staging native libs into entry/libs/arm64-v8a"
 mkdir -p "$LIBS_OUT"
 "$OHOS_NDK/llvm/bin/llvm-strip" --strip-unneeded "$ENGINE_SO" -o "$LIBS_OUT/libengine_api.so"
+"$OHOS_NDK/llvm/bin/llvm-strip" --strip-unneeded "$ARCHIVE_SO" -o "$LIBS_OUT/libfile_archive.so"
 cp -f "$OHOS_NDK/llvm/lib/aarch64-linux-ohos/libc++_shared.so" "$LIBS_OUT/"
 cp -f "$OHOS_NDK/llvm/lib/aarch64-linux-ohos/libomp.so" "$LIBS_OUT/"
 ls -la "$LIBS_OUT"
