@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -108,6 +109,9 @@ class ArchiveFfi {
     final sourcePtr = source.toNativeUtf8();
     final destinationPtr = destination.toNativeUtf8();
     final passwordPtr = (password ?? '').toNativeUtf8();
+    // toNativeUtf8 length is in bytes, not UTF-16 units: a CJK or emoji
+    // password is longer than password.length.
+    final passwordBytes = passwordPtr.length;
     try {
       return _start(
         rootPtr,
@@ -122,7 +126,7 @@ class ArchiveFfi {
       malloc.free(destinationPtr);
       // Password is copied by native code; wipe the Dart-side buffer we own.
       final bytes = passwordPtr.cast<Uint8>();
-      for (var i = 0; i < (password?.length ?? 0) + 1; i++) {
+      for (var i = 0; i <= passwordBytes; i++) {
         bytes[i] = 0;
       }
       malloc.free(passwordPtr);
@@ -173,6 +177,8 @@ class ArchiveFfi {
     return const ['libfile_archive.so'];
   }
 
+  /// Native truncates `current` at 1023 bytes, which can split a multi-byte
+  /// sequence; decode leniently so a long CJK name still displays.
   static String _fixedUtf8(Array<Uint8> bytes) {
     final out = <int>[];
     for (var i = 0; i < 1024; i++) {
@@ -180,6 +186,6 @@ class ArchiveFfi {
       if (value == 0) break;
       out.add(value);
     }
-    return String.fromCharCodes(out);
+    return utf8.decode(out, allowMalformed: true);
   }
 }
