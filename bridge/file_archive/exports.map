@@ -1,0 +1,12 @@
+/* Only the C ABI in archive_api.h is visible. The statically linked 7-Zip
+ * codecs and registrars stay local so a second copy inside libengine_api.so
+ * can never be bound to (or from) this library at load time. */
+{
+  global:
+    krkr_archive_start;
+    krkr_archive_poll;
+    krkr_archive_cancel;
+    krkr_archive_destroy;
+  local:
+    *;
+};

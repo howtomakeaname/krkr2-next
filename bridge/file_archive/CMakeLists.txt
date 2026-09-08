@@ -19,11 +19,22 @@ target_include_directories(file_archive PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 # even if no individual format handler is referenced by this translation unit.
 # Link 7-Zip only once: Apple force_load or ELF whole-archive. A second
 # ordinary archive link duplicates every codec symbol on lld.
+# Whole-archive linking would otherwise re-export every 7-Zip symbol. Both
+# this library and libengine_api.so carry their own 7-Zip, so restrict the
+# dynamic symbol table to the krkr_archive_* ABI and let each copy bind to
+# itself regardless of dlopen order or RTLD_GLOBAL.
 if(APPLE)
     target_link_libraries(file_archive PRIVATE 7zip::7zip)
-    target_link_options(file_archive PRIVATE "LINKER:-force_load,$<TARGET_FILE:7zip::7zip>")
+    target_link_options(file_archive PRIVATE
+        "LINKER:-force_load,$<TARGET_FILE:7zip::7zip>"
+        "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exports.apple.txt")
+    set_property(TARGET file_archive APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/exports.apple.txt")
 else()
     target_link_libraries(file_archive PRIVATE "-Wl,--whole-archive" 7zip::7zip "-Wl,--no-whole-archive")
+    target_link_options(file_archive PRIVATE
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map"
+        "LINKER:--exclude-libs,ALL")
+    set_property(TARGET file_archive APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/exports.map")
 endif()
 set_target_properties(file_archive PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 
