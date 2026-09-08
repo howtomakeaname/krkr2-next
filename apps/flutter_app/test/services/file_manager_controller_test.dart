@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_app/models/game_info.dart';
 import 'package:flutter_app/services/archive_volumes.dart';
 import 'package:flutter_app/services/file_manager_controller.dart';
+import 'package:flutter_app/services/file_operation_error.dart';
 import 'package:flutter_app/services/game_manager.dart';
 import 'package:flutter_app/services/manager_scope.dart';
 import 'package:flutter_app/services/manager_storage.dart';
@@ -77,5 +78,83 @@ void main() {
       ArchiveVolumes.extractFolderName('dlc.7z.001'),
       'dlc.7z',
     );
+  });
+
+  test('a failing item stops the batch and the listing shows what moved', () async {
+    final gamesPath = controller.files!.gamesPath;
+    await File(p.join(gamesPath, 'a.txt')).writeAsString('a');
+    await File(p.join(gamesPath, 'b.txt')).writeAsString('b');
+    final target = await Directory(p.join(gamesPath, 'target')).create();
+    // b.txt already exists at the destination, so the second move conflicts.
+    await File(p.join(target.path, 'b.txt')).writeAsString('old');
+    await controller.refresh();
+    controller.selected.addAll([
+      p.join(gamesPath, 'a.txt'),
+      p.join(gamesPath, 'b.txt'),
+    ]);
+
+    await controller.moveTo(target.path);
+
+    expect(controller.lastError?.code, FileErrorCode.conflict);
+    expect(await File(p.join(target.path, 'a.txt')).exists(), isTrue);
+    expect(await File(p.join(gamesPath, 'b.txt')).exists(), isTrue);
+    expect(await File(p.join(target.path, 'b.txt')).readAsString(), 'old');
+    // The listing was refreshed even though the batch failed.
+    expect(controller.entries.map((e) => e.name), isNot(contains('a.txt')));
+    expect(controller.entries.map((e) => e.name), contains('b.txt'));
+  });
+
+  test('copy reports completion once and hides progress afterwards', () async {
+    final gamesPath = controller.files!.gamesPath;
+    await File(p.join(gamesPath, 'readme.txt')).writeAsString('hello');
+    final target = await Directory(p.join(gamesPath, 'copies')).create();
+    await controller.refresh();
+    controller.selected.add(p.join(gamesPath, 'readme.txt'));
+
+    await controller.copyTo(target.path);
+
+    expect(controller.notice, ManagerNotice.completed);
+    expect(controller.task, isNull);
+    expect(controller.lastError, isNull);
+    expect(
+      await File(p.join(target.path, 'readme.txt')).readAsString(),
+      'hello',
+    );
+  });
+
+  test('trashing a parent folder hides every game inside it', () async {
+    final gamesPath = controller.files!.gamesPath;
+    final bundle = await Directory(p.join(gamesPath, '合集')).create();
+    await File(p.join(bundle.path, '甲', 'data.xp3')).create(recursive: true);
+    await File(p.join(bundle.path, '乙', 'data.xp3')).create(recursive: true);
+    await games.addGame(GameInfo(path: p.join(bundle.path, '甲')));
+    await games.addGame(GameInfo(path: p.join(bundle.path, '乙')));
+    await controller.refresh();
+    controller.selected.add(bundle.path);
+
+    await controller.trashSelected();
+    expect(
+      games.games.where((g) => g.path.startsWith(bundle.path)).map((g) => g.available),
+      everyElement(isFalse),
+    );
+    expect(games.games.length, 3, reason: 'history entries are kept');
+
+    await controller.restore(controller.trash.single);
+    expect(
+      games.games.where((g) => g.path.startsWith(bundle.path)).map((g) => g.available),
+      everyElement(isTrue),
+    );
+  });
+
+  test('viewing a folder that disappears falls back to games', () async {
+    final gamesPath = controller.files!.gamesPath;
+    final folder = await Directory(p.join(gamesPath, 'temp')).create();
+    await controller.open(folder.path);
+    expect(controller.currentPath, folder.path);
+
+    await folder.delete();
+    await controller.refresh();
+
+    expect(controller.currentPath, gamesPath);
   });
 }

@@ -6,11 +6,14 @@ import 'package:path/path.dart' as p;
 import 'archive_extractor.dart';
 import 'archive_volumes.dart';
 import 'engine_runtime_guard.dart';
-import 'file_operation_error.dart';
 import 'game_manager.dart';
 import 'local_file_service.dart';
 import 'manager_scope.dart';
 import 'manager_storage.dart';
+
+/// One-shot outcome the page turns into a toast. Only long tasks report
+/// success; quick edits are visible in the refreshed listing.
+enum ManagerNotice { completed }
 
 /// Coordinates grant, file tasks, library relocate and engine safety.
 class FileManagerController extends ChangeNotifier {
@@ -38,8 +41,10 @@ class FileManagerController extends ChangeNotifier {
   bool loading = false;
   bool get isBusy => files?.isBusy ?? false;
   bool get blocksLibraryScan => isBusy;
+  bool get isSupported => storage.isSupported;
   FileTask? task;
   FileOperationException? lastError;
+  ManagerNotice? notice;
 
   Future<void> load() async {
     loading = true;
@@ -54,7 +59,9 @@ class FileManagerController extends ChangeNotifier {
         await refresh();
       }
     } on FileOperationException catch (error) {
-      lastError = error;
+      // The empty state already explains an unsupported platform; a toast
+      // on every load would only repeat it.
+      if (error.code != FileErrorCode.unsupportedPlatform) lastError = error;
     } catch (error) {
       lastError = FileOperationException.from(error);
     } finally {
@@ -95,6 +102,15 @@ class FileManagerController extends ChangeNotifier {
   Future<void> refresh() async {
     final service = files;
     if (service == null) return;
+    // The folder being viewed can disappear underneath us (another app,
+    // or a restore that recreated a parent). Fall back to games/ rather
+    // than showing an empty listing for a path that no longer exists.
+    if (!await Directory(currentPath).exists()) {
+      currentPath = await Directory(service.gamesPath).exists()
+          ? service.gamesPath
+          : service.rootPath;
+      selected.clear();
+    }
     entries = await service.list(currentPath);
     trash = await service.deletedFiles();
     selected.removeWhere(
@@ -172,7 +188,7 @@ class FileManagerController extends ChangeNotifier {
         progress,
       );
     }
-  });
+  }, announce: true);
 
   Future<void> moveTo(String destinationDir) => _run(() async {
     for (final source in _expand(_targets)) {
@@ -217,7 +233,7 @@ class FileManagerController extends ChangeNotifier {
           task: _beginTask(),
         ),
       );
-    });
+    }, announce: true);
   }
 
   void cancelTask() {
@@ -265,8 +281,15 @@ class FileManagerController extends ChangeNotifier {
         ArchiveVolumes.isVolume(name);
   }
 
-  Future<void> _run(Future<void> Function() operation) async {
+  /// Multi-item operations stop at the first failure and report that code;
+  /// items handled before it stay where they were put. The listing is
+  /// refreshed on every exit so the page never shows the pre-failure state.
+  Future<void> _run(
+    Future<void> Function() operation, {
+    bool announce = false,
+  }) async {
     lastError = null;
+    notice = null;
     notifyListeners();
     try {
       for (final path in {..._targets, currentPath}) {
@@ -275,13 +298,19 @@ class FileManagerController extends ChangeNotifier {
       await operation();
       selected.clear();
       selecting = false;
-      await refresh();
+      if (announce) notice = ManagerNotice.completed;
     } on FileOperationException catch (error) {
       if (error.code != FileErrorCode.cancelled) lastError = error;
     } catch (error) {
       lastError = FileOperationException.from(error);
     } finally {
       task = null;
+      try {
+        await refresh();
+      } catch (_) {
+        // The operation outcome is what matters; a stale listing is
+        // corrected by the next refresh.
+      }
       notifyListeners();
     }
   }

@@ -247,18 +247,23 @@ class GameManager {
   }
 
   /// File is gone or in Recently Deleted. Keep stats; do not [removeGame].
-  Future<void> markUnavailable(String path) async {
-    final index = _games.indexWhere((g) => g.path == path);
-    if (index < 0 || !_games[index].available) return;
-    _games[index].available = false;
-    await _save();
-  }
+  ///
+  /// Applies to [path] and every game inside it, so trashing a folder that
+  /// holds several games hides all of them while a restore brings all back.
+  Future<void> markUnavailable(String path) => _setAvailable(path, false);
 
-  Future<void> markAvailable(String path) async {
-    final index = _games.indexWhere((g) => g.path == path);
-    if (index < 0 || _games[index].available) return;
-    _games[index].available = true;
-    await _save();
+  Future<void> markAvailable(String path) => _setAvailable(path, true);
+
+  Future<void> _setAvailable(String path, bool available) async {
+    var changed = false;
+    for (final game in _games) {
+      if (game.available == available || !_sameOrWithin(game.path, path)) {
+        continue;
+      }
+      game.available = available;
+      changed = true;
+    }
+    if (changed) await _save();
   }
 
   bool _sameOrWithin(String path, String base) {
