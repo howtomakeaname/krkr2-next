@@ -1,5 +1,16 @@
 import 'dart:typed_data';
 
+abstract final class EngineInputEventType {
+  static const int pointerDown = 1;
+  static const int pointerMove = 2;
+  static const int pointerUp = 3;
+  static const int pointerScroll = 4;
+  static const int keyDown = 5;
+  static const int keyUp = 6;
+  static const int textInput = 7;
+  static const int back = 8;
+}
+
 class EngineFrameInfo {
   const EngineFrameInfo({
     required this.width,

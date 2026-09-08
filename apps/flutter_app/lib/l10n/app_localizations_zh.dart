@@ -578,6 +578,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rotateScreen => '旋转屏幕';
 
   @override
+  String get showVirtualControls => '显示虚拟操控';
+
+  @override
+  String get hideVirtualControls => '隐藏虚拟操控';
+
+  @override
+  String get virtualTouchpad => '（触控板）轻点单击';
+
+  @override
+  String get virtualMouseLeft => '左键';
+
+  @override
+  String get virtualMouseRight => '右键';
+
+  @override
+  String get virtualConfirm => '确认（Enter）';
+
+  @override
+  String get virtualBack => '返回（Esc）';
+
+  @override
+  String get virtualAdvance => '推进（Space）';
+
+  @override
+  String get virtualSkip => '按住快进（Ctrl）';
+
+  @override
+  String get virtualUp => '上';
+
+  @override
+  String get virtualDown => '下';
+
+  @override
+  String get virtualLeft => '左';
+
+  @override
+  String get virtualRight => '右';
+
+  @override
   String get gameStarting => '正在启动';
 
   @override
