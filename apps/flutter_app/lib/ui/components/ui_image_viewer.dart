@@ -166,13 +166,17 @@ class _ZoomableImage extends StatefulWidget {
 
 class _ZoomableImageState extends State<_ZoomableImage>
     with SingleTickerProviderStateMixin {
-  late final TransformationController _tc = TransformationController();
-  late final AnimationController _ac = AnimationController(
-    vsync: this,
-    duration: UiDuration.base,
-  );
+  late final TransformationController _tc;
+  late final AnimationController _ac;
   Animation<Matrix4>? _anim;
   TapDownDetails? _doubleTapDetails;
+
+  @override
+  void initState() {
+    super.initState();
+    _tc = TransformationController();
+    _ac = AnimationController(vsync: this, duration: UiDuration.base);
+  }
 
   @override
   void dispose() {

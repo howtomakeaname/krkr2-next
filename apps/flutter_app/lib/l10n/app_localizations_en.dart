@@ -43,6 +43,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get managerRename => 'Rename';
 
   @override
+  String get managerRenameExtensionTitle => 'Change the file extension?';
+
+  @override
+  String managerRenameExtensionMessage(String from, String to) {
+    return 'Changing the extension from $from to $to may change how this file is classified (preview, extract, game data). Only continue if you meant to do that.';
+  }
+
+  @override
+  String get managerRenameExtensionContinue => 'Continue';
+
+  @override
+  String get managerNoExtension => 'no extension';
+
+  @override
   String get managerTrash => 'Move to Recently Deleted';
 
   @override
@@ -223,6 +237,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get managerDetailArchive => 'Archive';
+
+  @override
+  String get managerDetailGame => 'Game';
+
+  @override
+  String get managerDetailImage => 'Image';
+
+  @override
+  String get managerDetailAudio => 'Audio';
+
+  @override
+  String get managerDetailVideo => 'Video';
+
+  @override
+  String get managerDetailText => 'Text';
+
+  @override
+  String get managerDetailGameData => 'Game data';
+
+  @override
+  String get managerTextEmpty => 'This file is empty.';
+
+  @override
+  String get managerTextTruncated => 'Showing the first 2 MB of this file.';
+
+  @override
+  String get managerPlay => 'Play';
+
+  @override
+  String get managerPause => 'Pause';
+
+  @override
+  String get managerPreview => 'Preview';
+
+  @override
+  String get managerMediaFailed => 'This file could not be opened.';
 
   @override
   String get managerDetailSize => 'Size';

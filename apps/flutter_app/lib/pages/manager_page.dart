@@ -8,14 +8,12 @@ import '../l10n/app_localizations.dart';
 import '../l10n/file_manager_localizations.dart';
 import '../services/file_manager_controller.dart';
 import '../services/local_file_service.dart';
+import '../services/manager_file_kind.dart';
 import '../ui/ui.dart';
+import 'manager_media_page.dart';
 
 class ManagerPage extends StatefulWidget {
-  const ManagerPage({
-    super.key,
-    required this.controller,
-    this.active = true,
-  });
+  const ManagerPage({super.key, required this.controller, this.active = true});
 
   final FileManagerController controller;
 
@@ -103,87 +101,85 @@ class _ManagerPageState extends State<ManagerPage> {
     double bottom,
   ) {
     return Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(20, top + 16, 20, 8),
-            child: SizedBox(
-              height: UiNavigationMetrics.buttonExtent,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      controller.selecting
-                          ? l10n.managerItemsSelected(
-                              controller.selected.length,
-                            )
-                          : l10n.tabManage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.uiType.headline.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, top + 16, 20, 8),
+          child: SizedBox(
+            height: UiNavigationMetrics.buttonExtent,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    controller.selecting
+                        ? l10n.managerItemsSelected(controller.selected.length)
+                        : l10n.tabManage,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.uiType.headline.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (controller.grant != null)
-                    UiGlassToolbar(
-                      children: [
-                        UiGlassIconButton(
-                          icon: controller.selecting
-                              ? LucideIcons.check
-                              : LucideIcons.listChecks,
-                          semanticLabel: controller.selecting
-                              ? l10n.managerDone
-                              : l10n.managerSelect,
+                ),
+                if (controller.grant != null)
+                  UiGlassToolbar(
+                    children: [
+                      UiGlassIconButton(
+                        icon: controller.selecting
+                            ? LucideIcons.check
+                            : LucideIcons.listChecks,
+                        semanticLabel: controller.selecting
+                            ? l10n.managerDone
+                            : l10n.managerSelect,
+                        contained: false,
+                        onPressed: () =>
+                            controller.toggleSelecting(!controller.selecting),
+                      ),
+                      Builder(
+                        builder: (buttonContext) => UiGlassIconButton(
+                          icon: LucideIcons.ellipsis,
+                          semanticLabel: l10n.tabManage,
                           contained: false,
-                          onPressed: () =>
-                              controller.toggleSelecting(!controller.selecting),
+                          onPressed: () => _showMenu(buttonContext, l10n),
                         ),
-                        Builder(
-                          builder: (buttonContext) => UiGlassIconButton(
-                            icon: LucideIcons.ellipsis,
-                            semanticLabel: l10n.tabManage,
-                            contained: false,
-                            onPressed: () => _showMenu(buttonContext, l10n),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
-          if (controller.grant != null) _buildBreadcrumb(l10n),
-          if (controller.task != null) _buildProgress(l10n),
-          Expanded(child: _buildBody(l10n)),
-          if (controller.selecting && controller.selected.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 12),
-              child: UiGlassToolbar(
-                variant: UiGlassVariant.regular,
-                children: [
-                  UiGlassIconButton(
-                    icon: LucideIcons.copy,
-                    semanticLabel: l10n.managerCopy,
-                    contained: false,
-                    onPressed: () => _pickDestination(copy: true),
-                  ),
-                  UiGlassIconButton(
-                    icon: LucideIcons.folderInput,
-                    semanticLabel: l10n.managerMove,
-                    contained: false,
-                    onPressed: () => _pickDestination(copy: false),
-                  ),
-                  UiGlassIconButton(
-                    icon: LucideIcons.trash2,
-                    semanticLabel: l10n.managerTrash,
-                    contained: false,
-                    foregroundColor: colors.danger,
-                    onPressed: () => _confirmTrash(l10n),
-                  ),
-                ],
-              ),
+        ),
+        if (controller.grant != null) _buildBreadcrumb(l10n),
+        if (controller.task != null) _buildProgress(l10n),
+        Expanded(child: _buildBody(l10n)),
+        if (controller.selecting && controller.selected.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 12),
+            child: UiGlassToolbar(
+              variant: UiGlassVariant.regular,
+              children: [
+                UiGlassIconButton(
+                  icon: LucideIcons.copy,
+                  semanticLabel: l10n.managerCopy,
+                  contained: false,
+                  onPressed: () => _pickDestination(copy: true),
+                ),
+                UiGlassIconButton(
+                  icon: LucideIcons.folderInput,
+                  semanticLabel: l10n.managerMove,
+                  contained: false,
+                  onPressed: () => _pickDestination(copy: false),
+                ),
+                UiGlassIconButton(
+                  icon: LucideIcons.trash2,
+                  semanticLabel: l10n.managerTrash,
+                  contained: false,
+                  foregroundColor: colors.danger,
+                  onPressed: () => _confirmTrash(l10n),
+                ),
+              ],
             ),
-        ],
+          ),
+      ],
     );
   }
 
@@ -214,11 +210,28 @@ class _ManagerPageState extends State<ManagerPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            task.currentName.isEmpty ? l10n.managerWorking : task.currentName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.uiType.caption,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  task.currentName.isEmpty
+                      ? l10n.managerWorking
+                      : task.currentName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.uiType.caption,
+                ),
+              ),
+              if (task.bytesPerSecond case final speed?) ...[
+                const SizedBox(width: 8),
+                Text(
+                  formatTransferSpeed(speed),
+                  style: context.uiType.caption.copyWith(
+                    color: context.uiColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 6),
           Row(
@@ -303,11 +316,15 @@ class _ManagerPageState extends State<ManagerPage> {
         final entry = controller.entries[index];
         final selected = controller.selected.contains(entry.path);
         final mutable = controller.canMutate(entry.path);
+        final kind = ManagerFileKind.of(entry);
         return Builder(
           builder: (tileContext) => UiListTile(
             title: entry.name,
             subtitle: entry.isDirectory ? null : _sizeLabel(entry.stat.size),
-            icon: entry.isDirectory ? CupertinoIcons.folder : CupertinoIcons.doc,
+            icon: kind.icon,
+            iconColor: kind == ManagerFileKind.game
+                ? context.uiColors.brand
+                : null,
             trailing: controller.selecting && mutable
                 ? Icon(
                     selected
@@ -323,9 +340,9 @@ class _ManagerPageState extends State<ManagerPage> {
                 controller.toggle(entry.path);
               } else if (entry.isDirectory) {
                 controller.open(entry.path);
+              } else if (kind.canOpen) {
+                _openMedia(entry, kind);
               } else {
-                // Files have nothing to open into; a tap answers with what
-                // the entry is instead of doing nothing.
                 _showDetails(entry, l10n);
               }
             },
@@ -344,6 +361,10 @@ class _ManagerPageState extends State<ManagerPage> {
     if (bytes < mb) return '${(bytes / kb).toStringAsFixed(1)} KB';
     if (bytes < gb) return '${(bytes / mb).toStringAsFixed(1)} MB';
     return '${(bytes / gb).toStringAsFixed(2)} GB';
+  }
+
+  Future<void> _openMedia(LocalFileEntry entry, ManagerFileKind kind) {
+    return ManagerMediaPage.open(context, path: entry.path, kind: kind);
   }
 
   Future<void> _showDetails(LocalFileEntry entry, AppLocalizations l10n) {
@@ -393,10 +414,23 @@ class _ManagerPageState extends State<ManagerPage> {
     // The games container has no rename/move/trash; offering them only to
     // answer with protected_directory would be noise. Details always apply.
     final mutable = controller.canMutate(entry.path);
+    final kind = ManagerFileKind.of(entry);
     return UiPopupMenu.show<void>(
       context,
       anchor: UiPopupMenu.rectOf(tileContext),
       items: [
+        if (kind.canOpen)
+          UiMenuItem(
+            label: kind == ManagerFileKind.audio || kind == ManagerFileKind.video
+                ? l10n.managerPlay
+                : l10n.managerPreview,
+            icon: switch (kind) {
+              ManagerFileKind.image => LucideIcons.image,
+              ManagerFileKind.text => LucideIcons.fileText,
+              _ => LucideIcons.play,
+            },
+            onSelected: () => _openMedia(entry, kind),
+          ),
         UiMenuItem(
           label: l10n.managerDetails,
           icon: LucideIcons.info,
@@ -462,8 +496,38 @@ class _ManagerPageState extends State<ManagerPage> {
       l10n.managerRename,
       initial: entry.name,
     );
-    if (name == null) return;
+    if (name == null || name == entry.name) return;
+    if (!entry.isDirectory &&
+        ManagerFileKind.extensionChanged(entry.name, name)) {
+      if (!mounted) return;
+      // Let the name dialog finish leaving so its field is not rebuilt
+      // against a disposed controller when this alert lands.
+      await Future<void>.delayed(UiSprings.dismissDuration);
+      if (!mounted) return;
+      final confirmed = await UiDialog.show<bool>(
+        context,
+        title: l10n.managerRenameExtensionTitle,
+        message: l10n.managerRenameExtensionMessage(
+          _extensionLabel(entry.name, l10n),
+          _extensionLabel(name, l10n),
+        ),
+        actions: [
+          UiDialogAction(label: l10n.managerCancel, returnValue: false),
+          UiDialogAction(
+            label: l10n.managerRenameExtensionContinue,
+            isDefault: true,
+            returnValue: true,
+          ),
+        ],
+      );
+      if (confirmed != true) return;
+    }
     await controller.rename(entry.path, name);
+  }
+
+  String _extensionLabel(String name, AppLocalizations l10n) {
+    final ext = ManagerFileKind.extensionOf(name);
+    return ext.isEmpty ? l10n.managerNoExtension : '.$ext';
   }
 
   Future<String?> _promptName(
@@ -486,14 +550,14 @@ class _ManagerPageState extends State<ManagerPage> {
           label: l10n.managerDone,
           isDefault: true,
           // UiDialog pushes on the root navigator; pop the same one.
-          onPressed: () => Navigator.of(
-            context,
-            rootNavigator: true,
-          ).pop(input.text.trim()),
+          onPressed: () =>
+              Navigator.of(context, rootNavigator: true).pop(input.text.trim()),
         ),
       ],
     );
-    input.dispose();
+    // The dialog is still reversing; disposing now would rebuild its
+    // TextField against a dead controller.
+    Future<void>.delayed(UiSprings.dismissDuration, input.dispose);
     if (result == null || result.isEmpty) return null;
     return result;
   }
@@ -805,14 +869,7 @@ class _DetailsSheetState extends State<_DetailsSheet> {
       locale,
     ).add_Hm().format(entry.stat.modified.toLocal());
 
-    final String kind;
-    if (entry.isDirectory) {
-      kind = l10n.managerDetailFolder;
-    } else if (widget.controller.looksLikeArchive(entry.name)) {
-      kind = l10n.managerDetailArchive;
-    } else {
-      kind = l10n.managerDetailFile;
-    }
+    final kind = ManagerFileKind.of(entry).label(l10n);
 
     final String size;
     if (!entry.isDirectory) {
@@ -827,18 +884,73 @@ class _DetailsSheetState extends State<_DetailsSheet> {
       size = l10n.managerCalculating;
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: UiListSection(
-        children: [
-          UiListTile(title: l10n.managerDetailKind, trailingText: kind),
-          UiListTile(title: l10n.managerDetailSize, trailingText: size),
-          UiListTile(title: l10n.managerDetailModified, trailingText: modified),
-          UiListTile(
-            title: l10n.managerDetailLocation,
-            subtitle: widget.controller.locationOf(entry.path),
-          ),
-        ],
+    // Sit on the sheet itself. Another grouped card here is a panel inside
+    // a panel; location is stacked so a long path can wrap.
+    return Column(
+      key: const Key('manager-details'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DetailRow(label: l10n.managerDetailKind, value: kind),
+        _DetailRow(label: l10n.managerDetailSize, value: size),
+        _DetailRow(label: l10n.managerDetailModified, value: modified),
+        _DetailRow(
+          label: l10n.managerDetailLocation,
+          value: widget.controller.locationOf(entry.path),
+          stacked: true,
+          divider: false,
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.stacked = false,
+    this.divider = true,
+  });
+
+  final String label;
+  final String value;
+  final bool stacked;
+  final bool divider;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.uiColors;
+    final type = context.uiType;
+    final labelStyle = type.subheadline.copyWith(color: colors.textSecondary);
+    final valueStyle = type.body.copyWith(color: colors.textPrimary);
+    final content = stacked
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: labelStyle),
+              const SizedBox(height: 4),
+              Text(value, style: valueStyle),
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: labelStyle),
+              const SizedBox(width: UiSpacing.lg),
+              Expanded(
+                child: Text(value, style: valueStyle, textAlign: TextAlign.end),
+              ),
+            ],
+          );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: divider
+            ? Border(bottom: BorderSide(color: colors.separator, width: 0.5))
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: UiSpacing.md),
+        child: content,
       ),
     );
   }

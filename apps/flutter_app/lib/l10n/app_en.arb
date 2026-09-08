@@ -11,6 +11,16 @@
   "managerCopy": "Copy",
   "managerMove": "Move",
   "managerRename": "Rename",
+  "managerRenameExtensionTitle": "Change the file extension?",
+  "managerRenameExtensionMessage": "Changing the extension from {from} to {to} may change how this file is classified (preview, extract, game data). Only continue if you meant to do that.",
+  "@managerRenameExtensionMessage": {
+    "placeholders": {
+      "from": { "type": "String" },
+      "to": { "type": "String" }
+    }
+  },
+  "managerRenameExtensionContinue": "Continue",
+  "managerNoExtension": "no extension",
   "managerTrash": "Move to Recently Deleted",
   "managerRecentlyDeleted": "Recently Deleted",
   "managerTrashHint": "These items still use storage. Nothing is deleted automatically.",
@@ -67,6 +77,18 @@
   "managerDetailFolder": "Folder",
   "managerDetailFile": "File",
   "managerDetailArchive": "Archive",
+  "managerDetailGame": "Game",
+  "managerDetailImage": "Image",
+  "managerDetailAudio": "Audio",
+  "managerDetailVideo": "Video",
+  "managerDetailText": "Text",
+  "managerDetailGameData": "Game data",
+  "managerTextEmpty": "This file is empty.",
+  "managerTextTruncated": "Showing the first 2 MB of this file.",
+  "managerPlay": "Play",
+  "managerPause": "Pause",
+  "managerPreview": "Preview",
+  "managerMediaFailed": "This file could not be opened.",
   "managerDetailSize": "Size",
   "managerDetailItems": "{count} items",
   "@managerDetailItems": {

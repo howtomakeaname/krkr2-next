@@ -1,14 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_app/l10n/app_localizations.dart';
+import 'package:flutter_app/pages/manager_media_page.dart';
 import 'package:flutter_app/pages/manager_page.dart';
 import 'package:flutter_app/services/file_manager_controller.dart';
 import 'package:flutter_app/services/game_manager.dart';
+import 'package:flutter_app/services/local_file_service.dart';
 import 'package:flutter_app/services/manager_scope.dart';
 import 'package:flutter_app/services/manager_storage.dart';
 import 'package:flutter_app/ui/ui.dart';
@@ -31,6 +34,7 @@ void main() {
     ).create(recursive: true);
     await Directory(p.join(root.path, 'games')).create();
     await File(p.join(root.path, 'games', '中文 🐈.txt')).writeAsString('ok');
+    await File(p.join(root.path, 'games', 'notes.bin')).writeAsBytes([0, 1]);
     final games = GameManager();
     await games.load();
     controller = FileManagerController(
@@ -212,16 +216,17 @@ void main() {
     unsupported.dispose();
   });
 
-  testWidgets('tapping a file opens its details', (tester) async {
+  testWidgets('tapping a binary file opens its details', (tester) async {
     await pumpPage(tester);
-    await tester.tap(find.text('中文 🐈.txt'));
+    await tester.tap(find.text('notes.bin'));
     await tester.pumpAndSettle();
 
     // The list row shows the size too, so look inside the sheet only.
-    final sheet = find.byType(UiListSection);
+    final sheet = find.byKey(const Key('manager-details'));
     expect(sheet, findsOneWidget);
     Finder inSheet(String text) =>
         find.descendant(of: sheet, matching: find.text(text));
+    expect(find.byType(UiListSection), findsNothing);
     expect(inSheet('Kind'), findsOneWidget);
     expect(inSheet('File'), findsOneWidget);
     expect(inSheet('2 B'), findsOneWidget);
@@ -231,6 +236,19 @@ void main() {
     expect(location(gamesPath), 'Download/${ManagerScope.ohosAndroidAppId}');
     expect(find.text('${location(gamesPath)}/games'), findsOneWidget);
     expect(find.textContaining(fixture.path), findsNothing);
+  });
+
+  testWidgets('tapping a text file opens the preview', (tester) async {
+    await pumpPage(tester);
+    expect(find.byIcon(CupertinoIcons.doc_text), findsOneWidget);
+
+    await tester.tap(find.text('中文 🐈.txt'));
+    await tester.pump();
+    await settleIo(tester, find.text('ok'));
+
+    expect(find.byType(ManagerMediaPage), findsOneWidget);
+    expect(find.byType(SelectableText), findsOneWidget);
+    expect(find.byKey(const Key('manager-details')), findsNothing);
   });
 
   testWidgets('folder details total the contents after opening', (
@@ -256,6 +274,58 @@ void main() {
     expect(find.text('Calculating…'), findsOneWidget);
     await settleIo(tester, find.text('3 B · 1 items'));
     expect(find.text('Calculating…'), findsNothing);
+  });
+
+  Future<void> renameListedFile(
+    WidgetTester tester,
+    String from,
+    String to,
+  ) async {
+    await tester.longPress(find.text(from));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), to);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('renaming a file warns when the extension changes', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    await renameListedFile(tester, 'notes.bin', 'notes.dat');
+
+    expect(find.text('Change the file extension?'), findsOneWidget);
+    expect(
+      find.text(
+        'Changing the extension from .bin to .dat may change how this file is classified (preview, extract, game data). Only continue if you meant to do that.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('notes.bin'), findsOneWidget);
+    expect(find.text('notes.dat'), findsNothing);
+  });
+
+  testWidgets('confirming an extension change renames the file', (tester) async {
+    await pumpPage(tester);
+    await renameListedFile(tester, 'notes.bin', 'notes.dat');
+    await tester.tap(find.text('Continue'));
+    await settleIo(tester, find.text('notes.dat'));
+    expect(find.text('notes.bin'), findsNothing);
+  });
+
+  testWidgets('renaming without changing the extension does not warn', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    await renameListedFile(tester, 'notes.bin', 'other.bin');
+    expect(find.text('Change the file extension?'), findsNothing);
+    await settleIo(tester, find.text('other.bin'));
+    expect(find.text('notes.bin'), findsNothing);
   });
 
   testWidgets('a protected folder still offers details, nothing else', (
@@ -311,4 +381,144 @@ void main() {
     await pullToRefresh(tester, find.text('new.txt'));
     expect(find.text('This folder is empty'), findsNothing);
   });
+
+  testWidgets('a running copy shows the transfer speed next to the name', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    controller.task = FileTask()
+      ..currentName = 'pack.7z'
+      ..completed = 10 * 1024 * 1024
+      ..total = 20 * 1024 * 1024
+      ..bytesPerSecond = 2.5 * 1024 * 1024;
+    controller.notifyListeners();
+    await tester.pump();
+
+    expect(find.text('pack.7z'), findsOneWidget);
+    expect(find.text('2.50 MB/s'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+  });
+
+  testWidgets('a dat file is marked as game data and opens details', (
+    tester,
+  ) async {
+    await io(tester, () async {
+      await File(
+        p.join(controller.files!.gamesPath, 'save0001.dat'),
+      ).writeAsBytes(const []);
+      await controller.refresh();
+    });
+    await pumpPage(tester);
+    expect(find.byIcon(CupertinoIcons.square_stack_3d_up), findsOneWidget);
+
+    await tester.tap(find.text('save0001.dat'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manager-details')), findsOneWidget);
+    expect(find.text('Game data'), findsOneWidget);
+  });
+
+  testWidgets('an xp3 pack is marked as a game and opens details', (
+    tester,
+  ) async {
+    await io(tester, () async {
+      await File(
+        p.join(controller.files!.gamesPath, 'data.xp3'),
+      ).writeAsBytes(const []);
+      await controller.refresh();
+    });
+    await pumpPage(tester);
+    expect(find.byIcon(CupertinoIcons.game_controller), findsOneWidget);
+
+    await tester.tap(find.text('data.xp3'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manager-details')), findsOneWidget);
+    expect(find.text('Game'), findsOneWidget);
+  });
+
+  testWidgets('tapping an image opens the preview', (tester) async {
+    await io(tester, () async {
+      await File(
+        p.join(controller.files!.gamesPath, 'cover.png'),
+      ).writeAsBytes(_onePixelPng);
+      await controller.refresh();
+    });
+    await pumpPage(tester);
+    expect(find.byIcon(CupertinoIcons.photo), findsOneWidget);
+
+    await tester.tap(find.text('cover.png'));
+    await tester.pumpAndSettle();
+    expect(find.byType(UiImageViewer), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+  });
 }
+
+/// 1×1 transparent PNG so the preview has a real decodeable file.
+const _onePixelPng = <int>[
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0A,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
+];

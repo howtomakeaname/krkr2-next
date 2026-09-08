@@ -8,6 +8,7 @@ import 'archive_volumes.dart';
 import 'engine_runtime_guard.dart';
 import 'game_manager.dart';
 import 'local_file_service.dart';
+import 'manager_file_kind.dart';
 import 'manager_scope.dart';
 import 'manager_storage.dart';
 
@@ -324,18 +325,8 @@ class FileManagerController extends ChangeNotifier {
     await refresh();
   }
 
-  bool looksLikeArchive(String name) {
-    final lower = name.toLowerCase();
-    return lower.endsWith('.zip') ||
-        lower.endsWith('.7z') ||
-        lower.endsWith('.rar') ||
-        lower.endsWith('.tar') ||
-        lower.endsWith('.gz') ||
-        lower.endsWith('.bz2') ||
-        lower.endsWith('.xz') ||
-        lower.endsWith('.zst') ||
-        ArchiveVolumes.isVolume(name);
-  }
+  bool looksLikeArchive(String name) =>
+      ManagerFileKind.ofName(name) == ManagerFileKind.archive;
 
   /// Multi-item operations stop at the first failure and report that code;
   /// items handled before it stay where they were put. The listing is

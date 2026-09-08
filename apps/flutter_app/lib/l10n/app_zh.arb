@@ -11,6 +11,16 @@
   "managerCopy": "复制",
   "managerMove": "移动",
   "managerRename": "重命名",
+  "managerRenameExtensionTitle": "要更改扩展名吗？",
+  "managerRenameExtensionMessage": "把扩展名从 {from} 改成 {to} 可能会改变这个文件的类型（预览、解压、游戏数据等）。请确认这是你想做的。",
+  "@managerRenameExtensionMessage": {
+    "placeholders": {
+      "from": { "type": "String" },
+      "to": { "type": "String" }
+    }
+  },
+  "managerRenameExtensionContinue": "继续",
+  "managerNoExtension": "无扩展名",
   "managerTrash": "移到最近删除",
   "managerRecentlyDeleted": "最近删除",
   "managerTrashHint": "这些项目仍占用存储空间，不会自动清空。",
@@ -67,6 +77,18 @@
   "managerDetailFolder": "文件夹",
   "managerDetailFile": "文件",
   "managerDetailArchive": "压缩包",
+  "managerDetailGame": "游戏",
+  "managerDetailImage": "图片",
+  "managerDetailAudio": "音频",
+  "managerDetailVideo": "视频",
+  "managerDetailText": "文本",
+  "managerDetailGameData": "游戏数据",
+  "managerTextEmpty": "这个文件是空的。",
+  "managerTextTruncated": "仅显示此文件的前 2 MB。",
+  "managerPlay": "播放",
+  "managerPause": "暂停",
+  "managerPreview": "预览",
+  "managerMediaFailed": "无法打开此文件。",
   "managerDetailSize": "大小",
   "managerDetailItems": "{count} 项",
   "@managerDetailItems": {

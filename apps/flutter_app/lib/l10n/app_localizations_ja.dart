@@ -43,6 +43,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get managerRename => '名前を変更';
 
   @override
+  String get managerRenameExtensionTitle => '拡張子を変更しますか？';
+
+  @override
+  String managerRenameExtensionMessage(String from, String to) {
+    return '拡張子を $from から $to に変えると、ファイルの種類（プレビュー・展開・ゲームデータなど）が変わる場合があります。意図した操作のときだけ続けてください。';
+  }
+
+  @override
+  String get managerRenameExtensionContinue => '続ける';
+
+  @override
+  String get managerNoExtension => '拡張子なし';
+
+  @override
   String get managerTrash => '最近削除した項目に移動';
 
   @override
@@ -203,6 +217,42 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get managerDetailArchive => 'アーカイブ';
+
+  @override
+  String get managerDetailGame => 'ゲーム';
+
+  @override
+  String get managerDetailImage => '画像';
+
+  @override
+  String get managerDetailAudio => '音声';
+
+  @override
+  String get managerDetailVideo => '動画';
+
+  @override
+  String get managerDetailText => 'テキスト';
+
+  @override
+  String get managerDetailGameData => 'ゲームデータ';
+
+  @override
+  String get managerTextEmpty => 'このファイルは空です。';
+
+  @override
+  String get managerTextTruncated => 'このファイルの先頭 2 MB のみ表示しています。';
+
+  @override
+  String get managerPlay => '再生';
+
+  @override
+  String get managerPause => '一時停止';
+
+  @override
+  String get managerPreview => 'プレビュー';
+
+  @override
+  String get managerMediaFailed => 'このファイルを開けませんでした。';
 
   @override
   String get managerDetailSize => 'サイズ';

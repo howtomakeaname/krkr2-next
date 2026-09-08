@@ -8,17 +8,86 @@ import 'file_operation_error.dart';
 export 'file_operation_error.dart';
 
 class FileTask {
+  FileTask({DateTime Function()? now}) : _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
+
   bool cancelled = false;
   int completed = 0;
   int total = 0;
   String currentName = '';
   void Function()? onProgress;
 
+  /// Windowed bytes/second, or null until the first full sample lands.
+  /// Copy and extract both feed [completed] in bytes, so the same figure
+  /// is the transfer rate the progress row shows.
+  double? bytesPerSecond;
+
+  DateTime? _windowStartedAt;
+  int _windowStartedBytes = 0;
+
+  /// A sample shorter than this is too noisy: a single 64 KB chunk would
+  /// look like hundreds of MB/s if we divided by a few milliseconds.
+  static const _window = Duration(milliseconds: 300);
+
   void check() {
     if (cancelled) throw const FileOperationException(FileErrorCode.cancelled);
   }
 
-  void report() => onProgress?.call();
+  void report() {
+    _updateRate();
+    onProgress?.call();
+  }
+
+  void _updateRate() {
+    final now = _now();
+    final started = _windowStartedAt;
+    if (started == null) {
+      _windowStartedAt = now;
+      _windowStartedBytes = completed;
+      return;
+    }
+    final elapsed = now.difference(started);
+    if (elapsed < _window) return;
+    final delta = completed - _windowStartedBytes;
+    if (delta < 0) {
+      // A reused task that reset [completed] starts a fresh window.
+      bytesPerSecond = null;
+    } else {
+      final seconds = elapsed.inMicroseconds / 1e6;
+      final instant = seconds > 0 ? delta / seconds : 0.0;
+      bytesPerSecond = bytesPerSecond == null
+          ? instant
+          : bytesPerSecond! * 0.4 + instant * 0.6;
+    }
+    _windowStartedAt = now;
+    _windowStartedBytes = completed;
+  }
+}
+
+/// 1024-based rate so it matches the listing's size labels. Units step
+/// KB/s → MB/s → GB/s; anything under 1 KB/s still shows as KB/s.
+String formatTransferSpeed(double bytesPerSecond) {
+  const kb = 1024.0;
+  const mb = kb * 1024;
+  const gb = mb * 1024;
+  final rate = bytesPerSecond.isFinite && bytesPerSecond > 0
+      ? bytesPerSecond
+      : 0.0;
+  final String unit;
+  final double value;
+  if (rate >= gb) {
+    value = rate / gb;
+    unit = 'GB/s';
+  } else if (rate >= mb) {
+    value = rate / mb;
+    unit = 'MB/s';
+  } else {
+    value = rate / kb;
+    unit = 'KB/s';
+  }
+  final digits = value >= 100 ? 0 : (value >= 10 ? 1 : 2);
+  return '${value.toStringAsFixed(digits)} $unit';
 }
 
 class LocalFileEntry {
@@ -156,7 +225,10 @@ class LocalFileService {
         task.check();
         final name = p.basename(entry.path).toLowerCase();
         if (name == privateName) continue;
-        final type = await FileSystemEntity.type(entry.path, followLinks: false);
+        final type = await FileSystemEntity.type(
+          entry.path,
+          followLinks: false,
+        );
         if (type == FileSystemEntityType.link) continue;
         items++;
         if (type == FileSystemEntityType.directory) {
@@ -166,6 +238,7 @@ class LocalFileService {
         }
       }
     }
+
     await walk(path);
     return DirectorySummary(bytes: bytes, items: items);
   }

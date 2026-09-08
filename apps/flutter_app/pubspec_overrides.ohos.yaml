@@ -33,3 +33,15 @@ dependency_overrides:
     path: ../../../ohos_flutter_packages/packages/file_picker/file_picker
   file_picker_ohos:
     path: ../../../ohos_flutter_packages/packages/file_picker/file_picker/ohos
+  video_player:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player
+  video_player_ohos:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player_ohos
+  video_player_android:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player_android
+  video_player_avfoundation:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player_avfoundation
+  video_player_platform_interface:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player_platform_interface
+  video_player_web:
+    path: ../../../ohos_flutter_packages/packages/video_player/video_player_web

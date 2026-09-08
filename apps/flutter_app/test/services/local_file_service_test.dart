@@ -35,6 +35,28 @@ void main() {
     return file.writeAsString(data);
   }
 
+  test('transfer speed uses a sliding window and steps KB/MB/GB', () {
+    expect(formatTransferSpeed(0), '0.00 KB/s');
+    expect(formatTransferSpeed(512), '0.50 KB/s');
+    expect(formatTransferSpeed(12.3 * 1024), '12.3 KB/s');
+    expect(formatTransferSpeed(2.5 * 1024 * 1024), '2.50 MB/s');
+    expect(formatTransferSpeed(20 * 1024 * 1024), '20.0 MB/s');
+    expect(formatTransferSpeed(1.73 * 1024 * 1024 * 1024), '1.73 GB/s');
+
+    var now = DateTime.utc(2026, 1, 1);
+    final task = FileTask(now: () => now);
+    task.completed = 5 * 1024 * 1024;
+    task.report();
+    expect(task.bytesPerSecond, isNull);
+
+    now = now.add(const Duration(milliseconds: 500));
+    task.completed = 15 * 1024 * 1024;
+    task.report();
+    // 10 MiB in 0.5 s → 20 MiB/s.
+    expect(task.bytesPerSecond, closeTo(20 * 1024 * 1024, 1));
+    expect(formatTransferSpeed(task.bytesPerSecond!), '20.0 MB/s');
+  });
+
   test('lists directories first and preserves Unicode names', () async {
     await write('中文 空格 🐈.txt');
     await write('日本語/first.ks');

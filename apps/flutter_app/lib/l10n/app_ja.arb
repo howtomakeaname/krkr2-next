@@ -11,6 +11,16 @@
   "managerCopy": "コピー",
   "managerMove": "移動",
   "managerRename": "名前を変更",
+  "managerRenameExtensionTitle": "拡張子を変更しますか？",
+  "managerRenameExtensionMessage": "拡張子を {from} から {to} に変えると、ファイルの種類（プレビュー・展開・ゲームデータなど）が変わる場合があります。意図した操作のときだけ続けてください。",
+  "@managerRenameExtensionMessage": {
+    "placeholders": {
+      "from": { "type": "String" },
+      "to": { "type": "String" }
+    }
+  },
+  "managerRenameExtensionContinue": "続ける",
+  "managerNoExtension": "拡張子なし",
   "managerTrash": "最近削除した項目に移動",
   "managerRecentlyDeleted": "最近削除した項目",
   "managerTrashHint": "これらの項目は引き続き容量を使用します。自動削除は行いません。",
@@ -67,6 +77,18 @@
   "managerDetailFolder": "フォルダ",
   "managerDetailFile": "ファイル",
   "managerDetailArchive": "アーカイブ",
+  "managerDetailGame": "ゲーム",
+  "managerDetailImage": "画像",
+  "managerDetailAudio": "音声",
+  "managerDetailVideo": "動画",
+  "managerDetailText": "テキスト",
+  "managerDetailGameData": "ゲームデータ",
+  "managerTextEmpty": "このファイルは空です。",
+  "managerTextTruncated": "このファイルの先頭 2 MB のみ表示しています。",
+  "managerPlay": "再生",
+  "managerPause": "一時停止",
+  "managerPreview": "プレビュー",
+  "managerMediaFailed": "このファイルを開けませんでした。",
   "managerDetailSize": "サイズ",
   "managerDetailItems": "{count} 項目",
   "@managerDetailItems": {

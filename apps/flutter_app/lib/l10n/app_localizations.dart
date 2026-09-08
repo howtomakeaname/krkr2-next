@@ -166,6 +166,30 @@ abstract class AppLocalizations {
   /// **'Rename'**
   String get managerRename;
 
+  /// No description provided for @managerRenameExtensionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the file extension?'**
+  String get managerRenameExtensionTitle;
+
+  /// No description provided for @managerRenameExtensionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Changing the extension from {from} to {to} may change how this file is classified (preview, extract, game data). Only continue if you meant to do that.'**
+  String managerRenameExtensionMessage(String from, String to);
+
+  /// No description provided for @managerRenameExtensionContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get managerRenameExtensionContinue;
+
+  /// No description provided for @managerNoExtension.
+  ///
+  /// In en, this message translates to:
+  /// **'no extension'**
+  String get managerNoExtension;
+
   /// No description provided for @managerTrash.
   ///
   /// In en, this message translates to:
@@ -471,6 +495,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Archive'**
   String get managerDetailArchive;
+
+  /// No description provided for @managerDetailGame.
+  ///
+  /// In en, this message translates to:
+  /// **'Game'**
+  String get managerDetailGame;
+
+  /// No description provided for @managerDetailImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get managerDetailImage;
+
+  /// No description provided for @managerDetailAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get managerDetailAudio;
+
+  /// No description provided for @managerDetailVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get managerDetailVideo;
+
+  /// No description provided for @managerDetailText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get managerDetailText;
+
+  /// No description provided for @managerDetailGameData.
+  ///
+  /// In en, this message translates to:
+  /// **'Game data'**
+  String get managerDetailGameData;
+
+  /// No description provided for @managerTextEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is empty.'**
+  String get managerTextEmpty;
+
+  /// No description provided for @managerTextTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the first 2 MB of this file.'**
+  String get managerTextTruncated;
+
+  /// No description provided for @managerPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get managerPlay;
+
+  /// No description provided for @managerPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get managerPause;
+
+  /// No description provided for @managerPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get managerPreview;
+
+  /// No description provided for @managerMediaFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be opened.'**
+  String get managerMediaFailed;
 
   /// No description provided for @managerDetailSize.
   ///

@@ -42,6 +42,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get managerRename => '重命名';
 
   @override
+  String get managerRenameExtensionTitle => '要更改扩展名吗？';
+
+  @override
+  String managerRenameExtensionMessage(String from, String to) {
+    return '把扩展名从 $from 改成 $to 可能会改变这个文件的类型（预览、解压、游戏数据等）。请确认这是你想做的。';
+  }
+
+  @override
+  String get managerRenameExtensionContinue => '继续';
+
+  @override
+  String get managerNoExtension => '无扩展名';
+
+  @override
   String get managerTrash => '移到最近删除';
 
   @override
@@ -195,6 +209,42 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get managerDetailArchive => '压缩包';
+
+  @override
+  String get managerDetailGame => '游戏';
+
+  @override
+  String get managerDetailImage => '图片';
+
+  @override
+  String get managerDetailAudio => '音频';
+
+  @override
+  String get managerDetailVideo => '视频';
+
+  @override
+  String get managerDetailText => '文本';
+
+  @override
+  String get managerDetailGameData => '游戏数据';
+
+  @override
+  String get managerTextEmpty => '这个文件是空的。';
+
+  @override
+  String get managerTextTruncated => '仅显示此文件的前 2 MB。';
+
+  @override
+  String get managerPlay => '播放';
+
+  @override
+  String get managerPause => '暂停';
+
+  @override
+  String get managerPreview => '预览';
+
+  @override
+  String get managerMediaFailed => '无法打开此文件。';
 
   @override
   String get managerDetailSize => '大小';
