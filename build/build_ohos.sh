@@ -125,7 +125,7 @@ ARCHIVE_SO="$NINJA_BUILD/bridge/file_archive/libfile_archive.so"
 [[ -f "$ARCHIVE_SO" ]] || { echo "Error: $ARCHIVE_SO not built"; exit 1; }
 # file_archive must expose only its own C ABI; a second copy of the 7-Zip
 # symbols next to libengine_api.so would be resolved by load order.
-if "$OHOS_NDK/llvm/bin/llvm-nm" -D --defined-only "$ARCHIVE_SO" | grep -q ' GetNumberOfFormats$'; then
+if grep -q ' GetNumberOfFormats$' <<<"$("$OHOS_NDK/llvm/bin/llvm-nm" -D --defined-only "$ARCHIVE_SO")"; then
     echo "Error: $ARCHIVE_SO exports 7-Zip symbols; check the version script"
     exit 1
 fi
@@ -175,8 +175,11 @@ fi
 
 echo "OK: $HAP_OUT (flutter exit $hap_status)"
 ls -la "$HAP_OUT"
+# Capture once: with pipefail, `unzip | grep -q` fails on SIGPIPE even when
+# the entry is present.
+HAP_LISTING="$(unzip -l "$HAP_OUT")"
 for so in libengine_api.so libfile_archive.so; do
-    if ! unzip -l "$HAP_OUT" | grep -q "libs/arm64-v8a/$so"; then
+    if ! grep -q "libs/arm64-v8a/$so" <<<"$HAP_LISTING"; then
         echo "Error: $HAP_OUT is missing $so"
         exit 1
     fi
