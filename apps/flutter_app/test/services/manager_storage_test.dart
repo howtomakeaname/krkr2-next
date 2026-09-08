@@ -43,6 +43,33 @@ void main() {
     },
   );
 
+  test('platforms without a storage adapter never reach the picker', () async {
+    for (final platform in ['android', 'ios']) {
+      var picked = false;
+      final storage = ManagerStorage(
+        platform: platform,
+        pickDirectory: () async {
+          picked = true;
+          return p.join(fixture.path, 'Download', ManagerScope.ohosAndroidAppId);
+        },
+      );
+      expect(storage.isSupported, isFalse);
+      for (final call in [storage.currentGrant, storage.authorize]) {
+        await expectLater(
+          call(),
+          throwsA(
+            isA<FileOperationException>().having(
+              (error) => error.code,
+              'code',
+              FileErrorCode.unsupportedPlatform,
+            ),
+          ),
+        );
+      }
+      expect(picked, isFalse, reason: '$platform must not open a picker');
+    }
+  });
+
   test('desktop authorize rejects a user-chosen sandbox or sibling', () async {
     final other = await Directory(
       p.join(fixture.path, 'Downloads', 'other.app'),

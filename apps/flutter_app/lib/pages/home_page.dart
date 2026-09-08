@@ -134,6 +134,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _onFileManagerChanged() {
     if (!mounted) return;
+    // Progress ticks are the Manage tab's concern; the library only needs
+    // to rebuild once a task finished and paths may have moved.
+    if (_fileManager.task != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
     });

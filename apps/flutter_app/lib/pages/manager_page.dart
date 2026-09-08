@@ -1,12 +1,12 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
 import '../l10n/app_localizations.dart';
 import '../l10n/file_manager_localizations.dart';
 import '../services/file_manager_controller.dart';
-import '../services/file_operation_error.dart';
 import '../services/local_file_service.dart';
 import '../ui/ui.dart';
 
@@ -44,16 +44,28 @@ class _ManagerPageState extends State<ManagerPage> {
   void _onChanged() {
     if (!mounted) return;
     setState(() {});
-    final error = controller.lastError;
-    if (error == null) return;
     final l10n = AppLocalizations.of(context);
     if (l10n == null) return;
-    UiToast.show(
-      context,
-      message: l10n.fileOperationError(error.code),
-      type: UiToastType.error,
-    );
-    controller.lastError = null;
+    final error = controller.lastError;
+    if (error != null) {
+      controller.lastError = null;
+      // Codes only; the message never carries paths, passwords or the
+      // native exception text.
+      UiToast.show(
+        context,
+        message: l10n.fileOperationError(error.code),
+        type: UiToastType.error,
+      );
+      return;
+    }
+    if (controller.notice == ManagerNotice.completed) {
+      controller.notice = null;
+      UiToast.show(
+        context,
+        message: l10n.managerCompleted,
+        type: UiToastType.success,
+      );
+    }
   }
 
   @override
@@ -168,7 +180,10 @@ class _ManagerPageState extends State<ManagerPage> {
 
   Widget _buildProgress(AppLocalizations l10n) {
     final task = controller.task!;
-    final value = task.total <= 0 ? null : task.completed / task.total;
+    // A nested tar layer adds bytes after the outer total was reported.
+    final value = task.total <= 0
+        ? null
+        : (task.completed / task.total).clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Column(
@@ -203,6 +218,13 @@ class _ManagerPageState extends State<ManagerPage> {
       return const Center(child: UiLoader());
     }
     if (controller.grant == null) {
+      if (!controller.isSupported) {
+        return UiEmpty(
+          icon: LucideIcons.folderLock,
+          title: l10n.tabManage,
+          description: l10n.managerErrorUnsupportedPlatform,
+        );
+      }
       return UiEmpty(
         icon: LucideIcons.folderLock,
         title: l10n.tabManage,
@@ -382,7 +404,11 @@ class _ManagerPageState extends State<ManagerPage> {
         UiDialogAction(
           label: l10n.managerDone,
           isDefault: true,
-          onPressed: () => Navigator.of(context).pop(input.text.trim()),
+          // UiDialog pushes on the root navigator; pop the same one.
+          onPressed: () => Navigator.of(
+            context,
+            rootNavigator: true,
+          ).pop(input.text.trim()),
         ),
       ],
     );
@@ -432,13 +458,18 @@ class _ManagerPageState extends State<ManagerPage> {
                 for (final item in controller.trash)
                   UiListTile(
                     title: p.basename(item.originalPath),
-                    subtitle: item.deletedAt.toLocal().toString(),
+                    subtitle: _deletedAtLabel(item),
                     icon: LucideIcons.trash2,
                     onTap: () => _trashActions(item, l10n),
                   ),
               ],
             ),
     );
+  }
+
+  String _deletedAtLabel(DeletedFile item) {
+    final locale = Localizations.localeOf(context).toString();
+    return DateFormat.yMd(locale).add_Hm().format(item.deletedAt.toLocal());
   }
 
   Future<void> _trashActions(DeletedFile item, AppLocalizations l10n) async {
@@ -455,6 +486,7 @@ class _ManagerPageState extends State<ManagerPage> {
         ),
       ],
     );
+    if (!mounted) return;
     if (restore == true) {
       await controller.restore(item);
     } else if (restore == false) {

@@ -9,8 +9,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'file_operation_error.dart';
 import 'manager_scope.dart';
 
-/// Resolves and persists the Downloads/<appId> grant. Failed authorization
+/// Resolves and persists the `Downloads/<appId>` grant. Failed authorization
 /// never falls back to the private sandbox or the whole Downloads folder.
+///
+/// Platform coverage in this change:
+/// - HarmonyOS: `ensureManagerRoot` (DOWNLOAD picker) through the bridge.
+/// - macOS / Linux / Windows: one directory pick validated by [ManagerScope];
+///   `dart:io` can use the returned path directly.
+/// - Android / iOS: not available yet. A picker there returns a document
+///   tree or file-provider location, and the string a picker plugin derives
+///   from it is not a path `dart:io` may write to. Reporting
+///   [FileErrorCode.unsupportedPlatform] is safer than a misleading
+///   permission error after a half-finished operation.
 class ManagerStorage {
   ManagerStorage({
     MethodChannel? channel,
@@ -21,6 +31,7 @@ class ManagerStorage {
        _platform = platform ?? Platform.operatingSystem;
 
   static const _prefsKey = 'krkr2_manager_grant';
+  static const _pathBackedPlatforms = {'ohos', 'macos', 'linux', 'windows'};
 
   final MethodChannel _channel;
   final Future<String?> Function()? _pickDirectory;
@@ -28,7 +39,13 @@ class ManagerStorage {
 
   String get appId => ManagerScope.expectedAppId(_platform);
 
+  /// True when file management can run on this platform at all.
+  bool get isSupported => _pathBackedPlatforms.contains(_platform);
+
   Future<ManagerGrant?> currentGrant() async {
+    if (!isSupported) {
+      throw const FileOperationException(FileErrorCode.unsupportedPlatform);
+    }
     if (_platform == 'ohos') {
       try {
         return await _ensureOhosRoot(promptIfMissing: false);
@@ -64,6 +81,9 @@ class ManagerStorage {
   }
 
   Future<ManagerGrant> authorize() async {
+    if (!isSupported) {
+      throw const FileOperationException(FileErrorCode.unsupportedPlatform);
+    }
     if (_platform == 'ohos') {
       final grant = await _ensureOhosRoot(promptIfMissing: true);
       if (grant == null) {

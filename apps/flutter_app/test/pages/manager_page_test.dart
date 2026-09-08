@@ -9,7 +9,6 @@ import 'package:flutter_app/l10n/app_localizations.dart';
 import 'package:flutter_app/pages/manager_page.dart';
 import 'package:flutter_app/services/file_manager_controller.dart';
 import 'package:flutter_app/services/game_manager.dart';
-import 'package:flutter_app/services/local_file_service.dart';
 import 'package:flutter_app/services/manager_scope.dart';
 import 'package:flutter_app/services/manager_storage.dart';
 import 'package:flutter_app/ui/ui.dart';
@@ -98,5 +97,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Authorize Folder'), findsOneWidget);
     empty.dispose();
+  });
+
+  testWidgets('explains an unsupported platform instead of offering a picker', (
+    tester,
+  ) async {
+    final unsupported = FileManagerController(
+      gameManager: GameManager(),
+      storage: ManagerStorage(platform: 'android'),
+    );
+    await tester.pumpWidget(
+      UiThemeScope(
+        controller: UiThemeController(),
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: UiTheme.light(),
+          home: Scaffold(body: ManagerPage(controller: unsupported)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Authorize Folder'), findsNothing);
+    // Shown inline exactly once: the load error must not also toast it.
+    expect(
+      find.text('Folder access is not available on this platform yet.'),
+      findsOneWidget,
+    );
+    unsupported.dispose();
   });
 }
