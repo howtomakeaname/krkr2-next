@@ -177,6 +177,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get managerErrorFailed => '操作未完成，请检查相关项目后重试。';
 
   @override
+  String managerItemsSelected(int count) {
+    return '已选择 $count 项';
+  }
+
+  @override
+  String get managerEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get managerEncodingGb18030 => 'GB18030';
+
+  @override
+  String get managerEncodingCp932 => 'Shift_JIS';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override

@@ -436,6 +436,30 @@ abstract class AppLocalizations {
   /// **'The operation could not be completed. Check the affected items before trying again.'**
   String get managerErrorFailed;
 
+  /// No description provided for @managerItemsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String managerItemsSelected(int count);
+
+  /// No description provided for @managerEncodingUtf8.
+  ///
+  /// In en, this message translates to:
+  /// **'UTF-8'**
+  String get managerEncodingUtf8;
+
+  /// No description provided for @managerEncodingGb18030.
+  ///
+  /// In en, this message translates to:
+  /// **'GB18030'**
+  String get managerEncodingGb18030;
+
+  /// No description provided for @managerEncodingCp932.
+  ///
+  /// In en, this message translates to:
+  /// **'Shift_JIS'**
+  String get managerEncodingCp932;
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:

@@ -205,6 +205,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'The operation could not be completed. Check the affected items before trying again.';
 
   @override
+  String managerItemsSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get managerEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get managerEncodingGb18030 => 'GB18030';
+
+  @override
+  String get managerEncodingCp932 => 'Shift_JIS';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override

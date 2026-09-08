@@ -185,6 +185,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get managerErrorFailed => '操作を完了できませんでした。対象の項目を確認してから再試行してください。';
 
   @override
+  String managerItemsSelected(int count) {
+    return '$count 件を選択中';
+  }
+
+  @override
+  String get managerEncodingUtf8 => 'UTF-8';
+
+  @override
+  String get managerEncodingGb18030 => 'GB18030';
+
+  @override
+  String get managerEncodingCp932 => 'Shift_JIS';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override

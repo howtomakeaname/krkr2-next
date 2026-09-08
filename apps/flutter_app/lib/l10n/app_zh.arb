@@ -56,6 +56,15 @@
   "managerErrorGameRunning": "请先退出游戏，再修改游戏文件。",
   "managerErrorUnsupportedPlatform": "当前平台暂未提供此文件夹的访问能力。",
   "managerErrorFailed": "操作未完成，请检查相关项目后重试。",
+  "managerItemsSelected": "已选择 {count} 项",
+  "@managerItemsSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "managerEncodingUtf8": "UTF-8",
+  "managerEncodingGb18030": "GB18030",
+  "managerEncodingCp932": "Shift_JIS",
 
 "appTitle": "KrKr2 Next",
   "settings": "设置",

@@ -56,6 +56,15 @@
   "managerErrorGameRunning": "Exit the game before changing its files.",
   "managerErrorUnsupportedPlatform": "Folder access is not available on this platform yet.",
   "managerErrorFailed": "The operation could not be completed. Check the affected items before trying again.",
+  "managerItemsSelected": "{count} selected",
+  "@managerItemsSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "managerEncodingUtf8": "UTF-8",
+  "managerEncodingGb18030": "GB18030",
+  "managerEncodingCp932": "Shift_JIS",
 
 "appTitle": "KrKr2 Next",
   "settings": "Settings",

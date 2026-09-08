@@ -56,6 +56,15 @@
   "managerErrorGameRunning": "ゲームを終了してからファイルを変更してください。",
   "managerErrorUnsupportedPlatform": "このプラットフォームでは、このフォルダへのアクセスはまだ利用できません。",
   "managerErrorFailed": "操作を完了できませんでした。対象の項目を確認してから再試行してください。",
+  "managerItemsSelected": "{count} 件を選択中",
+  "@managerItemsSelected": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "managerEncodingUtf8": "UTF-8",
+  "managerEncodingGb18030": "GB18030",
+  "managerEncodingCp932": "Shift_JIS",
 
 "appTitle": "KrKr2 Next",
   "settings": "設定",
