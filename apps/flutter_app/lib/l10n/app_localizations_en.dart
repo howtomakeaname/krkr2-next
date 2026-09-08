@@ -9,6 +9,202 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get managerAuthorize => 'Authorize Folder';
+
+  @override
+  String get managerAuthorizationHint =>
+      'Select this app’s folder inside Downloads. Other folders cannot be managed.';
+
+  @override
+  String get managerEmpty => 'This folder is empty';
+
+  @override
+  String get managerNewFolder => 'New Folder';
+
+  @override
+  String get managerSelect => 'Select';
+
+  @override
+  String get managerSelectAll => 'Select All';
+
+  @override
+  String get managerDone => 'Done';
+
+  @override
+  String get managerCancel => 'Cancel';
+
+  @override
+  String get managerCopy => 'Copy';
+
+  @override
+  String get managerMove => 'Move';
+
+  @override
+  String get managerRename => 'Rename';
+
+  @override
+  String get managerTrash => 'Move to Recently Deleted';
+
+  @override
+  String get managerRecentlyDeleted => 'Recently Deleted';
+
+  @override
+  String get managerTrashHint =>
+      'These items still use storage. Nothing is deleted automatically.';
+
+  @override
+  String get managerTrashConfirm => 'Move selected items to Recently Deleted?';
+
+  @override
+  String get managerTrashExplanation =>
+      'You can restore them later. Game history and private saves will be kept.';
+
+  @override
+  String get managerRestore => 'Restore';
+
+  @override
+  String get managerDeletePermanently => 'Delete Permanently';
+
+  @override
+  String get managerPermanentConfirm => 'Permanently delete this item?';
+
+  @override
+  String get managerPermanentExplanation =>
+      'This cannot be undone. Private game saves are not included.';
+
+  @override
+  String get managerChooseDestination => 'Choose Destination';
+
+  @override
+  String get managerUseFolder => 'Use This Folder';
+
+  @override
+  String get managerName => 'Name';
+
+  @override
+  String get managerExtract => 'Extract';
+
+  @override
+  String get managerExtractTitle => 'Extract Archive';
+
+  @override
+  String get managerPassword => 'Password (if required)';
+
+  @override
+  String get managerEncoding => 'Legacy Filename Encoding';
+
+  @override
+  String get managerExtractHint =>
+      'Extract to a new folder and keep the archive. Unicode names in the archive take priority.';
+
+  @override
+  String get managerWorking => 'Working…';
+
+  @override
+  String get managerCompleted => 'Completed';
+
+  @override
+  String get managerRetry => 'Try Again';
+
+  @override
+  String get managerErrorCancelled => 'Operation cancelled.';
+
+  @override
+  String get managerErrorBusy =>
+      'Wait for the current file operation to finish.';
+
+  @override
+  String get managerErrorInvalidName =>
+      'Use a valid name without path separators or reserved characters.';
+
+  @override
+  String get managerErrorOutsideRoot =>
+      'Only this app’s dedicated Downloads folder can be managed.';
+
+  @override
+  String get managerErrorProtectedDirectory =>
+      'This folder is reserved. Manage the items inside it instead.';
+
+  @override
+  String get managerErrorUnsupportedLink =>
+      'Links and special files cannot be processed.';
+
+  @override
+  String get managerErrorNotFound =>
+      'The file or destination folder no longer exists.';
+
+  @override
+  String get managerErrorConflict =>
+      'An item with that name already exists. Nothing was overwritten.';
+
+  @override
+  String get managerErrorRecursiveTarget =>
+      'An item cannot be placed inside itself.';
+
+  @override
+  String get managerErrorTrashCorrupt =>
+      'This Recently Deleted record could not be read. No files were removed.';
+
+  @override
+  String get managerErrorPermissionDenied =>
+      'Access is unavailable. Check folder authorization and permissions.';
+
+  @override
+  String get managerErrorNoSpace =>
+      'Not enough storage. Free up space and try again.';
+
+  @override
+  String get managerErrorReadOnly => 'This location is read-only.';
+
+  @override
+  String get managerErrorPasswordRequired =>
+      'This archive requires a password.';
+
+  @override
+  String get managerErrorWrongPassword =>
+      'The password is incorrect, or the encrypted header is damaged.';
+
+  @override
+  String get managerErrorMissingVolume =>
+      'A volume is missing. Keep all volumes together with their original numbering.';
+
+  @override
+  String get managerErrorUnsupportedFormat =>
+      'This archive format is not supported or could not be recognized.';
+
+  @override
+  String get managerErrorUnsupportedMethod =>
+      'This archive uses an unsupported compression method.';
+
+  @override
+  String get managerErrorCorruptArchive =>
+      'The archive is incomplete or damaged. Check all volumes and the password.';
+
+  @override
+  String get managerErrorInvalidEncoding =>
+      'The filename encoding could not be decoded. Choose another encoding and try again.';
+
+  @override
+  String get managerErrorUnsafeArchivePath =>
+      'The archive contains unsafe paths. Extraction was stopped.';
+
+  @override
+  String get managerErrorArchiveLimit =>
+      'The archive exceeds the file count or expanded size safety limit.';
+
+  @override
+  String get managerErrorGameRunning =>
+      'Exit the game before changing its files.';
+
+  @override
+  String get managerErrorUnsupportedPlatform =>
+      'Folder access is not available on this platform yet.';
+
+  @override
+  String get managerErrorFailed =>
+      'The operation could not be completed. Check the affected items before trying again.';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override

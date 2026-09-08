@@ -9,6 +9,174 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get managerAuthorize => '授权文件夹';
+
+  @override
+  String get managerAuthorizationHint => '请选择下载目录下的应用专属文件夹，其他目录不在管理范围内。';
+
+  @override
+  String get managerEmpty => '此文件夹为空';
+
+  @override
+  String get managerNewFolder => '新建文件夹';
+
+  @override
+  String get managerSelect => '选择';
+
+  @override
+  String get managerSelectAll => '全选';
+
+  @override
+  String get managerDone => '完成';
+
+  @override
+  String get managerCancel => '取消';
+
+  @override
+  String get managerCopy => '复制';
+
+  @override
+  String get managerMove => '移动';
+
+  @override
+  String get managerRename => '重命名';
+
+  @override
+  String get managerTrash => '移到最近删除';
+
+  @override
+  String get managerRecentlyDeleted => '最近删除';
+
+  @override
+  String get managerTrashHint => '这些项目仍占用存储空间，不会自动清空。';
+
+  @override
+  String get managerTrashConfirm => '将所选项目移到最近删除？';
+
+  @override
+  String get managerTrashExplanation => '之后可以恢复。游玩记录和应用私有存档会保留。';
+
+  @override
+  String get managerRestore => '恢复';
+
+  @override
+  String get managerDeletePermanently => '永久删除';
+
+  @override
+  String get managerPermanentConfirm => '永久删除此项目？';
+
+  @override
+  String get managerPermanentExplanation => '此操作无法撤销，不会删除应用私有存档。';
+
+  @override
+  String get managerChooseDestination => '选择目标文件夹';
+
+  @override
+  String get managerUseFolder => '选择此文件夹';
+
+  @override
+  String get managerName => '名称';
+
+  @override
+  String get managerExtract => '解压缩';
+
+  @override
+  String get managerExtractTitle => '解压压缩包';
+
+  @override
+  String get managerPassword => '密码（如有）';
+
+  @override
+  String get managerEncoding => '旧格式文件名编码';
+
+  @override
+  String get managerExtractHint => '解压到新文件夹并保留压缩包。优先使用包内的 Unicode 文件名信息。';
+
+  @override
+  String get managerWorking => '正在处理…';
+
+  @override
+  String get managerCompleted => '已完成';
+
+  @override
+  String get managerRetry => '重试';
+
+  @override
+  String get managerErrorCancelled => '操作已取消。';
+
+  @override
+  String get managerErrorBusy => '请等待当前文件操作完成。';
+
+  @override
+  String get managerErrorInvalidName => '名称无效，请去掉路径分隔符或保留字符。';
+
+  @override
+  String get managerErrorOutsideRoot => '只能管理下载目录下的应用专属文件夹。';
+
+  @override
+  String get managerErrorProtectedDirectory => '这是固定目录，请操作其中的文件。';
+
+  @override
+  String get managerErrorUnsupportedLink => '暂不支持操作链接或特殊文件。';
+
+  @override
+  String get managerErrorNotFound => '文件或目标文件夹已不存在。';
+
+  @override
+  String get managerErrorConflict => '已有同名项目，未覆盖任何文件。';
+
+  @override
+  String get managerErrorRecursiveTarget => '不能放到自身或自己的子目录中。';
+
+  @override
+  String get managerErrorTrashCorrupt => '无法读取这条最近删除记录，未删除文件。';
+
+  @override
+  String get managerErrorPermissionDenied => '无法访问，请检查文件夹授权和读写权限。';
+
+  @override
+  String get managerErrorNoSpace => '存储空间不足，请释放空间后重试。';
+
+  @override
+  String get managerErrorReadOnly => '此位置为只读，无法修改。';
+
+  @override
+  String get managerErrorPasswordRequired => '此压缩包需要密码。';
+
+  @override
+  String get managerErrorWrongPassword => '密码不正确，或加密文件头已损坏。';
+
+  @override
+  String get managerErrorMissingVolume => '缺少分卷，请将所有分卷放在一起并保留原有编号。';
+
+  @override
+  String get managerErrorUnsupportedFormat => '暂不支持此压缩格式，或无法识别压缩包。';
+
+  @override
+  String get managerErrorUnsupportedMethod => '此压缩包使用了暂不支持的压缩方法。';
+
+  @override
+  String get managerErrorCorruptArchive => '压缩包不完整或已损坏，请检查分卷及密码。';
+
+  @override
+  String get managerErrorInvalidEncoding => '无法解码文件名，请切换编码后重试。';
+
+  @override
+  String get managerErrorUnsafeArchivePath => '压缩包包含不安全的路径，已停止解压。';
+
+  @override
+  String get managerErrorArchiveLimit => '压缩包的文件数或解压后大小超过安全限制。';
+
+  @override
+  String get managerErrorGameRunning => '请先退出游戏，再修改游戏文件。';
+
+  @override
+  String get managerErrorUnsupportedPlatform => '当前平台暂未提供此文件夹的访问能力。';
+
+  @override
+  String get managerErrorFailed => '操作未完成，请检查相关项目后重试。';
+
+  @override
   String get appTitle => 'KrKr2 Next';
 
   @override
