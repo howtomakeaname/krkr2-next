@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import 'game_engine.dart';
 
 /// Represents a game entry in the launcher.
@@ -14,8 +16,11 @@ class GameInfo {
     this.coverPath,
     this.playDurationSeconds,
     GameEngine? engine,
+    String? saveDirectoryName,
+    this.available = true,
   }) : keywords = keywords ?? <String>[],
-       engine = engine ?? GameEngine.detect(path);
+       engine = engine ?? GameEngine.detect(path),
+       saveDirectoryName = saveDirectoryName ?? saveNameFromPath(path);
 
   /// The root directory (or archive / pack file) of the game.
   String path;
@@ -46,6 +51,27 @@ class GameInfo {
   /// the filesystem to draw badges.
   GameEngine engine;
 
+  /// Stable KiriKiri save folder name. The engine otherwise derives this
+  /// from the current path leaf, so a rename would hide existing saves.
+  String saveDirectoryName;
+
+  /// False when the folder is in Recently Deleted or otherwise missing.
+  /// History stays; the library hides unavailable entries from launch.
+  bool available;
+
+  /// Matches the OHOS engine leaf used under `$KRKR_FILES_DIR/savedata/`.
+  static String saveNameFromPath(String path) {
+    var leaf = p.basename(path);
+    while (leaf.endsWith('/') || leaf.endsWith('\\')) {
+      leaf = leaf.substring(0, leaf.length - 1);
+    }
+    final lower = leaf.toLowerCase();
+    if (lower.endsWith('.xp3') || lower.endsWith('.pfs')) {
+      leaf = p.basename(p.dirname(path));
+    }
+    return leaf.isEmpty ? 'game' : leaf;
+  }
+
   /// Display name: user-set title or the last directory component.
   String get displayTitle {
     if (title != null && title!.isNotEmpty) return title!;
@@ -74,6 +100,8 @@ class GameInfo {
     'coverPath': coverPath,
     'playDurationSeconds': playDurationSeconds,
     'engine': engine.id,
+    'saveDirectoryName': saveDirectoryName,
+    'available': available,
   };
 
   factory GameInfo.fromJson(Map<String, dynamic> json) => GameInfo(
@@ -97,6 +125,8 @@ class GameInfo {
     // Entries written before the engine field existed are re-detected
     // from their path (cheap: extension check, or one directory listing).
     engine: GameEngine.fromId(json['engine'] as String?),
+    saveDirectoryName: json['saveDirectoryName'] as String?,
+    available: json['available'] is bool ? json['available'] as bool : true,
   );
 
   static List<GameInfo> listFromJsonString(String jsonString) {

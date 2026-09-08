@@ -169,8 +169,9 @@ class LocalFileService {
     await _relocate(from, to);
   });
 
-  Future<void> _relocate(String from, String to) async {
+  Future<void> _relocate(String from, String to, {bool notify = true}) async {
     await _renameEntity(from, to);
+    if (!notify) return;
     try {
       await onPathChanged?.call(from, to);
     } catch (_) {
@@ -283,7 +284,10 @@ class LocalFileService {
       flush: true,
     );
     try {
-      await _relocate(from, p.join(work.path, 'item'));
+      // Trash is not a library relocate. GameManager keeps the original
+      // path and marks the entry unavailable so history is not rewritten
+      // into `.krkr-manager/trash`.
+      await _relocate(from, p.join(work.path, 'item'), notify: false);
     } catch (_) {
       await _deletePrivateWorkspace(work.path);
       rethrow;

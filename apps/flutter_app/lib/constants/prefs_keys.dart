@@ -45,6 +45,7 @@ class PrefsKeys {
   static const String optionArchiveCacheCount = 'archive_cache_count';
   static const String optionAutoPathCacheCount = 'autopath_cache_count';
   static const String optionEngine = 'engine';
+  static const String optionSaveDir = 'krkr_savedir';
 
   // ── Engine option values ────────────────────────────────────────
   static const String angleBackendGles = 'gles';

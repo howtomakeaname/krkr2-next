@@ -2178,6 +2178,10 @@ engine_result_t engine_set_option(engine_handle_t handle,
     return ENGINE_RESULT_OK;
   }
 
+  if (key == "krkr_savedir" && option->value_utf8[0] != '\0') {
+    setenv("KRKR_SAVE_DIR", option->value_utf8, 1);
+  }
+
   TVPSetCommandLine(ttstr(option->key_utf8).c_str(), ttstr(option->value_utf8));
 
   if (key == ENGINE_OPTION_ARCHIVE_CACHE_COUNT) {

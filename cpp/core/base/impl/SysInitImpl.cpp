@@ -601,6 +601,17 @@ static void TVPInitProgramArgumentsAndDataPath(bool stop_after_datapath_got) {
                         ? parent
                         : parent.substr(s2 + 1);
                 }
+                // Flutter pins this when the game folder is renamed so
+                // existing $KRKR_FILES_DIR/savedata/<leaf>/ stays reachable.
+                if(const char *savedir = std::getenv("KRKR_SAVE_DIR");
+                   savedir && *savedir) {
+                    const std::string pinned(savedir);
+                    if(pinned.find('/') == std::string::npos &&
+                       pinned.find('\\') == std::string::npos &&
+                       pinned != "." && pinned != "..") {
+                        leaf = pinned;
+                    }
+                }
                 if(!leaf.empty()) {
                     p += leaf;
                     if(p.back() != '/')
