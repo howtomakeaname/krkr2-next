@@ -182,6 +182,38 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get managerDetails => '详情';
+
+  @override
+  String get managerDetailKind => '类型';
+
+  @override
+  String get managerDetailFolder => '文件夹';
+
+  @override
+  String get managerDetailFile => '文件';
+
+  @override
+  String get managerDetailArchive => '压缩包';
+
+  @override
+  String get managerDetailSize => '大小';
+
+  @override
+  String managerDetailItems(int count) {
+    return '$count 项';
+  }
+
+  @override
+  String get managerDetailModified => '修改时间';
+
+  @override
+  String get managerDetailLocation => '位置';
+
+  @override
+  String get managerCalculating => '正在计算…';
+
+  @override
   String get managerEncodingUtf8 => 'UTF-8';
 
   @override

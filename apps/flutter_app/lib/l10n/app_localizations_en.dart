@@ -210,6 +210,38 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get managerDetails => 'Details';
+
+  @override
+  String get managerDetailKind => 'Kind';
+
+  @override
+  String get managerDetailFolder => 'Folder';
+
+  @override
+  String get managerDetailFile => 'File';
+
+  @override
+  String get managerDetailArchive => 'Archive';
+
+  @override
+  String get managerDetailSize => 'Size';
+
+  @override
+  String managerDetailItems(int count) {
+    return '$count items';
+  }
+
+  @override
+  String get managerDetailModified => 'Modified';
+
+  @override
+  String get managerDetailLocation => 'Location';
+
+  @override
+  String get managerCalculating => 'Calculating…';
+
+  @override
   String get managerEncodingUtf8 => 'UTF-8';
 
   @override

@@ -442,6 +442,66 @@ abstract class AppLocalizations {
   /// **'{count} selected'**
   String managerItemsSelected(int count);
 
+  /// No description provided for @managerDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get managerDetails;
+
+  /// No description provided for @managerDetailKind.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind'**
+  String get managerDetailKind;
+
+  /// No description provided for @managerDetailFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder'**
+  String get managerDetailFolder;
+
+  /// No description provided for @managerDetailFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get managerDetailFile;
+
+  /// No description provided for @managerDetailArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get managerDetailArchive;
+
+  /// No description provided for @managerDetailSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get managerDetailSize;
+
+  /// No description provided for @managerDetailItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} items'**
+  String managerDetailItems(int count);
+
+  /// No description provided for @managerDetailModified.
+  ///
+  /// In en, this message translates to:
+  /// **'Modified'**
+  String get managerDetailModified;
+
+  /// No description provided for @managerDetailLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get managerDetailLocation;
+
+  /// No description provided for @managerCalculating.
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating…'**
+  String get managerCalculating;
+
   /// No description provided for @managerEncodingUtf8.
   ///
   /// In en, this message translates to:

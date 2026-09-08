@@ -190,6 +190,38 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get managerDetails => '詳細';
+
+  @override
+  String get managerDetailKind => '種類';
+
+  @override
+  String get managerDetailFolder => 'フォルダ';
+
+  @override
+  String get managerDetailFile => 'ファイル';
+
+  @override
+  String get managerDetailArchive => 'アーカイブ';
+
+  @override
+  String get managerDetailSize => 'サイズ';
+
+  @override
+  String managerDetailItems(int count) {
+    return '$count 項目';
+  }
+
+  @override
+  String get managerDetailModified => '変更日時';
+
+  @override
+  String get managerDetailLocation => '場所';
+
+  @override
+  String get managerCalculating => '計算中…';
+
+  @override
   String get managerEncodingUtf8 => 'UTF-8';
 
   @override

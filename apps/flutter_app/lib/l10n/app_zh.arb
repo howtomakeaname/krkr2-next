@@ -62,6 +62,21 @@
       "count": { "type": "int" }
     }
   },
+  "managerDetails": "详情",
+  "managerDetailKind": "类型",
+  "managerDetailFolder": "文件夹",
+  "managerDetailFile": "文件",
+  "managerDetailArchive": "压缩包",
+  "managerDetailSize": "大小",
+  "managerDetailItems": "{count} 项",
+  "@managerDetailItems": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "managerDetailModified": "修改时间",
+  "managerDetailLocation": "位置",
+  "managerCalculating": "正在计算…",
   "managerEncodingUtf8": "UTF-8",
   "managerEncodingGb18030": "GB18030",
   "managerEncodingCp932": "Shift_JIS",

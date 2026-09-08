@@ -119,6 +119,44 @@ class FileManagerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pull-to-refresh. Unlike [refresh], which callers use after their own
+  /// operation, this is user-initiated: a failure is reported rather than
+  /// left for the next operation to surface.
+  Future<void> reload() async {
+    if (files == null || task != null) return;
+    lastError = null;
+    try {
+      await refresh();
+    } on FileOperationException catch (error) {
+      lastError = error;
+      notifyListeners();
+    } catch (error) {
+      lastError = FileOperationException.from(error);
+      notifyListeners();
+    }
+  }
+
+  /// Folder totals for the details sheet. Cancel [task] to stop walking a
+  /// large game folder once the sheet is dismissed.
+  Future<DirectorySummary> summarize(String path, FileTask task) {
+    final service = files;
+    if (service == null) {
+      throw const FileOperationException(FileErrorCode.unsupportedPlatform);
+    }
+    return service.summarize(path, task);
+  }
+
+  /// Where an entry sits, anchored at the same label the breadcrumb uses for
+  /// the root (`Download/<appId>`) so the sheet never leaks the sandbox path.
+  String locationOf(String path) {
+    final service = files;
+    if (service == null) return path;
+    final root = grant?.displayRoot ?? p.basename(service.rootPath);
+    final relative = p.relative(p.dirname(path), from: service.rootPath);
+    if (relative == '.') return root;
+    return p.posix.joinAll([root, ...p.split(relative)]);
+  }
+
   Future<void> open(String path) async {
     if (selecting) {
       toggle(path);
@@ -138,13 +176,31 @@ class FileManagerController extends ChangeNotifier {
     await refresh();
   }
 
+  /// System back while this tab is visible: leave selection first, then walk
+  /// up one folder. Only at the authorized root does back fall through to
+  /// the default route behaviour.
+  bool get canGoBack =>
+      selecting || (files != null && !p.equals(currentPath, files!.rootPath));
+
+  Future<void> goBack() async {
+    if (selecting) {
+      toggleSelecting(false);
+      return;
+    }
+    await openParent();
+  }
+
   void toggleSelecting(bool value) {
     selecting = value;
     if (!value) selected.clear();
     notifyListeners();
   }
 
+  /// False for the root, the `games` container and private work.
+  bool canMutate(String path) => files != null && !files!.isProtected(path);
+
   void toggle(String path) {
+    if (!canMutate(path)) return;
     if (!selected.add(path)) selected.remove(path);
     notifyListeners();
   }
@@ -152,7 +208,7 @@ class FileManagerController extends ChangeNotifier {
   void selectAll() {
     selected
       ..clear()
-      ..addAll(entries.map((entry) => entry.path));
+      ..addAll(entries.map((entry) => entry.path).where(canMutate));
     notifyListeners();
   }
 

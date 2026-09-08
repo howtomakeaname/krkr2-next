@@ -71,6 +71,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
   bool _restartDeferred = false;
   int _selectedTab = 0;
+  static const _manageTabIndex = 2;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _searchActive = false;
@@ -1919,7 +1920,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
       _buildPlaceholderTab(title: l10n.tabExplore),
-      ManagerPage(controller: _fileManager),
+      ManagerPage(
+        controller: _fileManager,
+        active: _selectedTab == _manageTabIndex,
+      ),
       HomeProfileTab(
         games: allGames,
         playSessions: _gameManager.playSessions,

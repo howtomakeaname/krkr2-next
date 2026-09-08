@@ -40,6 +40,14 @@ class DeletedFile {
   final DateTime deletedAt;
 }
 
+/// Recursive size and item count for the details sheet. Links and private
+/// work are skipped, matching what the listing shows.
+class DirectorySummary {
+  const DirectorySummary({required this.bytes, required this.items});
+  final int bytes;
+  final int items;
+}
+
 /// A single-writer file service. No operation may leave [rootPath], follow a
 /// symbolic link or overwrite an existing item. Private work is excluded from
 /// directory listings and game discovery, including while a copy is incomplete.
@@ -67,6 +75,15 @@ class LocalFileService {
 
   static bool isPrivatePath(String path) =>
       p.split(path).any((part) => part.toLowerCase() == privateName);
+
+  /// Root, the fixed `games` container and private work cannot be renamed,
+  /// moved, copied or trashed. UI uses this to hide those actions up front.
+  bool isProtected(String path) {
+    final normalized = p.normalize(p.absolute(path));
+    return normalized == rootPath ||
+        normalized.toLowerCase() == gamesPath.toLowerCase() ||
+        isPrivatePath(p.relative(normalized, from: rootPath));
+  }
 
   static void validateName(String name) {
     if (name.trim().isEmpty ||
@@ -126,6 +143,31 @@ class LocalFileService {
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return result;
+  }
+
+  /// Walks a folder for the details sheet. Read-only, so it does not take the
+  /// writer lock; [task] lets the sheet abandon a large game folder early.
+  Future<DirectorySummary> summarize(String directory, FileTask task) async {
+    final path = await validatePath(directory);
+    var bytes = 0;
+    var items = 0;
+    Future<void> walk(String current) async {
+      await for (final entry in Directory(current).list(followLinks: false)) {
+        task.check();
+        final name = p.basename(entry.path).toLowerCase();
+        if (name == privateName) continue;
+        final type = await FileSystemEntity.type(entry.path, followLinks: false);
+        if (type == FileSystemEntityType.link) continue;
+        items++;
+        if (type == FileSystemEntityType.directory) {
+          await walk(entry.path);
+        } else {
+          bytes += (await entry.stat()).size;
+        }
+      }
+    }
+    await walk(path);
+    return DirectorySummary(bytes: bytes, items: items);
   }
 
   Future<void> _requireVacant(

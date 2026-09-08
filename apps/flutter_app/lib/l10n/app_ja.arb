@@ -62,6 +62,21 @@
       "count": { "type": "int" }
     }
   },
+  "managerDetails": "詳細",
+  "managerDetailKind": "種類",
+  "managerDetailFolder": "フォルダ",
+  "managerDetailFile": "ファイル",
+  "managerDetailArchive": "アーカイブ",
+  "managerDetailSize": "サイズ",
+  "managerDetailItems": "{count} 項目",
+  "@managerDetailItems": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "managerDetailModified": "変更日時",
+  "managerDetailLocation": "場所",
+  "managerCalculating": "計算中…",
   "managerEncodingUtf8": "UTF-8",
   "managerEncodingGb18030": "GB18030",
   "managerEncodingCp932": "Shift_JIS",

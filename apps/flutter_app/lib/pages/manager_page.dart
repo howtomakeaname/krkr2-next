@@ -11,9 +11,17 @@ import '../services/local_file_service.dart';
 import '../ui/ui.dart';
 
 class ManagerPage extends StatefulWidget {
-  const ManagerPage({super.key, required this.controller});
+  const ManagerPage({
+    super.key,
+    required this.controller,
+    this.active = true,
+  });
 
   final FileManagerController controller;
+
+  /// Whether this tab is the visible one. The page lives in an IndexedStack,
+  /// so it must only claim the system back gesture while it is on screen.
+  final bool active;
 
   @override
   State<ManagerPage> createState() => _ManagerPageState();
@@ -74,9 +82,27 @@ class _ManagerPageState extends State<ManagerPage> {
     final colors = context.uiColors;
     final top = MediaQuery.paddingOf(context).top;
     final bottom = MediaQuery.paddingOf(context).bottom;
-    return ColoredBox(
-      color: colors.background,
-      child: Column(
+    final handlesBack = widget.active && controller.canGoBack;
+    return PopScope(
+      canPop: !handlesBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) controller.goBack();
+      },
+      child: ColoredBox(
+        color: colors.background,
+        child: _buildPage(context, l10n, colors, top, bottom),
+      ),
+    );
+  }
+
+  Widget _buildPage(
+    BuildContext context,
+    AppLocalizations l10n,
+    UiColors colors,
+    double top,
+    double bottom,
+  ) {
+    return Column(
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(20, top + 16, 20, 8),
@@ -158,7 +184,6 @@ class _ManagerPageState extends State<ManagerPage> {
               ),
             ),
         ],
-      ),
     );
   }
 
@@ -233,14 +258,40 @@ class _ManagerPageState extends State<ManagerPage> {
         onAction: controller.authorize,
       );
     }
-    if (controller.entries.isEmpty) {
-      return UiEmpty(
-        icon: LucideIcons.folder,
-        title: l10n.managerEmpty,
-        actionLabel: l10n.managerNewFolder,
-        onAction: () => _createFolder(l10n),
-      );
-    }
+    return UiPullRefresh(
+      pullingText: l10n.pullToRefresh,
+      readyText: l10n.releaseToRefresh,
+      refreshingText: l10n.refreshing,
+      doneText: l10n.refreshDone,
+      onRefresh: controller.reload,
+      child: controller.entries.isEmpty
+          ? _buildEmptyFolder(l10n)
+          : _buildListing(l10n),
+    );
+  }
+
+  /// The empty state has nothing to scroll, so it is given the viewport
+  /// height inside a list; otherwise there is no gesture to pull on.
+  Widget _buildEmptyFolder(AppLocalizations l10n) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          SizedBox(
+            height: constraints.maxHeight,
+            child: UiEmpty(
+              icon: LucideIcons.folder,
+              title: l10n.managerEmpty,
+              actionLabel: l10n.managerNewFolder,
+              onAction: () => _createFolder(l10n),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListing(AppLocalizations l10n) {
     return ListView.builder(
       padding: EdgeInsets.only(
         left: 4,
@@ -251,12 +302,13 @@ class _ManagerPageState extends State<ManagerPage> {
       itemBuilder: (context, index) {
         final entry = controller.entries[index];
         final selected = controller.selected.contains(entry.path);
+        final mutable = controller.canMutate(entry.path);
         return Builder(
           builder: (tileContext) => UiListTile(
             title: entry.name,
-            subtitle: entry.isDirectory ? null : _sizeLabel(entry),
+            subtitle: entry.isDirectory ? null : _sizeLabel(entry.stat.size),
             icon: entry.isDirectory ? CupertinoIcons.folder : CupertinoIcons.doc,
-            trailing: controller.selecting
+            trailing: controller.selecting && mutable
                 ? Icon(
                     selected
                         ? CupertinoIcons.checkmark_circle_fill
@@ -267,10 +319,14 @@ class _ManagerPageState extends State<ManagerPage> {
                   )
                 : null,
             onTap: () {
-              if (controller.selecting) {
+              if (controller.selecting && mutable) {
                 controller.toggle(entry.path);
               } else if (entry.isDirectory) {
                 controller.open(entry.path);
+              } else {
+                // Files have nothing to open into; a tap answers with what
+                // the entry is instead of doing nothing.
+                _showDetails(entry, l10n);
               }
             },
             onLongPress: () => _showItemMenu(tileContext, entry, l10n),
@@ -280,11 +336,26 @@ class _ManagerPageState extends State<ManagerPage> {
     );
   }
 
-  String _sizeLabel(LocalFileEntry entry) {
-    final bytes = entry.stat.size;
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  String _sizeLabel(int bytes) {
+    const kb = 1024;
+    const mb = kb * 1024;
+    const gb = mb * 1024;
+    if (bytes < kb) return '$bytes B';
+    if (bytes < mb) return '${(bytes / kb).toStringAsFixed(1)} KB';
+    if (bytes < gb) return '${(bytes / mb).toStringAsFixed(1)} MB';
+    return '${(bytes / gb).toStringAsFixed(2)} GB';
+  }
+
+  Future<void> _showDetails(LocalFileEntry entry, AppLocalizations l10n) {
+    return UiBottomSheet.show<void>(
+      context,
+      title: entry.name,
+      child: _DetailsSheet(
+        entry: entry,
+        controller: controller,
+        sizeLabel: _sizeLabel,
+      ),
+    );
   }
 
   Future<void> _showMenu(BuildContext buttonContext, AppLocalizations l10n) {
@@ -319,52 +390,62 @@ class _ManagerPageState extends State<ManagerPage> {
     LocalFileEntry entry,
     AppLocalizations l10n,
   ) {
+    // The games container has no rename/move/trash; offering them only to
+    // answer with protected_directory would be noise. Details always apply.
+    final mutable = controller.canMutate(entry.path);
     return UiPopupMenu.show<void>(
       context,
       anchor: UiPopupMenu.rectOf(tileContext),
       items: [
         UiMenuItem(
-          label: l10n.managerRename,
-          icon: LucideIcons.pencil,
-          onSelected: () => _rename(entry, l10n),
+          label: l10n.managerDetails,
+          icon: LucideIcons.info,
+          onSelected: () => _showDetails(entry, l10n),
         ),
-        UiMenuItem(
-          label: l10n.managerCopy,
-          icon: LucideIcons.copy,
-          onSelected: () {
-            controller
-              ..toggleSelecting(true)
-              ..selected.add(entry.path);
-            _pickDestination(copy: true);
-          },
-        ),
-        UiMenuItem(
-          label: l10n.managerMove,
-          icon: LucideIcons.folderInput,
-          onSelected: () {
-            controller
-              ..toggleSelecting(true)
-              ..selected.add(entry.path);
-            _pickDestination(copy: false);
-          },
-        ),
-        if (controller.looksLikeArchive(entry.name))
+        if (mutable) ...[
           UiMenuItem(
-            label: l10n.managerExtract,
-            icon: LucideIcons.packageOpen,
-            onSelected: () => _extract(entry, l10n),
+            label: l10n.managerRename,
+            icon: LucideIcons.pencil,
+            onSelected: () => _rename(entry, l10n),
           ),
-        UiMenuItem(
-          label: l10n.managerTrash,
-          icon: LucideIcons.trash2,
-          isDestructive: true,
-          onSelected: () {
-            controller
-              ..toggleSelecting(true)
-              ..selected.add(entry.path);
-            _confirmTrash(l10n);
-          },
-        ),
+          UiMenuItem(
+            label: l10n.managerCopy,
+            icon: LucideIcons.copy,
+            onSelected: () {
+              controller
+                ..toggleSelecting(true)
+                ..selected.add(entry.path);
+              _pickDestination(copy: true);
+            },
+          ),
+          UiMenuItem(
+            label: l10n.managerMove,
+            icon: LucideIcons.folderInput,
+            onSelected: () {
+              controller
+                ..toggleSelecting(true)
+                ..selected.add(entry.path);
+              _pickDestination(copy: false);
+            },
+          ),
+          if (controller.looksLikeArchive(entry.name))
+            UiMenuItem(
+              label: l10n.managerExtract,
+              icon: LucideIcons.packageOpen,
+              onSelected: () => _extract(entry, l10n),
+            ),
+          UiMenuItem(
+            label: l10n.managerTrash,
+            icon: LucideIcons.trash2,
+            isDestructive: true,
+            onSelected: () {
+              controller
+                ..toggleSelecting(true)
+                ..selected.add(entry.path);
+              _confirmTrash(l10n);
+            },
+          ),
+        ],
       ],
     );
   }
@@ -661,6 +742,104 @@ class _DestinationBrowserState extends State<_DestinationBrowser> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Kind, size, modified time and location of one entry. Folder totals are
+/// walked after the sheet opens so a multi-gigabyte game does not delay it;
+/// the walk is cancelled if the sheet is dismissed first.
+class _DetailsSheet extends StatefulWidget {
+  const _DetailsSheet({
+    required this.entry,
+    required this.controller,
+    required this.sizeLabel,
+  });
+
+  final LocalFileEntry entry;
+  final FileManagerController controller;
+  final String Function(int bytes) sizeLabel;
+
+  @override
+  State<_DetailsSheet> createState() => _DetailsSheetState();
+}
+
+class _DetailsSheetState extends State<_DetailsSheet> {
+  final _task = FileTask();
+  DirectorySummary? _summary;
+  FileOperationException? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.entry.isDirectory) _summarize();
+  }
+
+  @override
+  void dispose() {
+    _task.cancelled = true;
+    super.dispose();
+  }
+
+  Future<void> _summarize() async {
+    try {
+      final summary = await widget.controller.summarize(
+        widget.entry.path,
+        _task,
+      );
+      if (mounted) setState(() => _summary = summary);
+    } on FileOperationException catch (error) {
+      if (error.code == FileErrorCode.cancelled) return;
+      if (mounted) setState(() => _error = error);
+    } catch (error) {
+      if (mounted) setState(() => _error = FileOperationException.from(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final entry = widget.entry;
+    final locale = Localizations.localeOf(context).toString();
+    final modified = DateFormat.yMd(
+      locale,
+    ).add_Hm().format(entry.stat.modified.toLocal());
+
+    final String kind;
+    if (entry.isDirectory) {
+      kind = l10n.managerDetailFolder;
+    } else if (widget.controller.looksLikeArchive(entry.name)) {
+      kind = l10n.managerDetailArchive;
+    } else {
+      kind = l10n.managerDetailFile;
+    }
+
+    final String size;
+    if (!entry.isDirectory) {
+      size = widget.sizeLabel(entry.stat.size);
+    } else if (_summary case final summary?) {
+      size =
+          '${widget.sizeLabel(summary.bytes)} · '
+          '${l10n.managerDetailItems(summary.items)}';
+    } else if (_error case final error?) {
+      size = l10n.fileOperationError(error.code);
+    } else {
+      size = l10n.managerCalculating;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: UiListSection(
+        children: [
+          UiListTile(title: l10n.managerDetailKind, trailingText: kind),
+          UiListTile(title: l10n.managerDetailSize, trailingText: size),
+          UiListTile(title: l10n.managerDetailModified, trailingText: modified),
+          UiListTile(
+            title: l10n.managerDetailLocation,
+            subtitle: widget.controller.locationOf(entry.path),
+          ),
+        ],
+      ),
     );
   }
 }
