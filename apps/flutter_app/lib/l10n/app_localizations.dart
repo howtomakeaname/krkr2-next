@@ -205,7 +205,7 @@ abstract class AppLocalizations {
   /// No description provided for @tabHome.
   ///
   /// In en, this message translates to:
-  /// **'Home'**
+  /// **'Library'**
   String get tabHome;
 
   /// No description provided for @tabExplore.
@@ -322,6 +322,12 @@ abstract class AppLocalizations {
   /// **'Title'**
   String get profileHonorTitle;
 
+  /// No description provided for @profileHonorNextUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Next title'**
+  String get profileHonorNextUnlock;
+
   /// No description provided for @profileHonorNewcomer.
   ///
   /// In en, this message translates to:
@@ -387,6 +393,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Top title reached'**
   String get profileHonorHighest;
+
+  /// No description provided for @profileHonorCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get profileHonorCurrent;
+
+  /// No description provided for @profileHonorObtained.
+  ///
+  /// In en, this message translates to:
+  /// **'Earned'**
+  String get profileHonorObtained;
+
+  /// No description provided for @profileHonorLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Not earned'**
+  String get profileHonorLocked;
 
   /// No description provided for @profileGameRecords.
   ///

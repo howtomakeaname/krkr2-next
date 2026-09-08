@@ -62,7 +62,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gotIt => '知道了';
 
   @override
-  String get tabHome => '首页';
+  String get tabHome => '库';
 
   @override
   String get tabExplore => '探索';
@@ -122,6 +122,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileHonorTitle => '称号';
 
   @override
+  String get profileHonorNextUnlock => '下个称号';
+
+  @override
   String get profileHonorNewcomer => '初来乍到';
 
   @override
@@ -161,6 +164,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileHonorHighest => '已经到最高档';
+
+  @override
+  String get profileHonorCurrent => '当前';
+
+  @override
+  String get profileHonorObtained => '已获得';
+
+  @override
+  String get profileHonorLocked => '未获得';
 
   @override
   String get profileGameRecords => '游戏记录';

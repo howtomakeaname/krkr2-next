@@ -65,7 +65,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gotIt => 'Got it';
 
   @override
-  String get tabHome => 'Home';
+  String get tabHome => 'Library';
 
   @override
   String get tabExplore => 'Explore';
@@ -125,6 +125,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileHonorTitle => 'Title';
 
   @override
+  String get profileHonorNextUnlock => 'Next title';
+
+  @override
   String get profileHonorNewcomer => 'New Arrival';
 
   @override
@@ -164,6 +167,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileHonorHighest => 'Top title reached';
+
+  @override
+  String get profileHonorCurrent => 'Current';
+
+  @override
+  String get profileHonorObtained => 'Earned';
+
+  @override
+  String get profileHonorLocked => 'Not earned';
 
   @override
   String get profileGameRecords => 'Games';

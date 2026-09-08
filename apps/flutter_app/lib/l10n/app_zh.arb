@@ -20,7 +20,7 @@
   "gamesDirectory": "游戏目录：Games/",
   "gotIt": "知道了",
 
-  "tabHome": "首页",
+  "tabHome": "库",
   "tabExplore": "探索",
   "tabManage": "管理",
   "tabProfile": "我的",
@@ -40,6 +40,7 @@
   "profileStatistics": "游玩统计",
   "profileViewStatistics": "查看详细统计",
   "profileHonorTitle": "称号",
+  "profileHonorNextUnlock": "下个称号",
   "profileHonorNewcomer": "初来乍到",
   "profileHonorStoryTraveler": "剧情旅人",
   "profileHonorImmersedReader": "沉浸读者",
@@ -66,6 +67,9 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "profileHonorHighest": "已经到最高档",
+  "profileHonorCurrent": "当前",
+  "profileHonorObtained": "已获得",
+  "profileHonorLocked": "未获得",
   "profileGameRecords": "游戏记录",
   "profileRecentGame": "最近游玩",
   "profileNoHistory": "暂无记录",

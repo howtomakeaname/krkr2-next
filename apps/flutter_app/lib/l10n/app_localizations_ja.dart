@@ -63,7 +63,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gotIt => '了解';
 
   @override
-  String get tabHome => 'ホーム';
+  String get tabHome => 'ライブラリ';
 
   @override
   String get tabExplore => '見つける';
@@ -123,6 +123,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profileHonorTitle => '称号';
 
   @override
+  String get profileHonorNextUnlock => '次の称号';
+
+  @override
   String get profileHonorNewcomer => 'はじめの一歩';
 
   @override
@@ -162,6 +165,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get profileHonorHighest => '最高ランクです';
+
+  @override
+  String get profileHonorCurrent => '現在';
+
+  @override
+  String get profileHonorObtained => '獲得済み';
+
+  @override
+  String get profileHonorLocked => '未獲得';
 
   @override
   String get profileGameRecords => 'ゲーム記録';

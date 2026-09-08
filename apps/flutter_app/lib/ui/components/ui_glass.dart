@@ -2,13 +2,13 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart' show CupertinoTheme, CupertinoThemeData;
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as glass;
 
 import '../theme/ui_glass_theme.dart';
 import '../theme/ui_metrics.dart';
-import '../theme/ui_springs.dart';
 import '../theme/ui_theme.dart';
 
 /// 玻璃材质的视觉密度。
@@ -210,14 +210,12 @@ class _GlassRefractionRim extends StatelessWidget {
     required this.thickness,
     required this.scaleX,
     required this.scaleY,
-    this.shift = Offset.zero,
   });
 
   final BorderRadius borderRadius;
   final double thickness;
   final double scaleX;
   final double scaleY;
-  final Offset shift;
 
   @override
   Widget build(BuildContext context) {
@@ -238,8 +236,8 @@ class _GlassRefractionRim extends StatelessWidget {
           0,
           1,
           0,
-          width * (1 - scaleX) / 2 + shift.dx,
-          height * (1 - scaleY) / 2 + shift.dy,
+          width * (1 - scaleX) / 2,
+          height * (1 - scaleY) / 2,
           0,
           1,
         ]);
@@ -335,30 +333,67 @@ class UiGlassToolbar extends StatelessWidget {
     this.tint,
     this.enableBlur,
     this.padding = const EdgeInsets.all(2),
-  }) : assert(children.length > 0);
+    this.interactive = true,
+  }) : child = null,
+       assert(children.length > 0);
+
+  /// Keeps a changing toolbar body (for example a search field) in one lens.
+  const UiGlassToolbar.custom({
+    super.key,
+    required Widget this.child,
+    this.variant = UiGlassVariant.clear,
+    this.tint,
+    this.enableBlur,
+    this.padding = const EdgeInsets.all(2),
+    this.interactive = true,
+  }) : children = const [];
 
   final List<Widget> children;
+  final Widget? child;
   final UiGlassVariant variant;
   final Color? tint;
   final bool? enableBlur;
   final EdgeInsetsGeometry padding;
 
+  /// Disable deformation while editing text, without replacing the subtree.
+  final bool interactive;
+
   @override
   Widget build(BuildContext context) {
-    return UiGlassSurface(
-      variant: variant,
-      tint: tint,
-      enableBlur: enableBlur,
-      padding: padding,
-      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+    return _UiGlassControlTheme(
+      child: Builder(
+        builder: (context) {
+          final animate =
+              interactive && !MediaQuery.disableAnimationsOf(context);
+          return glass.GlassButton.custom(
+            // Child controls own activation, focus and semantics.
+            onTap: () {},
+            canRequestFocus: false,
+            excludeFromSemantics: true,
+            shape: const glass.LiquidRoundedRectangle(borderRadius: 999),
+            useOwnLayer: true,
+            quality: _controlQuality(enableBlur),
+            settings: _controlSettings(context, variant, tint, enableBlur),
+            interactionScale: animate ? 1.025 : 1,
+            stretch: animate ? 0.15 : 0,
+            glowRadius: animate ? null : 0,
+            ambientBaseLight: animate ? _controlPressLight(context) : 0,
+            child: Padding(
+              padding: padding,
+              child:
+                  child ??
+                  Row(mainAxisSize: MainAxisSize.min, children: children),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
-/// Liquid Glass 图标按钮。
-///
-/// 按下和松开均由物理弹簧驱动，并继承当前速度；快速连续点击不会在中途跳帧。
-class UiGlassIconButton extends StatefulWidget {
+/// Glass optics and anchored stretch come from liquid_glass_widgets.
+/// This adapter keeps the app's loading, long-press and haptic behavior.
+class UiGlassIconButton extends StatelessWidget {
   const UiGlassIconButton({
     super.key,
     required this.icon,
@@ -386,389 +421,84 @@ class UiGlassIconButton extends StatefulWidget {
   final Color? tint;
   final UiGlassVariant variant;
 
-  /// false 时作为 [UiGlassToolbar] 的子项，不再创建第二层玻璃。
+  /// false uses the parent's glass; only the local press highlight is drawn.
   final bool contained;
   final bool? enableBlur;
   final bool enableHaptic;
   final bool loading;
 
-  @override
-  State<UiGlassIconButton> createState() => _UiGlassIconButtonState();
-}
+  bool get _enabled => onPressed != null && !loading;
 
-class _UiGlassIconButtonState extends State<UiGlassIconButton>
-    with TickerProviderStateMixin {
-  late final AnimationController _press = AnimationController.unbounded(
-    vsync: this,
-  );
-  late final AnimationController _pullX = AnimationController.unbounded(
-    vsync: this,
-  );
-  late final AnimationController _pullY = AnimationController.unbounded(
-    vsync: this,
-  );
-  int? _trackedPointer;
-  Duration? _lastPointerTime;
-  Offset _releaseVelocity = Offset.zero;
-
-  bool get _enabled => widget.onPressed != null && !widget.loading;
-
-  bool get _reduceMotion {
-    final mediaQuery = MediaQuery.maybeOf(context);
-    return mediaQuery?.disableAnimations ??
-        WidgetsBinding
-            .instance
-            .platformDispatcher
-            .accessibilityFeatures
-            .disableAnimations;
-  }
-
-  void _animateTo(double target) {
-    if (_reduceMotion) {
-      _press.value = target;
-      return;
-    }
-    _press.animateWith(
-      SpringSimulation(UiSprings.press, _press.value, target, _press.velocity),
-    );
-  }
-
-  void _setPull(Offset localPosition) {
-    final center = Offset(widget.size / 2, widget.size / 2);
-    var pull = localPosition - center;
-    final limit = widget.size * 0.82;
-    if (pull.distance > limit) {
-      pull = Offset.fromDirection(pull.direction, limit);
-    }
-    _pullX
-      ..stop()
-      ..value = pull.dx;
-    _pullY
-      ..stop()
-      ..value = pull.dy;
-  }
-
-  void _handlePointerDown(PointerDownEvent event) {
-    if (!_enabled || _trackedPointer != null) return;
-    _trackedPointer = event.pointer;
-    _lastPointerTime = event.timeStamp;
-    _releaseVelocity = Offset.zero;
-    _setPull(event.localPosition);
-    _animateTo(1);
-  }
-
-  void _handlePointerMove(PointerMoveEvent event) {
-    if (_trackedPointer != event.pointer) return;
-    final previousTime = _lastPointerTime;
-    final elapsed = previousTime == null
-        ? 0.0
-        : (event.timeStamp - previousTime).inMicroseconds /
-              Duration.microsecondsPerSecond;
-    if (elapsed > 0) {
-      _releaseVelocity = Offset(
-        event.delta.dx / elapsed,
-        event.delta.dy / elapsed,
-      );
-    }
-    _lastPointerTime = event.timeStamp;
-    _setPull(event.localPosition);
-  }
-
-  void _handlePointerEnd(PointerEvent event) {
-    if (_trackedPointer != event.pointer) return;
-    _trackedPointer = null;
-    _lastPointerTime = null;
-    _animateTo(0);
-    if (_reduceMotion) {
-      _pullX.value = 0;
-      _pullY.value = 0;
-      return;
-    }
-    final vx = _releaseVelocity.dx.clamp(-900.0, 900.0);
-    final vy = _releaseVelocity.dy.clamp(-900.0, 900.0);
-    _pullX.animateWith(SpringSimulation(UiSprings.press, _pullX.value, 0, vx));
-    _pullY.animateWith(SpringSimulation(UiSprings.press, _pullY.value, 0, vy));
-  }
-
-  void _handleTap() {
+  void _activate() {
     if (!_enabled) return;
-    if (widget.enableHaptic) HapticFeedback.lightImpact();
-    widget.onPressed?.call();
-  }
-
-  @override
-  void didUpdateWidget(covariant UiGlassIconButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_enabled != (oldWidget.onPressed != null && !oldWidget.loading)) {
-      _animateTo(0);
-      _pullX.value = 0;
-      _pullY.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _press.dispose();
-    _pullX.dispose();
-    _pullY.dispose();
-    super.dispose();
+    if (enableHaptic) HapticFeedback.lightImpact();
+    onPressed!();
   }
 
   @override
   Widget build(BuildContext context) {
-    final foreground = widget.foregroundColor ?? context.uiColors.brand;
-    final child = SizedBox.square(
-      dimension: widget.size,
-      child: Center(
-        child: widget.loading
-            ? SizedBox.square(
-                dimension: widget.iconSize,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: foreground,
-                ),
-              )
-            : Icon(widget.icon, size: widget.iconSize, color: foreground),
-      ),
-    );
-
+    final foreground = foregroundColor ?? context.uiColors.brand;
     return Semantics(
       button: true,
       enabled: _enabled,
-      label: widget.semanticLabel,
+      label: semanticLabel,
+      onTap: _enabled ? _activate : null,
+      onLongPress: _enabled ? onLongPress : null,
+      excludeSemantics: true,
       child: SizedBox.square(
-        dimension: widget.size,
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: _handlePointerDown,
-          onPointerMove: _handlePointerMove,
-          onPointerUp: _handlePointerEnd,
-          onPointerCancel: _handlePointerEnd,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _enabled ? _handleTap : null,
-            onLongPress: _enabled ? widget.onLongPress : null,
-            child: AnimatedBuilder(
-              animation: Listenable.merge(<Listenable>[_press, _pullX, _pullY]),
-              child: child,
-              builder: (context, child) {
-                final progress = _press.value.clamp(0.0, 1.0);
-                final pull = Offset(_pullX.value, _pullY.value);
-                final content = Opacity(
-                  opacity: _enabled ? 1 : 0.42,
-                  child: Transform.translate(
-                    offset: pull * (0.035 * progress),
-                    child: child,
+        dimension: size,
+        child: _UiGlassControlTheme(
+          child: Builder(
+            builder: (context) {
+              final reduceMotion = MediaQuery.disableAnimationsOf(context);
+              return IgnorePointer(
+                ignoring: !_enabled,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  excludeFromSemantics: true,
+                  onLongPress: _enabled ? onLongPress : null,
+                  child: glass.GlassButton.custom(
+                    // A loading/disabled transition cancels any held press.
+                    key: ValueKey(_enabled),
+                    onTap: _activate,
+                    enabled: _enabled,
+                    canRequestFocus: _enabled,
+                    excludeFromSemantics: true,
+                    width: size,
+                    height: size,
+                    shape: const glass.LiquidOval(),
+                    style: contained
+                        ? glass.GlassButtonStyle.filled
+                        : glass.GlassButtonStyle.transparent,
+                    useOwnLayer: contained,
+                    quality: _controlQuality(enableBlur),
+                    settings: _controlSettings(
+                      context,
+                      variant,
+                      tint,
+                      enableBlur,
+                    ),
+                    // The default +17pt growth clips a 44pt button inside a
+                    // 56pt app bar. Shared-toolbar children must not scale twice.
+                    interactionScale: reduceMotion || !contained ? 1 : 1.06,
+                    stretch: reduceMotion || !contained ? 0 : 0.5,
+                    glowRadius: reduceMotion ? 0 : null,
+                    ambientBaseLight: reduceMotion
+                        ? 0
+                        : _controlPressLight(context),
+                    child: loading
+                        ? SizedBox.square(
+                            dimension: iconSize,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: foreground,
+                            ),
+                          )
+                        : Icon(icon, size: iconSize, color: foreground),
                   ),
-                );
-                if (!widget.contained) {
-                  return _GlassPressedHighlight(
-                    diameter: widget.size,
-                    interaction: progress,
-                    pull: pull,
-                    color: context.uiGlass.pressedFill,
-                    child: content,
-                  );
-                }
-                return _InteractiveGlassOrb(
-                  diameter: widget.size,
-                  variant: widget.variant,
-                  tint: widget.tint,
-                  enableBlur: widget.enableBlur ?? true,
-                  interaction: progress,
-                  pull: pull,
-                  child: content,
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Inside a shared toolbar the outer glass is sampled once. This local sheen is
-/// transparent at rest and follows the contact without adding another blur.
-class _GlassPressedHighlight extends StatelessWidget {
-  const _GlassPressedHighlight({
-    required this.diameter,
-    required this.interaction,
-    required this.pull,
-    required this.color,
-    required this.child,
-  });
-
-  final double diameter;
-  final double interaction;
-  final Offset pull;
-  final Color color;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = interaction.clamp(0.0, 1.0);
-    final half = diameter / 2;
-    final normalized = Offset(
-      (pull.dx / half).clamp(-1.0, 1.0),
-      (pull.dy / half).clamp(-1.0, 1.0),
-    );
-    return Transform.translate(
-      offset: pull * (0.035 * progress),
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.diagonal3Values(
-          1 - (0.02 * progress),
-          1 - (0.045 * progress),
-          1,
-        ),
-        child: CustomPaint(
-          painter: _PressedSheenPainter(
-            progress: progress,
-            position: normalized,
-            color: color,
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-/// A compact clear-glass control. Its silhouette remains stable; the lens,
-/// specular rim and content shift toward the contact, then spring home.
-class _InteractiveGlassOrb extends StatelessWidget {
-  const _InteractiveGlassOrb({
-    required this.diameter,
-    required this.variant,
-    required this.enableBlur,
-    required this.interaction,
-    required this.pull,
-    required this.child,
-    this.tint,
-  });
-
-  final double diameter;
-  final UiGlassVariant variant;
-  final bool enableBlur;
-  final double interaction;
-  final Offset pull;
-  final Color? tint;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final glass = context.uiGlass;
-    final progress = interaction.clamp(0.0, 1.0);
-    final visualDiameter = math.max(32.0, diameter - 4);
-    final half = diameter / 2;
-    final normalized = Offset(
-      (pull.dx / half).clamp(-1.0, 1.0),
-      (pull.dy / half).clamp(-1.0, 1.0),
-    );
-    final baseFill = switch (variant) {
-      UiGlassVariant.clear => glass.clearFill,
-      UiGlassVariant.regular => glass.regularFill,
-    };
-    var fill = Color.alphaBlend(
-      glass.pressedFill.withValues(alpha: glass.pressedFill.a * progress),
-      baseFill,
-    );
-    if (tint case final color?) {
-      fill = Color.alphaBlend(color.withValues(alpha: 0.10), fill);
-    }
-    final border = tint == null
-        ? glass.border
-        : Color.lerp(glass.border, tint, 0.12)!;
-    final blurSigma = switch (variant) {
-      UiGlassVariant.clear => glass.clearBlurSigma,
-      UiGlassVariant.regular => glass.regularBlurSigma,
-    };
-
-    final opticalMaterial = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(
-            -0.45 + (normalized.dx * 0.42),
-            -0.62 + (normalized.dy * 0.42),
-          ),
-          radius: 1.18,
-          colors: <Color>[
-            Color.alphaBlend(
-              glass.highlight.withValues(alpha: 0.17 + 0.08 * progress),
-              fill,
-            ),
-            fill,
-            Color.alphaBlend(Colors.black.withValues(alpha: 0.045), fill),
-          ],
-          stops: const <double>[0, 0.52, 1],
-        ),
-      ),
-      child: CustomPaint(
-        foregroundPainter: _OpticalRimPainter(
-          border: border,
-          highlight: glass.highlight,
-          progress: progress,
-          position: normalized,
-        ),
-        child: Center(child: child),
-      ),
-    );
-    Widget material = Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        if (enableBlur)
-          Positioned.fill(
-            child: _GlassRefractionRim(
-              borderRadius: BorderRadius.circular(visualDiameter / 2),
-              thickness: 3.2,
-              scaleX: 1.045 + normalized.dx.abs() * progress * 0.018,
-              scaleY: 1.045 + normalized.dy.abs() * progress * 0.018,
-              shift: normalized * (1.35 * progress),
-            ),
-          ),
-        opticalMaterial,
-      ],
-    );
-    if (enableBlur && blurSigma > 0) {
-      material = BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: material,
-      );
-    }
-
-    return Center(
-      child: Transform.translate(
-        key: const ValueKey<String>('ui-glass-orb'),
-        offset: pull * (0.055 * progress),
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.diagonal3Values(
-            1 - (0.025 * progress) + (0.010 * normalized.dx.abs() * progress),
-            1 - (0.040 * progress) + (0.010 * normalized.dy.abs() * progress),
-            1,
-          ),
-          child: RepaintBoundary(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: glass.shadow.withValues(alpha: glass.shadow.a * 0.7),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                    spreadRadius: -5,
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                clipBehavior: Clip.antiAlias,
-                child: SizedBox.square(
-                  dimension: visualDiameter,
-                  child: material,
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -776,101 +506,50 @@ class _InteractiveGlassOrb extends StatelessWidget {
   }
 }
 
-class _OpticalRimPainter extends CustomPainter {
-  const _OpticalRimPainter({
-    required this.border,
-    required this.highlight,
-    required this.progress,
-    required this.position,
-  });
+double _controlPressLight(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? 0.04 : 0.08;
 
-  final Color border;
-  final Color highlight;
-  final double progress;
-  final Offset position;
+glass.GlassQuality _controlQuality(bool? enableBlur) => enableBlur == false
+    ? glass.GlassQuality.minimal
+    : glass.GlassQuality.premium;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bounds = (Offset.zero & size).deflate(0.65);
-    canvas.drawOval(
-      bounds,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.55
-        ..color = border,
-    );
-
-    final hasContact = position.distance > 0.04;
-    final direction = hasContact ? position.direction : -math.pi * 0.72;
-    canvas.drawArc(
-      bounds,
-      direction - 0.82,
-      1.64,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 1.05
-        ..color = highlight.withValues(alpha: 0.18 + 0.16 * progress),
-    );
-    canvas.drawArc(
-      bounds,
-      direction + math.pi - 0.62,
-      1.24,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 0.8
-        ..color = Colors.black.withValues(alpha: 0.06 + 0.04 * progress),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _OpticalRimPainter oldDelegate) =>
-      border != oldDelegate.border ||
-      highlight != oldDelegate.highlight ||
-      progress != oldDelegate.progress ||
-      position != oldDelegate.position;
+glass.LiquidGlassSettings _controlSettings(
+  BuildContext context,
+  UiGlassVariant variant,
+  Color? tint,
+  bool? enableBlur,
+) {
+  final settings =
+      glass.GlassThemeData.of(
+        context,
+      ).settingsFor(context)?.applyTo(const glass.LiquidGlassSettings()) ??
+      const glass.LiquidGlassSettings();
+  return settings.copyWith(
+    glassColor: tint == null
+        ? settings.glassColor
+        : Color.alphaBlend(tint.withValues(alpha: 0.10), settings.glassColor),
+    blur: enableBlur == false
+        ? 0
+        : variant == UiGlassVariant.regular
+        ? math.max(8, settings.blur)
+        : settings.blur,
+  );
 }
 
-class _PressedSheenPainter extends CustomPainter {
-  const _PressedSheenPainter({
-    required this.progress,
-    required this.position,
-    required this.color,
-  });
+/// The app can use a different appearance from the system.
+class _UiGlassControlTheme extends StatelessWidget {
+  const _UiGlassControlTheme({required this.child});
 
-  final double progress;
-  final Offset position;
-  final Color color;
+  final Widget child;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0) return;
-    final center = size.center(
-      Offset(position.dx * size.width * 0.12, position.dy * size.height * 0.12),
+  Widget build(BuildContext context) {
+    return CupertinoTheme(
+      data: CupertinoThemeData(
+        brightness: Theme.of(context).brightness,
+        primaryColor: context.uiColors.brand,
+      ),
+      child: glass.GlassAccessibilityScope(child: child),
     );
-    final paint = Paint()
-      ..shader =
-          RadialGradient(
-            colors: <Color>[
-              color.withValues(alpha: color.a * progress),
-              color.withValues(alpha: color.a * progress * 0.34),
-              color.withValues(alpha: 0),
-            ],
-            stops: const <double>[0, 0.58, 1],
-          ).createShader(
-            Rect.fromCircle(center: center, radius: diameterFor(size) * 0.54),
-          );
-    canvas.drawCircle(center, diameterFor(size) * 0.54, paint);
   }
-
-  double diameterFor(Size size) => math.min(size.width, size.height);
-
-  @override
-  bool shouldRepaint(covariant _PressedSheenPainter oldDelegate) =>
-      progress != oldDelegate.progress ||
-      position != oldDelegate.position ||
-      color != oldDelegate.color;
 }

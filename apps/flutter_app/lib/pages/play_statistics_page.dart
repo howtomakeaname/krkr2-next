@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../l10n/app_localizations.dart';
-import '../l10n/play_honor_localizations.dart';
 import '../models/game_info.dart';
 import '../models/play_insights.dart';
 import '../models/play_session.dart';
 import '../ui/ui.dart';
+import '../widgets/play_honor_card.dart';
 
 class PlayStatisticsPage extends StatelessWidget {
   const PlayStatisticsPage({
@@ -30,6 +30,7 @@ class PlayStatisticsPage extends StatelessWidget {
       sessions: playSessions,
       now: now ?? DateTime.now(),
     );
+    final honor = insights.honor;
 
     return Scaffold(
       key: const ValueKey<String>('play-statistics-page'),
@@ -49,170 +50,14 @@ class PlayStatisticsPage extends StatelessWidget {
         children: [
           _StatisticsOverview(insights: insights),
           const SizedBox(height: UiSpacing.md),
-          _HonorCard(honor: insights.honor),
+          PlayHonorCard(
+            honor: honor,
+            remainingDuration: _formatPlayTime(l10n, honor.remainingSeconds),
+          ),
           if (insights.rankedGames.isNotEmpty) ...[
             const SizedBox(height: UiSpacing.md),
             _MostPlayedSection(games: insights.rankedGames),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HonorCard extends StatelessWidget {
-  const _HonorCard({required this.honor});
-
-  final PlayHonor honor;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final colors = context.uiColors;
-    final nextTier = honor.nextTier;
-    final remainingDuration = _formatPlayTime(l10n, honor.remainingSeconds);
-    final requirement = l10n.playHonorRequirement(honor, remainingDuration);
-
-    return UiCard(
-      key: const ValueKey<String>('statistics-honor-card'),
-      borderRadius: UiRadius.brXl,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.profileHonorTitle,
-            style: context.uiType.footnote.copyWith(
-              color: colors.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: UiSpacing.xs),
-          Text(
-            l10n.playHonorTier(honor.tier),
-            key: const ValueKey<String>('statistics-honor-title'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.uiType.title1.copyWith(color: colors.textPrimary),
-          ),
-          const SizedBox(height: UiSpacing.lg),
-          _HonorMilestoneTrack(honor: honor),
-          const SizedBox(height: UiSpacing.md),
-          if (nextTier != null) ...[
-            Text(
-              l10n.profileHonorNext(l10n.playHonorTier(nextTier)),
-              style: context.uiType.footnote.copyWith(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-          ],
-          Text(
-            requirement,
-            key: const ValueKey<String>('statistics-honor-requirement'),
-            style: context.uiType.footnote.copyWith(
-              color: colors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HonorMilestoneTrack extends StatelessWidget {
-  const _HonorMilestoneTrack({required this.honor});
-
-  final PlayHonor honor;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final tiers = PlayHonorTier.values;
-
-    return Semantics(
-      label: l10n.profileHonorTitle,
-      value: l10n.playHonorTier(honor.tier),
-      child: ExcludeSemantics(
-        child: SizedBox(
-          key: const ValueKey<String>('statistics-honor-track'),
-          height: 12,
-          child: Row(
-            children: [
-              for (var index = 0; index < tiers.length; index++) ...[
-                _HonorMilestoneDot(
-                  reached: index <= honor.tier.index,
-                  current: index == honor.tier.index,
-                ),
-                if (index != tiers.length - 1)
-                  Expanded(
-                    child: _HonorMilestoneSegment(
-                      progress: index < honor.tier.index
-                          ? 1
-                          : index == honor.tier.index
-                          ? honor.progress
-                          : 0,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HonorMilestoneDot extends StatelessWidget {
-  const _HonorMilestoneDot({required this.reached, required this.current});
-
-  final bool reached;
-  final bool current;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.uiColors;
-    return AnimatedContainer(
-      duration: UiDuration.base,
-      curve: UiCurves.iosSpringOut,
-      width: current ? 10 : 6,
-      height: current ? 10 : 6,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: reached ? colors.brand : colors.separator,
-        border: current ? Border.all(color: colors.brandSoft, width: 2) : null,
-      ),
-    );
-  }
-}
-
-class _HonorMilestoneSegment extends StatelessWidget {
-  const _HonorMilestoneSegment({required this.progress});
-
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.uiColors;
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: progress.clamp(0, 1)),
-      duration: UiDuration.slow,
-      curve: UiCurves.iosSpringOut,
-      builder: (context, value, _) => Stack(
-        alignment: Alignment.centerLeft,
-        children: [
-          Container(height: 2, color: colors.separator),
-          FractionallySizedBox(
-            widthFactor: value,
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                color: colors.brand,
-                borderRadius: UiRadius.brPill,
-              ),
-            ),
-          ),
         ],
       ),
     );

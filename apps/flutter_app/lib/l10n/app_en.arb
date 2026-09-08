@@ -20,7 +20,7 @@
   "gamesDirectory": "Games directory: Games/",
   "gotIt": "Got it",
 
-  "tabHome": "Home",
+  "tabHome": "Library",
   "tabExplore": "Explore",
   "tabManage": "Manage",
   "tabProfile": "Me",
@@ -40,6 +40,7 @@
   "profileStatistics": "Play Statistics",
   "profileViewStatistics": "View Detailed Statistics",
   "profileHonorTitle": "Title",
+  "profileHonorNextUnlock": "Next title",
   "profileHonorNewcomer": "New Arrival",
   "profileHonorStoryTraveler": "Story Traveler",
   "profileHonorImmersedReader": "Immersed Reader",
@@ -66,6 +67,9 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "profileHonorHighest": "Top title reached",
+  "profileHonorCurrent": "Current",
+  "profileHonorObtained": "Earned",
+  "profileHonorLocked": "Not earned",
   "profileGameRecords": "Games",
   "profileRecentGame": "Recently Played",
   "profileNoHistory": "No activity yet",
