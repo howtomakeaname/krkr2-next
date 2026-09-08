@@ -88,4 +88,30 @@ void main() {
       );
     },
   );
+
+  test('HarmonyOS rejects a native root that is not Download/<appId>', () async {
+    final channel = const MethodChannel('flutter_engine_bridge');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'ensureManagerRoot') {
+            return <String, dynamic>{
+              'root': '/storage/Users/currentUser/Download/other.app',
+              'games': '/storage/Users/currentUser/Download/other.app/games',
+              'appId': ManagerScope.ohosAndroidAppId,
+            };
+          }
+          return null;
+        });
+    final storage = ManagerStorage(platform: 'ohos', channel: channel);
+    await expectLater(
+      storage.authorize(),
+      throwsA(
+        isA<FileOperationException>().having(
+          (error) => error.code,
+          'code',
+          FileErrorCode.outsideRoot,
+        ),
+      ),
+    );
+  });
 }

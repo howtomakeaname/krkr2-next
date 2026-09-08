@@ -413,6 +413,9 @@ export default class FlutterEngineBridgePlugin
 
     const finish = (rootPath: string): void => {
       try {
+        if (!fs.accessSync(rootPath)) {
+          fs.mkdirSync(rootPath);
+        }
         const gamesPath = `${rootPath}/games`;
         if (!fs.accessSync(gamesPath)) {
           fs.mkdirSync(gamesPath);
@@ -449,7 +452,10 @@ export default class FlutterEngineBridgePlugin
             result.error('cancelled', 'Folder authorization was cancelled', null);
             return;
           }
-          finish(new fileUri.FileUri(uris[0]).path);
+          // The picker only proves the user authorized Downloads. Always
+          // create Download/<bundleName>/; never treat the saved document
+          // (or another folder) as the manage-tab root.
+          finish(rootPath);
         })
         .catch((err: Error) => {
           Log.e(TAG, `ensureManagerRoot: save failed: ${err.message}`);

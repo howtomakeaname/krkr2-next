@@ -108,7 +108,9 @@ class ManagerStorage {
         appId: (info?['appId'] as String?) ?? appId,
         platform: 'ohos',
       );
-      if (grant == null) return null;
+      if (grant == null) {
+        throw const FileOperationException(FileErrorCode.outsideRoot);
+      }
       return ManagerGrant(
         rootPath: grant.rootPath,
         gamesPath: (info?['games'] as String?)?.isNotEmpty == true
