@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_app/l10n/app_localizations.dart';
@@ -49,9 +50,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('库'), findsOneWidget);
+    expect(find.bySemanticsLabel('库'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('ui-nav-item-3')));
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('ui-nav-item-3'))),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('profile-play-card')), findsOneWidget);
@@ -155,9 +158,7 @@ void main() {
     expect(find.text('wangguanzhiabcd@126.com'), findsOneWidget);
   });
 
-  testWidgets('tab selection lens follows the selected destination', (
-    tester,
-  ) async {
+  testWidgets('glass tab bar follows the selected destination', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
       MaterialApp(
@@ -170,15 +171,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final lens = find.byKey(const ValueKey('ui-nav-selection-lens'));
     final glass = find.byKey(const ValueKey('ui-nav-glass'));
-    expect(tester.getSize(glass).width, 286);
-    expect(tester.getSize(lens).width, lessThan(286 / 4));
-    final homeLeft = tester.getTopLeft(lens).dx;
-    await tester.tap(find.byKey(const ValueKey('ui-nav-item-2')));
+    expect(tester.getSize(glass), const Size(400, 64));
+    expect(
+      tester.widget<GlassTabBar>(find.byType(GlassTabBar)).selectedIndex,
+      0,
+    );
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('ui-nav-item-2'))),
+    );
     await tester.pumpAndSettle();
 
-    expect(tester.getTopLeft(lens).dx, greaterThan(homeLeft));
+    expect(
+      tester.widget<GlassTabBar>(find.byType(GlassTabBar)).selectedIndex,
+      2,
+    );
   });
 
   testWidgets('search toolbar expands and filters the library', (tester) async {

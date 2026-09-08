@@ -7,6 +7,7 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -40,6 +41,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+  final _navBackdropKey = GlobalKey<GlassContentAwareScopeState>();
   final GameManager _gameManager = GameManager();
   final GameMetadataScrapeFlow _scrapeFlow = GameMetadataScrapeFlow();
   bool _loading = true;
@@ -1893,39 +1895,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     ];
 
-    return Scaffold(
+    // Tab changes and library loads do not emit scroll notifications.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _navBackdropKey.currentState?.requestSample();
+    });
+    return GlassContentAwareScope(
+      key: _navBackdropKey,
       backgroundColor: context.uiColors.background,
-      extendBody: true,
-      // Native tab bars switch content immediately; the continuity lives in
-      // the moving glass lens below. IndexedStack also preserves each tab's
-      // scroll position without repainting hidden pages.
-      body: IndexedStack(index: _selectedTab, children: tabs),
-      bottomNavigationBar: UiNavBar(
-        currentIndex: _selectedTab,
-        overMedia: _selectedTab == 0 && games.isNotEmpty,
-        onChanged: _selectTab,
-        items: [
-          UiNavItem(
-            icon: CupertinoIcons.house,
-            activeIcon: CupertinoIcons.house_fill,
-            label: l10n.tabHome,
-          ),
-          UiNavItem(
-            icon: CupertinoIcons.compass,
-            activeIcon: CupertinoIcons.compass_fill,
-            label: l10n.tabExplore,
-          ),
-          UiNavItem(
-            icon: CupertinoIcons.folder,
-            activeIcon: CupertinoIcons.folder_fill,
-            label: l10n.tabManage,
-          ),
-          UiNavItem(
-            icon: CupertinoIcons.person,
-            activeIcon: CupertinoIcons.person_fill,
-            label: l10n.tabProfile,
-          ),
-        ],
+      child: Scaffold(
+        backgroundColor: context.uiColors.background,
+        extendBody: true,
+        // Native tab bars switch content immediately; the continuity lives in
+        // the moving glass lens below. IndexedStack also preserves each tab's
+        // scroll position without repainting hidden pages.
+        body: GlassContentAwareContent(
+          child: IndexedStack(index: _selectedTab, children: tabs),
+        ),
+        bottomNavigationBar: UiNavBar(
+          currentIndex: _selectedTab,
+          onChanged: _selectTab,
+          items: [
+            UiNavItem(
+              icon: CupertinoIcons.house,
+              activeIcon: CupertinoIcons.house_fill,
+              label: l10n.tabHome,
+            ),
+            UiNavItem(
+              icon: CupertinoIcons.compass,
+              activeIcon: CupertinoIcons.compass_fill,
+              label: l10n.tabExplore,
+            ),
+            UiNavItem(
+              icon: CupertinoIcons.folder,
+              activeIcon: CupertinoIcons.folder_fill,
+              label: l10n.tabManage,
+            ),
+            UiNavItem(
+              icon: CupertinoIcons.person,
+              activeIcon: CupertinoIcons.person_fill,
+              label: l10n.tabProfile,
+            ),
+          ],
+        ),
       ),
     );
   }
