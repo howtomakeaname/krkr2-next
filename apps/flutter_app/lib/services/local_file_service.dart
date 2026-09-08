@@ -4,12 +4,8 @@ import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
-class FileOperationException implements Exception {
-  const FileOperationException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}
+import 'file_operation_error.dart';
+export 'file_operation_error.dart';
 
 class FileTask {
   bool cancelled = false;
@@ -19,7 +15,7 @@ class FileTask {
   void Function()? onProgress;
 
   void check() {
-    if (cancelled) throw const FileOperationException('操作已取消');
+    if (cancelled) throw const FileOperationException(FileErrorCode.cancelled);
   }
 
   void report() => onProgress?.call();
@@ -60,7 +56,7 @@ class LocalFileService {
   String get _privatePath => p.join(rootPath, privateName);
 
   Future<T> _exclusive<T>(Future<T> Function() operation) async {
-    if (_busy) throw const FileOperationException('请等待当前文件操作完成');
+    if (_busy) throw const FileOperationException(FileErrorCode.busy);
     _busy = true;
     try {
       return await operation();
@@ -81,7 +77,7 @@ class LocalFileService {
         name.toLowerCase() == privateName ||
         RegExp(r'[\x00-\x1f/\\:*?"<>|]').hasMatch(name) ||
         utf8.encode(name).length > 255) {
-      throw const FileOperationException('名称无效，请去掉路径分隔符或特殊字符');
+      throw const FileOperationException(FileErrorCode.invalidName);
     }
   }
 
@@ -92,14 +88,14 @@ class LocalFileService {
   }) async {
     final path = p.normalize(p.absolute(input));
     if (path != rootPath && !p.isWithin(rootPath, path)) {
-      throw const FileOperationException('只能管理应用下载目录中的文件');
+      throw const FileOperationException(FileErrorCode.outsideRoot);
     }
     if (!internal && isPrivatePath(p.relative(path, from: rootPath))) {
-      throw const FileOperationException('这是文件管理器的工作目录');
+      throw const FileOperationException(FileErrorCode.protectedDirectory);
     }
     if (mutate &&
         (path == rootPath || path.toLowerCase() == gamesPath.toLowerCase())) {
-      throw const FileOperationException('这是固定目录，请操作其中的文件');
+      throw const FileOperationException(FileErrorCode.protectedDirectory);
     }
     // Check each component, not just the last one: a link in an ancestor can
     // otherwise redirect a perfectly ordinary-looking child outside the root.
@@ -108,7 +104,7 @@ class LocalFileService {
       cursor = p.join(cursor, part);
       if (await FileSystemEntity.type(cursor, followLinks: false) ==
           FileSystemEntityType.link) {
-        throw const FileOperationException('暂不支持操作符号链接');
+        throw const FileOperationException(FileErrorCode.unsupportedLink);
       }
     }
     return path;
@@ -137,13 +133,14 @@ class LocalFileService {
   }) async {
     await validatePath(destination, internal: internal);
     final parent = Directory(p.dirname(destination));
-    if (!await parent.exists()) throw const FileOperationException('目标文件夹不存在');
+    if (!await parent.exists())
+      throw const FileOperationException(FileErrorCode.notFound);
     // Download is case-insensitive. Keep the same collision policy in tests
     // and on other hosts, including for an empty destination directory.
     await for (final entry in parent.list(followLinks: false)) {
       if (p.basename(entry.path).toLowerCase() ==
           p.basename(destination).toLowerCase()) {
-        throw const FileOperationException('已有同名项目，请换一个名称');
+        throw const FileOperationException(FileErrorCode.conflict);
       }
     }
   }
@@ -166,7 +163,7 @@ class LocalFileService {
     final from = await validatePath(source, mutate: true);
     final to = await validatePath(destination);
     if (from == to || p.isWithin(from, to)) {
-      throw const FileOperationException('不能移动到自身或自己的子目录');
+      throw const FileOperationException(FileErrorCode.recursiveTarget);
     }
     await _requireVacant(to);
     await _relocate(from, to);
@@ -213,7 +210,7 @@ class LocalFileService {
         final from = await validatePath(source, mutate: true);
         final to = await validatePath(destination);
         if (from == to || p.isWithin(from, to)) {
-          throw const FileOperationException('不能复制到自身或自己的子目录');
+          throw const FileOperationException(FileErrorCode.recursiveTarget);
         }
         await _requireVacant(to);
         final work = await _workspace('tasks');
@@ -296,7 +293,7 @@ class LocalFileService {
 
   String _trashWorkspace(String id) {
     if (!RegExp(r'^[0-9a-f]{32}$').hasMatch(id)) {
-      throw const FileOperationException('最近删除记录无效');
+      throw const FileOperationException(FileErrorCode.trashCorrupt);
     }
     return p.join(_privatePath, 'trash', id);
   }
@@ -323,7 +320,7 @@ class LocalFileService {
               as Map<String, dynamic>;
       final relative = data['path'] as String;
       if (p.isAbsolute(relative))
-        throw const FileOperationException('最近删除记录路径无效');
+        throw const FileOperationException(FileErrorCode.trashCorrupt);
       final original = await validatePath(
         p.join(rootPath, relative),
         mutate: true,
@@ -352,7 +349,7 @@ class LocalFileService {
 
   Future<void> permanentlyDelete(DeletedFile item) => _exclusive(() async {
     if (!(await deletedFiles()).any((e) => e.id == item.id)) {
-      throw const FileOperationException('最近删除记录不存在');
+      throw const FileOperationException(FileErrorCode.notFound);
     }
     await _deletePrivateWorkspace(_trashWorkspace(item.id));
   });
@@ -363,7 +360,7 @@ class LocalFileService {
     if (rel.length != 2 ||
         !{'trash', 'tasks'}.contains(rel.first) ||
         !RegExp(r'^[0-9a-f]{32}$').hasMatch(rel.last)) {
-      throw const FileOperationException('拒绝清理无效的工作目录');
+      throw const FileOperationException(FileErrorCode.outsideRoot);
     }
     // Directory.delete does not follow child links. The workspace itself has
     // already been checked and is always a single generated task directory.

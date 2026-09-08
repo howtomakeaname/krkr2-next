@@ -267,7 +267,7 @@ void main() {
       await expectLater(
         service.extract(destination, (output) async {
           await File(p.join(output, 'partial.txt')).writeAsString('partial');
-          throw const FileOperationException('密码错误');
+          throw const FileOperationException(FileErrorCode.wrongPassword);
         }),
         throwsA(isA<FileOperationException>()),
       );
