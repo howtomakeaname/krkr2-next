@@ -584,7 +584,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hideVirtualControls => '隐藏虚拟操控';
 
   @override
-  String get virtualTouchpad => '触控板 · 轻点单击';
+  String get virtualTouchpad => '（触控板）轻点单击';
 
   @override
   String get virtualMouseLeft => '左键';
