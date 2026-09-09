@@ -619,7 +619,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'KrKr2 Next'**
+  /// **'NextScene'**
   String get appTitle;
 
   /// No description provided for @settings.
@@ -661,8 +661,8 @@ abstract class AppLocalizations {
   /// No description provided for @noGamesHintIos.
   ///
   /// In en, this message translates to:
-  /// **'Use the Files app to copy game folders to:\nOn My iPhone > Krkr2 > Games\nThen tap \"Refresh\"'**
-  String get noGamesHintIos;
+  /// **'Use the Files app to copy game folders to:\nOn My iPhone > {appName} > Games\nThen tap \"Refresh\"'**
+  String noGamesHintIos(String appName);
 
   /// No description provided for @importGames.
   ///
@@ -685,8 +685,8 @@ abstract class AppLocalizations {
   /// No description provided for @importStep2.
   ///
   /// In en, this message translates to:
-  /// **'2. Go to: On My iPhone > Krkr2 > Games'**
-  String get importStep2;
+  /// **'2. Go to: On My iPhone > {appName} > Games'**
+  String importStep2(String appName);
 
   /// No description provided for @importStep3.
   ///
@@ -735,6 +735,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage'**
   String get tabManage;
+
+  /// No description provided for @tabStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Stats'**
+  String get tabStatistics;
 
   /// No description provided for @tabProfile.
   ///
@@ -934,6 +940,18 @@ abstract class AppLocalizations {
   /// **'Games'**
   String get profileGameRecords;
 
+  /// No description provided for @profileLocalSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'On This Device'**
+  String get profileLocalSummary;
+
+  /// No description provided for @profileLibraryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Library'**
+  String get profileLibraryCount;
+
   /// No description provided for @profileRecentGame.
   ///
   /// In en, this message translates to:
@@ -976,29 +994,173 @@ abstract class AppLocalizations {
   /// **'{hours} hr {minutes} min'**
   String playTimeHoursMinutes(int hours, int minutes);
 
-  /// No description provided for @helpImportTitle.
+  /// No description provided for @helpIntro.
   ///
   /// In en, this message translates to:
-  /// **'Import Games'**
-  String get helpImportTitle;
+  /// **'This page covers importing games, where to store them, file management, and how play time is recorded.'**
+  String get helpIntro;
 
-  /// No description provided for @helpImportBody.
+  /// No description provided for @helpSectionLibrary.
   ///
   /// In en, this message translates to:
-  /// **'Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app\'s public games directory, then pull to refresh.'**
-  String get helpImportBody;
+  /// **'Import and launch'**
+  String get helpSectionLibrary;
 
-  /// No description provided for @helpLaunchTitle.
+  /// No description provided for @helpSectionFiles.
   ///
   /// In en, this message translates to:
-  /// **'Launch & Quick Actions'**
-  String get helpLaunchTitle;
+  /// **'Files and metadata'**
+  String get helpSectionFiles;
 
-  /// No description provided for @helpLaunchBody.
+  /// No description provided for @helpSectionMore.
   ///
   /// In en, this message translates to:
-  /// **'Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.'**
-  String get helpLaunchBody;
+  /// **'Statistics and settings'**
+  String get helpSectionMore;
+
+  /// No description provided for @helpFaqImportQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding a game to the library'**
+  String get helpFaqImportQ;
+
+  /// No description provided for @helpFaqImportA.
+  ///
+  /// In en, this message translates to:
+  /// **'On Library, tap Add Game and choose a complete game directory, or an XP3 / PFS pack. On HarmonyOS you can also place the directory in the app\'s public games path, then return to the home screen and pull down to refresh.'**
+  String get helpFaqImportA;
+
+  /// No description provided for @helpFaqOhosQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage location on HarmonyOS'**
+  String get helpFaqOhosQ;
+
+  /// No description provided for @helpFaqOhosA.
+  ///
+  /// In en, this message translates to:
+  /// **'In the system Files app, copy the complete game directory to:\n{path}\nThis app only reads and writes its own folder under Download.'**
+  String helpFaqOhosA(String path);
+
+  /// No description provided for @helpFaqIosQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying a game on iPhone'**
+  String get helpFaqIosQ;
+
+  /// No description provided for @helpFaqIosA.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Files, copy the game folder to On My iPhone > {appName} > Games, then return here and tap Refresh.'**
+  String helpFaqIosA(String appName);
+
+  /// No description provided for @helpFaqLaunchQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap and touch-and-hold'**
+  String get helpFaqLaunchQ;
+
+  /// No description provided for @helpFaqLaunchA.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a card to open details, then launch from there. Touch and hold to launch, scrape the title and cover, rename, or remove the entry from the list without opening details.'**
+  String get helpFaqLaunchA;
+
+  /// No description provided for @helpFaqManageQ.
+  ///
+  /// In en, this message translates to:
+  /// **'What you can do on Manage'**
+  String get helpFaqManageQ;
+
+  /// No description provided for @helpFaqManageA.
+  ///
+  /// In en, this message translates to:
+  /// **'Inside the authorised app folder you can copy, move, rename, extract archives, and view details. The root, games, and private save folders are protected and cannot be deleted like ordinary files.'**
+  String get helpFaqManageA;
+
+  /// No description provided for @helpFaqArchiveQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Archives and split volumes'**
+  String get helpFaqArchiveQ;
+
+  /// No description provided for @helpFaqArchiveA.
+  ///
+  /// In en, this message translates to:
+  /// **'zip, 7z and rar archives can be extracted on Manage. Keep split XP3 volumes in the same folder. Extraction and import do not rewrite game scripts.'**
+  String get helpFaqArchiveA;
+
+  /// No description provided for @helpFaqRemoveQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Does removing a game delete the files?'**
+  String get helpFaqRemoveQ;
+
+  /// No description provided for @helpFaqRemoveA.
+  ///
+  /// In en, this message translates to:
+  /// **'No. Removal only takes the entry off the list. The folder stays on disk. Delete files from Manage.'**
+  String get helpFaqRemoveA;
+
+  /// No description provided for @helpFaqMetadataQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Filling in a title and cover'**
+  String get helpFaqMetadataQ;
+
+  /// No description provided for @helpFaqMetadataA.
+  ///
+  /// In en, this message translates to:
+  /// **'After adding a game, or from the touch-and-hold menu, choose Scrape info and search VNDB by title. Only the display name and cover change.'**
+  String get helpFaqMetadataA;
+
+  /// No description provided for @helpFaqStatsQ.
+  ///
+  /// In en, this message translates to:
+  /// **'How play time is recorded'**
+  String get helpFaqStatsQ;
+
+  /// No description provided for @helpFaqStatsA.
+  ///
+  /// In en, this message translates to:
+  /// **'Time from launch to a normal exit is stored as one session and shown on Stats. If the process is force-stopped, that session may not be recorded.'**
+  String get helpFaqStatsA;
+
+  /// No description provided for @helpFaqControlsQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing without a keyboard or mouse'**
+  String get helpFaqControlsQ;
+
+  /// No description provided for @helpFaqControlsA.
+  ///
+  /// In en, this message translates to:
+  /// **'On-screen keys cover confirm, back, skip and direction. Use the layout shown during play.'**
+  String get helpFaqControlsA;
+
+  /// No description provided for @helpFaqSettingsQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Language and appearance'**
+  String get helpFaqSettingsQ;
+
+  /// No description provided for @helpFaqSettingsA.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings from Me to change the language, and to choose light, dark or system appearance. Some engine options take effect only after a restart.'**
+  String get helpFaqSettingsA;
+
+  /// No description provided for @helpFaqCompatQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Which titles are supported'**
+  String get helpFaqCompatQ;
+
+  /// No description provided for @helpFaqCompatA.
+  ///
+  /// In en, this message translates to:
+  /// **'This app runs KiriKiri2 and Artemis titles. It is not an official release. A title may fail to start if assets are missing, an instruction is unimplemented, or the encryption is unsupported.'**
+  String get helpFaqCompatA;
 
   /// No description provided for @removeGame.
   ///
@@ -1414,29 +1576,53 @@ abstract class AppLocalizations {
   /// **'Version'**
   String get version;
 
-  /// No description provided for @aboutVersionDesc.
+  /// No description provided for @legal.
   ///
   /// In en, this message translates to:
-  /// **'Iterative testing, not for long-term use'**
-  String get aboutVersionDesc;
+  /// **'Legal'**
+  String get legal;
 
-  /// No description provided for @aboutAuthor.
+  /// No description provided for @legalTabOpenSource.
   ///
   /// In en, this message translates to:
-  /// **'Author'**
-  String get aboutAuthor;
+  /// **'Licenses'**
+  String get legalTabOpenSource;
 
-  /// No description provided for @aboutEmail.
+  /// No description provided for @legalTabPrivacy.
   ///
   /// In en, this message translates to:
-  /// **'Email'**
-  String get aboutEmail;
+  /// **'Privacy'**
+  String get legalTabPrivacy;
 
-  /// No description provided for @aboutEmailCopied.
+  /// No description provided for @legalTabDisclaimer.
   ///
   /// In en, this message translates to:
-  /// **'Email copied to clipboard'**
-  String get aboutEmailCopied;
+  /// **'Disclaimer'**
+  String get legalTabDisclaimer;
+
+  /// No description provided for @legalOpenSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-source licenses'**
+  String get legalOpenSourceTitle;
+
+  /// No description provided for @legalPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy statement'**
+  String get legalPrivacyTitle;
+
+  /// No description provided for @legalDisclaimerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disclaimer'**
+  String get legalDisclaimerTitle;
+
+  /// No description provided for @legalUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepared by reference to the implementation dated {date}.'**
+  String legalUpdated(String date);
 
   /// No description provided for @gameEngineError.
   ///

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'config/app_info.dart';
 import 'config/app_theme_mode.dart';
 import 'config/stats_base_url.dart'
     if (dart.library.io) 'config/stats_base_url_io.dart';
@@ -43,7 +44,10 @@ Future<void> main() async {
   await AppThemePlatform.apply(initialThemeCode);
 
   unawaited(
-    FirstOpenAnalytics.reportIfNeeded(baseUrl: statsBaseUrl, version: '1.0.0'),
+    FirstOpenAnalytics.reportIfNeeded(
+      baseUrl: statsBaseUrl,
+      version: AppInfo.version,
+    ),
   );
   runApp(
     Krkr2App(initialLocale: initialLocale, initialThemeMode: initialThemeMode),
@@ -109,7 +113,9 @@ class _Krkr2AppState extends State<Krkr2App> {
     return UiThemeScope(
       controller: _uiTheme,
       child: MaterialApp(
-        title: 'KrKr2 Next',
+        title: AppInfo.nameForLanguage(
+          (_locale ?? ui.PlatformDispatcher.instance.locale).languageCode,
+        ),
         debugShowCheckedModeBanner: false,
         locale: _locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,

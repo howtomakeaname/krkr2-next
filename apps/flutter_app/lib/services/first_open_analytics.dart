@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_info.dart';
+
 /// 首次打开统计：向自建 Go 服务上报一次（匿名 id + 版本号）。
 /// 本地调试时 [baseUrl] 设为 `http://127.0.0.1:8080`（iOS 模拟器 / macOS）
 /// 或 `http://10.0.2.2:8080`（Android 模拟器）。
@@ -40,7 +42,7 @@ class FirstOpenAnalytics {
     final id = await _anonId();
     final body = jsonEncode(<String, String>{
       'id': id,
-      'v': version ?? '1.0.0',
+      'v': version ?? AppInfo.version,
     });
 
     try {

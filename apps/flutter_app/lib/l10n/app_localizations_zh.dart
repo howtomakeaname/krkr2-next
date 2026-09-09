@@ -273,7 +273,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get managerEncodingCp932 => 'Shift_JIS';
 
   @override
-  String get appTitle => 'KrKr2 Next';
+  String get appTitle => '下一幕';
 
   @override
   String get settings => '设置';
@@ -294,8 +294,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noGamesHintDesktop => '点击「添加游戏」选择游戏目录';
 
   @override
-  String get noGamesHintIos =>
-      '使用「文件」App 将游戏文件夹复制到：\n我的 iPhone > Krkr2 > Games\n然后点击「刷新」';
+  String noGamesHintIos(String appName) {
+    return '使用「文件」App 将游戏文件夹复制到：\n我的 iPhone > $appName > Games\n然后点击「刷新」';
+  }
 
   @override
   String get importGames => '导入游戏';
@@ -307,7 +308,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importStep1 => '1. 打开 iPhone 上的「文件」App';
 
   @override
-  String get importStep2 => '2. 前往：我的 iPhone > Krkr2 > Games';
+  String importStep2(String appName) {
+    return '2. 前往：我的 iPhone > $appName > Games';
+  }
 
   @override
   String get importStep3 => '3. 将游戏文件夹复制到 Games 目录';
@@ -333,6 +336,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tabManage => '管理';
+
+  @override
+  String get tabStatistics => '统计';
 
   @override
   String get tabProfile => '我的';
@@ -442,6 +448,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileGameRecords => '游戏记录';
 
   @override
+  String get profileLocalSummary => '本机摘要';
+
+  @override
+  String get profileLibraryCount => '游戏库';
+
+  @override
   String get profileRecentGame => '最近游玩';
 
   @override
@@ -471,17 +483,99 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get helpImportTitle => '导入游戏';
+  String get helpIntro => '本页说明游戏的导入、存放位置、文件管理，以及游玩时间的统计方式。';
 
   @override
-  String get helpImportBody =>
-      '将完整游戏文件夹或 XP3 / PFS 封包导入游戏库；HarmonyOS 也可以把文件夹放入应用的公共游戏目录后下拉刷新。';
+  String get helpSectionLibrary => '导入与启动';
 
   @override
-  String get helpLaunchTitle => '启动与快捷操作';
+  String get helpSectionFiles => '文件与资料';
 
   @override
-  String get helpLaunchBody => '点按游戏卡片查看详情；长按卡片可以直接启动、刮削信息、重命名或移除。';
+  String get helpSectionMore => '统计与设置';
+
+  @override
+  String get helpFaqImportQ => '如何将游戏加入游戏库';
+
+  @override
+  String get helpFaqImportA =>
+      '在「库」中点击「添加游戏」，选择完整游戏目录，或 XP3 / PFS 封包。HarmonyOS 也可以先将目录放到本应用的公共游戏路径，返回首页后下拉刷新。';
+
+  @override
+  String get helpFaqOhosQ => 'HarmonyOS 下应存放于何处';
+
+  @override
+  String helpFaqOhosA(String path) {
+    return '请使用系统「文件管理」，将完整游戏目录复制到：\n$path\n本应用只会读写 Download 下属于自己的目录。';
+  }
+
+  @override
+  String get helpFaqIosQ => '如何在 iPhone 上拷贝游戏';
+
+  @override
+  String helpFaqIosA(String appName) {
+    return '打开「文件」App，将游戏文件夹复制到「我的 iPhone > $appName > Games」，再返回本应用刷新。';
+  }
+
+  @override
+  String get helpFaqLaunchQ => '轻触与长按有何区别';
+
+  @override
+  String get helpFaqLaunchA =>
+      '轻触卡片会打开详情，再从详情启动。长按可以直接启动、刮削名称与封面、重命名，或从列表中移除，不必先进入详情。';
+
+  @override
+  String get helpFaqManageQ => '「管理」页可以做什么';
+
+  @override
+  String get helpFaqManageA =>
+      '在已授权的应用目录内，可以复制、移动、重命名、解压和查看详情。根目录、games 和私有存档目录受保护，不能按普通文件删除。';
+
+  @override
+  String get helpFaqArchiveQ => '压缩包与分卷如何处理';
+
+  @override
+  String get helpFaqArchiveA =>
+      '「管理」页可以解压 zip、7z、rar。分卷 XP3 请放在同一目录。解压和导入都不会改写游戏脚本。';
+
+  @override
+  String get helpFaqRemoveQ => '从游戏库移除是否删除文件';
+
+  @override
+  String get helpFaqRemoveA => '不会。移除只会去掉列表中的条目，磁盘上的目录仍在。删除文件请到「管理」中操作。';
+
+  @override
+  String get helpFaqMetadataQ => '如何取得封面与名称';
+
+  @override
+  String get helpFaqMetadataA =>
+      '添加游戏后，或从长按菜单选择「刮削信息」，按作品名检索 VNDB。只会更改显示名称和封面。';
+
+  @override
+  String get helpFaqStatsQ => '游玩时间如何记录';
+
+  @override
+  String get helpFaqStatsA => '从启动到正常退出记为一次时长，显示在「统计」。若进程被系统强制结束，该次可能不会被记录。';
+
+  @override
+  String get helpFaqControlsQ => '无键盘或鼠标时如何操作';
+
+  @override
+  String get helpFaqControlsA => '游玩时会提供虚拟按键，包括确认、返回、快进和方向。具体键位以当时屏幕上的控件为准。';
+
+  @override
+  String get helpFaqSettingsQ => '如何更改语言与外观';
+
+  @override
+  String get helpFaqSettingsA =>
+      '从「我的」进入「设置」，可以更改语言，并在浅色、深色和跟随系统之间选择。部分引擎选项需要重启后才会生效。';
+
+  @override
+  String get helpFaqCompatQ => '支持哪些游戏';
+
+  @override
+  String get helpFaqCompatA =>
+      '面向 KiriKiri2 与 Artemis 作品，不是官方发行版本。资源缺失、指令未实现，或所用加密不受支持时，可能无法启动。';
 
   @override
   String get removeGame => '移除游戏';
@@ -701,16 +795,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get version => '版本';
 
   @override
-  String get aboutVersionDesc => '迭代测试，切勿长期使用';
+  String get legal => '法律信息';
 
   @override
-  String get aboutAuthor => '作者';
+  String get legalTabOpenSource => '开源协议';
 
   @override
-  String get aboutEmail => '邮箱';
+  String get legalTabPrivacy => '隐私声明';
 
   @override
-  String get aboutEmailCopied => '邮箱已复制到剪贴板';
+  String get legalTabDisclaimer => '免责声明';
+
+  @override
+  String get legalOpenSourceTitle => '开源协议声明';
+
+  @override
+  String get legalPrivacyTitle => '隐私声明';
+
+  @override
+  String get legalDisclaimerTitle => '免责声明';
+
+  @override
+  String legalUpdated(String date) {
+    return '本声明依据 $date 之程序实现整理。';
+  }
 
   @override
   String get gameEngineError => '引擎错误';

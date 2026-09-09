@@ -1,5 +1,7 @@
 import 'package:path/path.dart' as p;
 
+import '../config/app_info.dart';
+
 /// Dedicated Downloads subtree that file management is allowed to touch.
 ///
 /// The grant is the application folder itself (`Download/<appId>/`), not the
@@ -43,8 +45,8 @@ class ManagerGrant {
 class ManagerScope {
   ManagerScope._();
 
-  static const ohosAndroidAppId = 'org.github.krkr2.flutter_app';
-  static const appleAppId = 'org.github.krkr2.flutterApp';
+  static const ohosAndroidAppId = AppInfo.bundleId;
+  static const appleAppId = AppInfo.bundleId;
 
   static String expectedAppId(String platform) {
     return platform == 'ios' || platform == 'macos'
