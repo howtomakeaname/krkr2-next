@@ -49,6 +49,7 @@ export 'components/ui_rating.dart';
 export 'components/ui_collapse.dart';
 export 'components/ui_banner.dart';
 export 'components/ui_nav_bar.dart';
+export 'components/ui_tab_header.dart';
 export 'components/ui_time_picker.dart';
 export 'components/ui_otp.dart';
 export 'components/ui_app_bar.dart';

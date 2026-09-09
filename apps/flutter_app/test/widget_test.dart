@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_app/config/app_info.dart';
 import 'package:flutter_app/main.dart';
 
 void main() {
@@ -11,7 +12,7 @@ void main() {
     await tester.pumpWidget(const Krkr2App());
     await tester.pumpAndSettle();
 
-    expect(find.text('KrKr2 Next'), findsOneWidget);
+    expect(find.text(AppInfo.nameEn), findsOneWidget);
     expect(find.byKey(const ValueKey('ui-nav-item-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('ui-nav-item-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('ui-nav-item-2')), findsOneWidget);

@@ -78,7 +78,6 @@ class _ManagerPageState extends State<ManagerPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colors = context.uiColors;
-    final top = MediaQuery.paddingOf(context).top;
     final bottom = MediaQuery.paddingOf(context).bottom;
     final handlesBack = widget.active && controller.canGoBack;
     return PopScope(
@@ -88,7 +87,7 @@ class _ManagerPageState extends State<ManagerPage> {
       },
       child: ColoredBox(
         color: colors.background,
-        child: _buildPage(context, l10n, colors, top, bottom),
+        child: _buildPage(context, l10n, colors, bottom),
       ),
     );
   }
@@ -97,56 +96,39 @@ class _ManagerPageState extends State<ManagerPage> {
     BuildContext context,
     AppLocalizations l10n,
     UiColors colors,
-    double top,
     double bottom,
   ) {
     return Column(
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(20, top + 16, 20, 8),
-          child: SizedBox(
-            height: UiNavigationMetrics.buttonExtent,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    controller.selecting
-                        ? l10n.managerItemsSelected(controller.selected.length)
-                        : l10n.tabManage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.uiType.headline.copyWith(
-                      fontWeight: FontWeight.w700,
+        UiTabHeader.labeled(
+          title: controller.selecting
+              ? l10n.managerItemsSelected(controller.selected.length)
+              : l10n.tabManage,
+          trailing: controller.grant == null
+              ? null
+              : UiGlassToolbar(
+                  children: [
+                    UiGlassIconButton(
+                      icon: controller.selecting
+                          ? LucideIcons.check
+                          : LucideIcons.listChecks,
+                      semanticLabel: controller.selecting
+                          ? l10n.managerDone
+                          : l10n.managerSelect,
+                      contained: false,
+                      onPressed: () =>
+                          controller.toggleSelecting(!controller.selecting),
                     ),
-                  ),
-                ),
-                if (controller.grant != null)
-                  UiGlassToolbar(
-                    children: [
-                      UiGlassIconButton(
-                        icon: controller.selecting
-                            ? LucideIcons.check
-                            : LucideIcons.listChecks,
-                        semanticLabel: controller.selecting
-                            ? l10n.managerDone
-                            : l10n.managerSelect,
+                    Builder(
+                      builder: (buttonContext) => UiGlassIconButton(
+                        icon: LucideIcons.ellipsis,
+                        semanticLabel: l10n.tabManage,
                         contained: false,
-                        onPressed: () =>
-                            controller.toggleSelecting(!controller.selecting),
+                        onPressed: () => _showMenu(buttonContext, l10n),
                       ),
-                      Builder(
-                        builder: (buttonContext) => UiGlassIconButton(
-                          icon: LucideIcons.ellipsis,
-                          semanticLabel: l10n.tabManage,
-                          contained: false,
-                          onPressed: () => _showMenu(buttonContext, l10n),
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
+                    ),
+                  ],
+                ),
         ),
         if (controller.grant != null) _buildBreadcrumb(l10n),
         if (controller.task != null) _buildProgress(l10n),
@@ -421,7 +403,8 @@ class _ManagerPageState extends State<ManagerPage> {
       items: [
         if (kind.canOpen)
           UiMenuItem(
-            label: kind == ManagerFileKind.audio || kind == ManagerFileKind.video
+            label:
+                kind == ManagerFileKind.audio || kind == ManagerFileKind.video
                 ? l10n.managerPlay
                 : l10n.managerPreview,
             icon: switch (kind) {

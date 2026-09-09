@@ -32,32 +32,34 @@ class PlayStatisticsPage extends StatelessWidget {
     );
     final honor = insights.honor;
 
-    return Scaffold(
+    return ColoredBox(
       key: const ValueKey<String>('play-statistics-page'),
-      backgroundColor: context.uiColors.groupedBackground,
-      appBar: AppBar(
-        title: Text(l10n.profileStatistics),
-        backgroundColor: context.uiColors.groupedBackground,
-        automaticallyImplyLeading: false,
-        leading: UiBarIconButton(
-          icon: LucideIcons.arrowLeft,
-          semanticLabel: l10n.back,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      color: context.uiColors.groupedBackground,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatisticsOverview(insights: insights),
-          const SizedBox(height: UiSpacing.md),
-          PlayHonorCard(
-            honor: honor,
-            remainingDuration: _formatPlayTime(l10n, honor.remainingSeconds),
+          UiTabHeader.labeled(title: l10n.tabStatistics),
+          Expanded(
+            child: ListView(
+              key: const PageStorageKey<String>('statistics-tab-scroll'),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
+              children: [
+                _StatisticsOverview(insights: insights),
+                const SizedBox(height: UiSpacing.md),
+                PlayHonorCard(
+                  honor: honor,
+                  remainingDuration: _formatPlayTime(
+                    l10n,
+                    honor.remainingSeconds,
+                  ),
+                ),
+                if (insights.rankedGames.isNotEmpty) ...[
+                  const SizedBox(height: UiSpacing.md),
+                  _MostPlayedSection(games: insights.rankedGames),
+                ],
+              ],
+            ),
           ),
-          if (insights.rankedGames.isNotEmpty) ...[
-            const SizedBox(height: UiSpacing.md),
-            _MostPlayedSection(games: insights.rankedGames),
-          ],
         ],
       ),
     );
