@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_app/config/app_info.dart';
 import 'package:flutter_app/l10n/app_localizations.dart';
 import 'package:flutter_app/constants/prefs_keys.dart';
 import 'package:flutter_app/models/game_engine.dart';
@@ -12,7 +13,7 @@ import 'package:flutter_app/pages/home_page.dart';
 import 'package:flutter_app/ui/ui.dart';
 
 void main() {
-  testWidgets('profile tab shows play stats and support destinations', (
+  testWidgets('stats tab shows play data; profile keeps support destinations', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(430, 932);
@@ -51,34 +52,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('库'), findsOneWidget);
+    expect(find.bySemanticsLabel('探索'), findsNothing);
 
     await tester.tapAt(
-      tester.getCenter(find.byKey(const ValueKey('ui-nav-item-3'))),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('profile-play-card')), findsOneWidget);
-    expect(find.text('游玩时间'), findsOneWidget);
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('profile-summary-lifetime')))
-          .data,
-      '2 小时 5 分钟',
-    );
-    expect(find.text('累计游玩'), findsOneWidget);
-    expect(find.text('近 7 天'), findsOneWidget);
-    expect(find.text('剧情旅人'), findsOneWidget);
-    expect(find.text('游玩统计'), findsOneWidget);
-    expect(find.text('常玩游戏'), findsNothing);
-    expect(find.text('测试游戏'), findsNothing);
-
-    await tester.tap(
-      find.byKey(const ValueKey<String>('profile-statistics-entry')),
+      tester.getCenter(find.byKey(const ValueKey('ui-nav-item-2'))),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('play-statistics-page')), findsOneWidget);
-    expect(find.text('游玩统计'), findsOneWidget);
+    expect(find.text('统计'), findsWidgets);
+    expect(find.byKey(const ValueKey('profile-play-card')), findsNothing);
     expect(find.text('常玩游戏'), findsOneWidget);
     expect(find.text('称号'), findsOneWidget);
     expect(find.text('下个称号'), findsOneWidget);
@@ -137,25 +120,42 @@ void main() {
     );
     expect(landscapeCover.width / landscapeCover.height, closeTo(16 / 9, 0.01));
 
-    await tester.tap(find.bySemanticsLabel('返回'));
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('ui-nav-item-3'))),
+    );
     await tester.pumpAndSettle();
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('帮助'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
+    expect(find.text('本机摘要'), findsOneWidget);
+    expect(find.text('游戏库'), findsOneWidget);
+    expect(find.text('最近游玩'), findsOneWidget);
+    expect(find.text('测试游戏'), findsWidgets);
+    expect(find.text('开源协议声明'), findsOneWidget);
+    expect(find.text('隐私声明'), findsOneWidget);
+    expect(find.text('免责声明'), findsOneWidget);
+    expect(find.text('法律信息'), findsNothing);
+    expect(find.byKey(const ValueKey('profile-play-card')), findsNothing);
 
     await tester.tap(find.text('帮助'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('help-page')), findsOneWidget);
-    expect(find.text('导入游戏'), findsOneWidget);
-    expect(find.text('启动与快捷操作'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('返回'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('关于'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('about-page')), findsOneWidget);
+    expect(find.text(AppInfo.nameZh), findsOneWidget);
     expect(find.text('版本'), findsOneWidget);
-    expect(find.text('wangguanzhiabcd@126.com'), findsOneWidget);
+    expect(find.text(AppInfo.version), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('about-page')),
+        matching: find.text('开源协议声明'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('glass tab bar follows the selected destination', (tester) async {
