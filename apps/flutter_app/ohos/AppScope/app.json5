@@ -1,6 +1,6 @@
 {
   "app": {
-    "bundleName": "org.github.krkr2.flutter_app",
+    "bundleName": "com.nextscene.app",
     "vendor": "example",
     "versionCode": 1000001,
     "versionName": "1.0.0",

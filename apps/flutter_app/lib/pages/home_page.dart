@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_info.dart';
 import '../constants/prefs_keys.dart';
 import '../flows/game_metadata_scrape_flow.dart';
 import '../l10n/app_localizations.dart';
@@ -71,7 +72,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _gameOrientation = PrefsKeys.gameOrientationLandscape;
   bool _restartDeferred = false;
   int _selectedTab = 0;
-  static const _manageTabIndex = 2;
+  static const _manageTabIndex = 1;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _searchActive = false;
@@ -1342,7 +1343,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  l10n.importStep2,
+                  l10n.importStep2(AppInfo.nameForLanguage(l10n.localeName)),
                   style: context.uiType.body.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1626,29 +1627,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _openAbout() => UiMotion.push<void>(context, const AboutPage());
 
-  void _openStatistics() => UiMotion.push<void>(
-    context,
-    PlayStatisticsPage(
-      games: _sortedGames,
-      playSessions: _gameManager.playSessions,
-    ),
-  );
-
-  Widget _buildPlaceholderTab({required String title}) {
-    final colors = context.uiColors;
-    final topPadding = MediaQuery.paddingOf(context).top;
-    return ColoredBox(
-      color: colors.background,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 8),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Text(title, style: context.uiType.largeTitle),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -1659,7 +1637,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         !Platform.isAndroid &&
         !Platform.isIOS &&
         Platform.operatingSystem != 'ohos';
-    final topPadding = MediaQuery.of(context).padding.top;
     // Pull-to-refresh rescans the drop folder (iOS: Documents/Games,
     // OHOS: Download/<bundleName>/games). Desktop and Android pick games
     // through a picker, so there is nothing to rescan there.
@@ -1668,178 +1645,167 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     // The title bar stays put; only the library below it scrolls and pulls.
     const collapsedToolbarWidth = 94.0;
-    final Widget header = Padding(
-      padding: EdgeInsets.only(
-        top: topPadding + 16,
-        left: 20,
-        right: 20,
-        bottom: 8,
-      ),
-      child: SizedBox(
-        height: UiNavigationMetrics.buttonExtent,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              alignment: Alignment.centerRight,
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  right: collapsedToolbarWidth + 8,
-                  top: 0,
-                  bottom: 0,
-                  child: ExcludeSemantics(
-                    excluding: _searchActive,
-                    child: AnimatedOpacity(
-                      key: const ValueKey<String>('home-app-title'),
-                      opacity: _searchActive ? 0 : 1,
+    final Widget header = UiTabHeader(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
+            alignment: Alignment.centerRight,
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                right: collapsedToolbarWidth + 8,
+                top: 0,
+                bottom: 0,
+                child: ExcludeSemantics(
+                  excluding: _searchActive,
+                  child: AnimatedOpacity(
+                    key: const ValueKey<String>('home-app-title'),
+                    opacity: _searchActive ? 0 : 1,
+                    duration: UiDuration.fast,
+                    curve: UiCurves.iosSmooth,
+                    child: AnimatedSlide(
+                      offset: _searchActive
+                          ? const Offset(-0.04, 0)
+                          : Offset.zero,
                       duration: UiDuration.fast,
                       curve: UiCurves.iosSmooth,
-                      child: AnimatedSlide(
-                        offset: _searchActive
-                            ? const Offset(-0.04, 0)
-                            : Offset.zero,
-                        duration: UiDuration.fast,
-                        curve: UiCurves.iosSmooth,
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                l10n.appTitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: context.uiType.headline.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              AppInfo.nameForLanguage(l10n.localeName),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: UiTabHeader.titleStyleOf(context),
+                            ),
+                          ),
+                          if (isDesktop && !_loading) ...[
+                            const SizedBox(width: UiSpacing.sm),
+                            Tooltip(
+                              message: _engineMode == EngineMode.builtIn
+                                  ? (_builtInAvailable
+                                        ? l10n.builtInReady
+                                        : l10n.builtInNotReady)
+                                  : (_customDylibPath != null
+                                        ? _customDylibPath!.split('/').last
+                                        : l10n.customNotSet),
+                              child: Icon(
+                                _engineMode == EngineMode.builtIn
+                                    ? LucideIcons.packageOpen
+                                    : LucideIcons.puzzle,
+                                color: _engineReady
+                                    ? context.uiColors.brand
+                                    : context.uiColors.danger,
+                                size: 22,
                               ),
                             ),
-                            if (isDesktop && !_loading) ...[
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                left: _searchActive
+                    ? 0
+                    : constraints.maxWidth - collapsedToolbarWidth,
+                width: _searchActive
+                    ? constraints.maxWidth
+                    : collapsedToolbarWidth,
+                top: 0,
+                bottom: 0,
+                duration: UiSprings.materializeDuration,
+                curve: UiSprings.materializeCurve,
+                child: UiGlassToolbar.custom(
+                  key: const ValueKey<String>('home-search-toolbar'),
+                  variant: UiGlassVariant.clear,
+                  interactive: !_searchActive,
+                  padding: const EdgeInsets.all(2),
+                  child: AnimatedSwitcher(
+                    duration: UiDuration.fast,
+                    switchInCurve: UiCurves.iosSmooth,
+                    switchOutCurve: UiCurves.iosSmooth,
+                    layoutBuilder: (currentChild, previousChildren) => Stack(
+                      alignment: Alignment.centerRight,
+                      children: <Widget>[...previousChildren, ?currentChild],
+                    ),
+                    child: _searchActive
+                        ? Row(
+                            key: const ValueKey<String>('search-editor'),
+                            children: [
+                              const SizedBox(width: 10),
+                              Icon(
+                                LucideIcons.search,
+                                size: 18,
+                                color: context.uiColors.textSecondary,
+                              ),
                               const SizedBox(width: UiSpacing.sm),
-                              Tooltip(
-                                message: _engineMode == EngineMode.builtIn
-                                    ? (_builtInAvailable
-                                          ? l10n.builtInReady
-                                          : l10n.builtInNotReady)
-                                    : (_customDylibPath != null
-                                          ? _customDylibPath!.split('/').last
-                                          : l10n.customNotSet),
-                                child: Icon(
-                                  _engineMode == EngineMode.builtIn
-                                      ? LucideIcons.packageOpen
-                                      : LucideIcons.puzzle,
-                                  color: _engineReady
-                                      ? context.uiColors.brand
-                                      : context.uiColors.danger,
-                                  size: 22,
+                              Expanded(
+                                child: TextField(
+                                  key: const ValueKey<String>(
+                                    'home-search-field',
+                                  ),
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  textInputAction: TextInputAction.done,
+                                  onChanged: _updateSearch,
+                                  onSubmitted: (_) => _finishSearch(),
+                                  style: context.uiType.body.copyWith(
+                                    color: context.uiColors.textPrimary,
+                                  ),
+                                  cursorColor: context.uiColors.brand,
+                                  decoration: InputDecoration.collapsed(
+                                    hintText: l10n.searchGamesHint,
+                                    hintStyle: context.uiType.body.copyWith(
+                                      color: context.uiColors.textTertiary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              UiGlassIconButton(
+                                icon: LucideIcons.check,
+                                semanticLabel: l10n.done,
+                                contained: false,
+                                onPressed: _finishSearch,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            key: const ValueKey<String>('home-actions'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              UiGlassIconButton(
+                                icon: LucideIcons.search,
+                                semanticLabel: l10n.search,
+                                contained: false,
+                                onPressed: _loading ? null : _beginSearch,
+                              ),
+                              Builder(
+                                builder: (btnContext) => UiGlassIconButton(
+                                  icon: LucideIcons.plus,
+                                  semanticLabel: l10n.importGames,
+                                  contained: false,
+                                  onPressed: _loading
+                                      ? null
+                                      : () {
+                                          _addGame(
+                                            anchor: UiPopupMenu.rectOf(
+                                              btnContext,
+                                            ),
+                                          );
+                                        },
                                 ),
                               ),
                             ],
-                          ],
-                        ),
-                      ),
-                    ),
+                          ),
                   ),
                 ),
-                AnimatedPositioned(
-                  left: _searchActive
-                      ? 0
-                      : constraints.maxWidth - collapsedToolbarWidth,
-                  width: _searchActive
-                      ? constraints.maxWidth
-                      : collapsedToolbarWidth,
-                  top: 0,
-                  bottom: 0,
-                  duration: UiSprings.materializeDuration,
-                  curve: UiSprings.materializeCurve,
-                  child: UiGlassToolbar.custom(
-                    key: const ValueKey<String>('home-search-toolbar'),
-                    variant: UiGlassVariant.clear,
-                    interactive: !_searchActive,
-                    padding: const EdgeInsets.all(2),
-                    child: AnimatedSwitcher(
-                      duration: UiDuration.fast,
-                      switchInCurve: UiCurves.iosSmooth,
-                      switchOutCurve: UiCurves.iosSmooth,
-                      layoutBuilder: (currentChild, previousChildren) => Stack(
-                        alignment: Alignment.centerRight,
-                        children: <Widget>[...previousChildren, ?currentChild],
-                      ),
-                      child: _searchActive
-                          ? Row(
-                              key: const ValueKey<String>('search-editor'),
-                              children: [
-                                const SizedBox(width: 10),
-                                Icon(
-                                  LucideIcons.search,
-                                  size: 18,
-                                  color: context.uiColors.textSecondary,
-                                ),
-                                const SizedBox(width: UiSpacing.sm),
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey<String>(
-                                      'home-search-field',
-                                    ),
-                                    controller: _searchController,
-                                    focusNode: _searchFocusNode,
-                                    textInputAction: TextInputAction.done,
-                                    onChanged: _updateSearch,
-                                    onSubmitted: (_) => _finishSearch(),
-                                    style: context.uiType.body.copyWith(
-                                      color: context.uiColors.textPrimary,
-                                    ),
-                                    cursorColor: context.uiColors.brand,
-                                    decoration: InputDecoration.collapsed(
-                                      hintText: l10n.searchGamesHint,
-                                      hintStyle: context.uiType.body.copyWith(
-                                        color: context.uiColors.textTertiary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                UiGlassIconButton(
-                                  icon: LucideIcons.check,
-                                  semanticLabel: l10n.done,
-                                  contained: false,
-                                  onPressed: _finishSearch,
-                                ),
-                              ],
-                            )
-                          : Row(
-                              key: const ValueKey<String>('home-actions'),
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                UiGlassIconButton(
-                                  icon: LucideIcons.search,
-                                  semanticLabel: l10n.search,
-                                  contained: false,
-                                  onPressed: _loading ? null : _beginSearch,
-                                ),
-                                Builder(
-                                  builder: (btnContext) => UiGlassIconButton(
-                                    icon: LucideIcons.plus,
-                                    semanticLabel: l10n.importGames,
-                                    contained: false,
-                                    onPressed: _loading
-                                        ? null
-                                        : () {
-                                            _addGame(
-                                              anchor: UiPopupMenu.rectOf(
-                                                btnContext,
-                                              ),
-                                            );
-                                          },
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
+              ),
+            ],
+          );
+        },
       ),
     );
 
@@ -1919,15 +1885,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ],
         ),
       ),
-      _buildPlaceholderTab(title: l10n.tabExplore),
       ManagerPage(
         controller: _fileManager,
         active: _selectedTab == _manageTabIndex,
       ),
-      HomeProfileTab(
+      PlayStatisticsPage(
         games: allGames,
         playSessions: _gameManager.playSessions,
-        onOpenStatistics: _openStatistics,
+      ),
+      HomeProfileTab(
+        games: visibleGames,
+        onOpenLibrary: () => _selectTab(0),
+        onOpenGame: _openGameDetail,
         onOpenSettings: _openSettings,
         onOpenHelp: _openHelp,
         onOpenAbout: _openAbout,
@@ -1960,14 +1929,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               label: l10n.tabHome,
             ),
             UiNavItem(
-              icon: CupertinoIcons.compass,
-              activeIcon: CupertinoIcons.compass_fill,
-              label: l10n.tabExplore,
-            ),
-            UiNavItem(
               icon: CupertinoIcons.folder,
               activeIcon: CupertinoIcons.folder_fill,
               label: l10n.tabManage,
+            ),
+            UiNavItem(
+              icon: CupertinoIcons.chart_bar,
+              activeIcon: CupertinoIcons.chart_bar_fill,
+              label: l10n.tabStatistics,
             ),
             UiNavItem(
               icon: CupertinoIcons.person,
@@ -1992,7 +1961,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildEmptyState(AppLocalizations l10n) {
     final String description;
     if (Platform.isIOS) {
-      description = l10n.noGamesHintIos;
+      description = l10n.noGamesHintIos(
+        AppInfo.nameForLanguage(l10n.localeName),
+      );
     } else if (Platform.operatingSystem == 'ohos') {
       description = l10n.noGamesHintOhos(
         _ohosGamesDirDisplay ?? 'Download/<bundleName>/games',

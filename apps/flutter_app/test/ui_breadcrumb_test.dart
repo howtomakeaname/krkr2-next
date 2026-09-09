@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter_app/config/app_info.dart';
 import 'package:flutter_app/ui/ui.dart';
 
 Future<ValueNotifier<List<String>>> _pumpCrumbs(
@@ -47,7 +48,7 @@ void main() {
     tester,
   ) async {
     await _pumpCrumbs(tester, [
-      'Download/org.github.krkr2.flutter_app',
+      AppInfo.downloadDisplayRoot,
       'games',
       '常轨脱离Creative凸（官中）',
     ]);

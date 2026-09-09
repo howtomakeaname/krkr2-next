@@ -301,7 +301,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get managerEncodingCp932 => 'Shift_JIS';
 
   @override
-  String get appTitle => 'KrKr2 Next';
+  String get appTitle => 'NextScene';
 
   @override
   String get settings => 'Settings';
@@ -323,8 +323,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Click \"Add Game\" to select a game directory';
 
   @override
-  String get noGamesHintIos =>
-      'Use the Files app to copy game folders to:\nOn My iPhone > Krkr2 > Games\nThen tap \"Refresh\"';
+  String noGamesHintIos(String appName) {
+    return 'Use the Files app to copy game folders to:\nOn My iPhone > $appName > Games\nThen tap \"Refresh\"';
+  }
 
   @override
   String get importGames => 'Import Games';
@@ -337,7 +338,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importStep1 => '1. Open the \"Files\" app on your iPhone';
 
   @override
-  String get importStep2 => '2. Go to: On My iPhone > Krkr2 > Games';
+  String importStep2(String appName) {
+    return '2. Go to: On My iPhone > $appName > Games';
+  }
 
   @override
   String get importStep3 => '3. Copy your game folder into the Games directory';
@@ -364,6 +367,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tabManage => 'Manage';
+
+  @override
+  String get tabStatistics => 'Stats';
 
   @override
   String get tabProfile => 'Me';
@@ -473,6 +479,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileGameRecords => 'Games';
 
   @override
+  String get profileLocalSummary => 'On This Device';
+
+  @override
+  String get profileLibraryCount => 'Library';
+
+  @override
   String get profileRecentGame => 'Recently Played';
 
   @override
@@ -502,18 +514,103 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get helpImportTitle => 'Import Games';
+  String get helpIntro =>
+      'This page covers importing games, where to store them, file management, and how play time is recorded.';
 
   @override
-  String get helpImportBody =>
-      'Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app\'s public games directory, then pull to refresh.';
+  String get helpSectionLibrary => 'Import and launch';
 
   @override
-  String get helpLaunchTitle => 'Launch & Quick Actions';
+  String get helpSectionFiles => 'Files and metadata';
 
   @override
-  String get helpLaunchBody =>
-      'Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.';
+  String get helpSectionMore => 'Statistics and settings';
+
+  @override
+  String get helpFaqImportQ => 'Adding a game to the library';
+
+  @override
+  String get helpFaqImportA =>
+      'On Library, tap Add Game and choose a complete game directory, or an XP3 / PFS pack. On HarmonyOS you can also place the directory in the app\'s public games path, then return to the home screen and pull down to refresh.';
+
+  @override
+  String get helpFaqOhosQ => 'Storage location on HarmonyOS';
+
+  @override
+  String helpFaqOhosA(String path) {
+    return 'In the system Files app, copy the complete game directory to:\n$path\nThis app only reads and writes its own folder under Download.';
+  }
+
+  @override
+  String get helpFaqIosQ => 'Copying a game on iPhone';
+
+  @override
+  String helpFaqIosA(String appName) {
+    return 'Open Files, copy the game folder to On My iPhone > $appName > Games, then return here and tap Refresh.';
+  }
+
+  @override
+  String get helpFaqLaunchQ => 'Tap and touch-and-hold';
+
+  @override
+  String get helpFaqLaunchA =>
+      'Tap a card to open details, then launch from there. Touch and hold to launch, scrape the title and cover, rename, or remove the entry from the list without opening details.';
+
+  @override
+  String get helpFaqManageQ => 'What you can do on Manage';
+
+  @override
+  String get helpFaqManageA =>
+      'Inside the authorised app folder you can copy, move, rename, extract archives, and view details. The root, games, and private save folders are protected and cannot be deleted like ordinary files.';
+
+  @override
+  String get helpFaqArchiveQ => 'Archives and split volumes';
+
+  @override
+  String get helpFaqArchiveA =>
+      'zip, 7z and rar archives can be extracted on Manage. Keep split XP3 volumes in the same folder. Extraction and import do not rewrite game scripts.';
+
+  @override
+  String get helpFaqRemoveQ => 'Does removing a game delete the files?';
+
+  @override
+  String get helpFaqRemoveA =>
+      'No. Removal only takes the entry off the list. The folder stays on disk. Delete files from Manage.';
+
+  @override
+  String get helpFaqMetadataQ => 'Filling in a title and cover';
+
+  @override
+  String get helpFaqMetadataA =>
+      'After adding a game, or from the touch-and-hold menu, choose Scrape info and search VNDB by title. Only the display name and cover change.';
+
+  @override
+  String get helpFaqStatsQ => 'How play time is recorded';
+
+  @override
+  String get helpFaqStatsA =>
+      'Time from launch to a normal exit is stored as one session and shown on Stats. If the process is force-stopped, that session may not be recorded.';
+
+  @override
+  String get helpFaqControlsQ => 'Playing without a keyboard or mouse';
+
+  @override
+  String get helpFaqControlsA =>
+      'On-screen keys cover confirm, back, skip and direction. Use the layout shown during play.';
+
+  @override
+  String get helpFaqSettingsQ => 'Language and appearance';
+
+  @override
+  String get helpFaqSettingsA =>
+      'Open Settings from Me to change the language, and to choose light, dark or system appearance. Some engine options take effect only after a restart.';
+
+  @override
+  String get helpFaqCompatQ => 'Which titles are supported';
+
+  @override
+  String get helpFaqCompatA =>
+      'This app runs KiriKiri2 and Artemis titles. It is not an official release. A title may fail to start if assets are missing, an instruction is unimplemented, or the encryption is unsupported.';
 
   @override
   String get removeGame => 'Remove Game';
@@ -743,16 +840,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get version => 'Version';
 
   @override
-  String get aboutVersionDesc => 'Iterative testing, not for long-term use';
+  String get legal => 'Legal';
 
   @override
-  String get aboutAuthor => 'Author';
+  String get legalTabOpenSource => 'Licenses';
 
   @override
-  String get aboutEmail => 'Email';
+  String get legalTabPrivacy => 'Privacy';
 
   @override
-  String get aboutEmailCopied => 'Email copied to clipboard';
+  String get legalTabDisclaimer => 'Disclaimer';
+
+  @override
+  String get legalOpenSourceTitle => 'Open-source licenses';
+
+  @override
+  String get legalPrivacyTitle => 'Privacy statement';
+
+  @override
+  String get legalDisclaimerTitle => 'Disclaimer';
+
+  @override
+  String legalUpdated(String date) {
+    return 'Prepared by reference to the implementation dated $date.';
+  }
 
   @override
   String get gameEngineError => 'Engine Error';

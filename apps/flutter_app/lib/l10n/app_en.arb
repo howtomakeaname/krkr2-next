@@ -103,19 +103,29 @@
   "managerEncodingGb18030": "GB18030",
   "managerEncodingCp932": "Shift_JIS",
 
-"appTitle": "KrKr2 Next",
+"appTitle": "NextScene",
   "settings": "Settings",
   "addGame": "Add Game",
   "refresh": "Refresh",
   "howToImport": "How to Import",
   "noGamesYet": "No games added yet",
   "noGamesHintDesktop": "Click \"Add Game\" to select a game directory",
-  "noGamesHintIos": "Use the Files app to copy game folders to:\nOn My iPhone > Krkr2 > Games\nThen tap \"Refresh\"",
+  "noGamesHintIos": "Use the Files app to copy game folders to:\nOn My iPhone > {appName} > Games\nThen tap \"Refresh\"",
+  "@noGamesHintIos": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
 
   "importGames": "Import Games",
   "importGamesDesc": "Please copy your game folders to this app's directory using the Files app:",
   "importStep1": "1. Open the \"Files\" app on your iPhone",
-  "importStep2": "2. Go to: On My iPhone > Krkr2 > Games",
+  "importStep2": "2. Go to: On My iPhone > {appName} > Games",
+  "@importStep2": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
   "importStep3": "3. Copy your game folder into the Games directory",
   "importStep4": "4. Come back and tap \"Refresh\" to detect new games",
   "macosImportTip": "Note: Please select the folder containing the XP3 file first before select the target XP3 file due to macOS sandbox restrictions",
@@ -125,6 +135,7 @@
   "tabHome": "Library",
   "tabExplore": "Explore",
   "tabManage": "Manage",
+  "tabStatistics": "Stats",
   "tabProfile": "Me",
   "search": "Search",
   "searchGamesHint": "Search games",
@@ -173,6 +184,8 @@
   "profileHonorObtained": "Earned",
   "profileHonorLocked": "Not earned",
   "profileGameRecords": "Games",
+  "profileLocalSummary": "On This Device",
+  "profileLibraryCount": "Library",
   "profileRecentGame": "Recently Played",
   "profileNoHistory": "No activity yet",
   "profilePlaySummary": "{duration} played · {count} games",
@@ -198,10 +211,44 @@
       "minutes": { "type": "int" }
     }
   },
-  "helpImportTitle": "Import Games",
-  "helpImportBody": "Import a complete game folder or an XP3 / PFS pack. On HarmonyOS, you can also place a folder in the app's public games directory, then pull to refresh.",
-  "helpLaunchTitle": "Launch & Quick Actions",
-  "helpLaunchBody": "Tap a game card for details. Touch and hold it to launch, scrape metadata, rename, or remove it.",
+  "helpIntro": "This page covers importing games, where to store them, file management, and how play time is recorded.",
+  "helpSectionLibrary": "Import and launch",
+  "helpSectionFiles": "Files and metadata",
+  "helpSectionMore": "Statistics and settings",
+  "helpFaqImportQ": "Adding a game to the library",
+  "helpFaqImportA": "On Library, tap Add Game and choose a complete game directory, or an XP3 / PFS pack. On HarmonyOS you can also place the directory in the app's public games path, then return to the home screen and pull down to refresh.",
+  "helpFaqOhosQ": "Storage location on HarmonyOS",
+  "helpFaqOhosA": "In the system Files app, copy the complete game directory to:\n{path}\nThis app only reads and writes its own folder under Download.",
+  "@helpFaqOhosA": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "helpFaqIosQ": "Copying a game on iPhone",
+  "helpFaqIosA": "Open Files, copy the game folder to On My iPhone > {appName} > Games, then return here and tap Refresh.",
+  "@helpFaqIosA": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
+  "helpFaqLaunchQ": "Tap and touch-and-hold",
+  "helpFaqLaunchA": "Tap a card to open details, then launch from there. Touch and hold to launch, scrape the title and cover, rename, or remove the entry from the list without opening details.",
+  "helpFaqManageQ": "What you can do on Manage",
+  "helpFaqManageA": "Inside the authorised app folder you can copy, move, rename, extract archives, and view details. The root, games, and private save folders are protected and cannot be deleted like ordinary files.",
+  "helpFaqArchiveQ": "Archives and split volumes",
+  "helpFaqArchiveA": "zip, 7z and rar archives can be extracted on Manage. Keep split XP3 volumes in the same folder. Extraction and import do not rewrite game scripts.",
+  "helpFaqRemoveQ": "Does removing a game delete the files?",
+  "helpFaqRemoveA": "No. Removal only takes the entry off the list. The folder stays on disk. Delete files from Manage.",
+  "helpFaqMetadataQ": "Filling in a title and cover",
+  "helpFaqMetadataA": "After adding a game, or from the touch-and-hold menu, choose Scrape info and search VNDB by title. Only the display name and cover change.",
+  "helpFaqStatsQ": "How play time is recorded",
+  "helpFaqStatsA": "Time from launch to a normal exit is stored as one session and shown on Stats. If the process is force-stopped, that session may not be recorded.",
+  "helpFaqControlsQ": "Playing without a keyboard or mouse",
+  "helpFaqControlsA": "On-screen keys cover confirm, back, skip and direction. Use the layout shown during play.",
+  "helpFaqSettingsQ": "Language and appearance",
+  "helpFaqSettingsA": "Open Settings from Me to change the language, and to choose light, dark or system appearance. Some engine options take effect only after a restart.",
+  "helpFaqCompatQ": "Which titles are supported",
+  "helpFaqCompatA": "This app runs KiriKiri2 and Artemis titles. It is not an official release. A title may fail to start if assets are missing, an instruction is unimplemented, or the encryption is unsupported.",
 
   "removeGame": "Remove Game",
   "removeGameConfirm": "Remove \"{title}\" from the list?\nThis will NOT delete the game files.",
@@ -307,10 +354,19 @@
 
   "settingsAbout": "About",
   "version": "Version",
-  "aboutVersionDesc": "Iterative testing, not for long-term use",
-  "aboutAuthor": "Author",
-  "aboutEmail": "Email",
-  "aboutEmailCopied": "Email copied to clipboard",
+  "legal": "Legal",
+  "legalTabOpenSource": "Licenses",
+  "legalTabPrivacy": "Privacy",
+  "legalTabDisclaimer": "Disclaimer",
+  "legalOpenSourceTitle": "Open-source licenses",
+  "legalPrivacyTitle": "Privacy statement",
+  "legalDisclaimerTitle": "Disclaimer",
+  "legalUpdated": "Prepared by reference to the implementation dated {date}.",
+  "@legalUpdated": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
 
   "gameEngineError": "Engine Error",
   "unknownError": "Unknown error",

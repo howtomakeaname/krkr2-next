@@ -103,19 +103,19 @@
   "managerEncodingGb18030": "GB18030",
   "managerEncodingCp932": "Shift_JIS",
 
-"appTitle": "KrKr2 Next",
+"appTitle": "下一幕",
   "settings": "设置",
   "addGame": "添加游戏",
   "refresh": "刷新",
   "howToImport": "导入指南",
   "noGamesYet": "尚未添加任何游戏",
   "noGamesHintDesktop": "点击「添加游戏」选择游戏目录",
-  "noGamesHintIos": "使用「文件」App 将游戏文件夹复制到：\n我的 iPhone > Krkr2 > Games\n然后点击「刷新」",
+  "noGamesHintIos": "使用「文件」App 将游戏文件夹复制到：\n我的 iPhone > {appName} > Games\n然后点击「刷新」",
 
   "importGames": "导入游戏",
   "importGamesDesc": "请使用「文件」App 将游戏文件夹复制到本应用的目录：",
   "importStep1": "1. 打开 iPhone 上的「文件」App",
-  "importStep2": "2. 前往：我的 iPhone > Krkr2 > Games",
+  "importStep2": "2. 前往：我的 iPhone > {appName} > Games",
   "importStep3": "3. 将游戏文件夹复制到 Games 目录",
   "importStep4": "4. 返回本应用，点击「刷新」检测新游戏",
   "macosImportTip": "注意：由于 macOS 沙盒限制，请先选择 XP3 文件所在的文件夹后再选择目标 XP3 文件",
@@ -125,6 +125,7 @@
   "tabHome": "库",
   "tabExplore": "探索",
   "tabManage": "管理",
+  "tabStatistics": "统计",
   "tabProfile": "我的",
   "search": "搜索",
   "searchGamesHint": "搜索游戏",
@@ -173,6 +174,8 @@
   "profileHonorObtained": "已获得",
   "profileHonorLocked": "未获得",
   "profileGameRecords": "游戏记录",
+  "profileLocalSummary": "本机摘要",
+  "profileLibraryCount": "游戏库",
   "profileRecentGame": "最近游玩",
   "profileNoHistory": "暂无记录",
   "profilePlaySummary": "已玩 {duration} · {count} 个游戏",
@@ -198,10 +201,44 @@
       "minutes": { "type": "int" }
     }
   },
-  "helpImportTitle": "导入游戏",
-  "helpImportBody": "将完整游戏文件夹或 XP3 / PFS 封包导入游戏库；HarmonyOS 也可以把文件夹放入应用的公共游戏目录后下拉刷新。",
-  "helpLaunchTitle": "启动与快捷操作",
-  "helpLaunchBody": "点按游戏卡片查看详情；长按卡片可以直接启动、刮削信息、重命名或移除。",
+  "helpIntro": "本页说明游戏的导入、存放位置、文件管理，以及游玩时间的统计方式。",
+  "helpSectionLibrary": "导入与启动",
+  "helpSectionFiles": "文件与资料",
+  "helpSectionMore": "统计与设置",
+  "helpFaqImportQ": "如何将游戏加入游戏库",
+  "helpFaqImportA": "在「库」中点击「添加游戏」，选择完整游戏目录，或 XP3 / PFS 封包。HarmonyOS 也可以先将目录放到本应用的公共游戏路径，返回首页后下拉刷新。",
+  "helpFaqOhosQ": "HarmonyOS 下应存放于何处",
+  "helpFaqOhosA": "请使用系统「文件管理」，将完整游戏目录复制到：\n{path}\n本应用只会读写 Download 下属于自己的目录。",
+  "@helpFaqOhosA": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "helpFaqIosQ": "如何在 iPhone 上拷贝游戏",
+  "helpFaqIosA": "打开「文件」App，将游戏文件夹复制到「我的 iPhone > {appName} > Games」，再返回本应用刷新。",
+  "@helpFaqIosA": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
+  "helpFaqLaunchQ": "轻触与长按有何区别",
+  "helpFaqLaunchA": "轻触卡片会打开详情，再从详情启动。长按可以直接启动、刮削名称与封面、重命名，或从列表中移除，不必先进入详情。",
+  "helpFaqManageQ": "「管理」页可以做什么",
+  "helpFaqManageA": "在已授权的应用目录内，可以复制、移动、重命名、解压和查看详情。根目录、games 和私有存档目录受保护，不能按普通文件删除。",
+  "helpFaqArchiveQ": "压缩包与分卷如何处理",
+  "helpFaqArchiveA": "「管理」页可以解压 zip、7z、rar。分卷 XP3 请放在同一目录。解压和导入都不会改写游戏脚本。",
+  "helpFaqRemoveQ": "从游戏库移除是否删除文件",
+  "helpFaqRemoveA": "不会。移除只会去掉列表中的条目，磁盘上的目录仍在。删除文件请到「管理」中操作。",
+  "helpFaqMetadataQ": "如何取得封面与名称",
+  "helpFaqMetadataA": "添加游戏后，或从长按菜单选择「刮削信息」，按作品名检索 VNDB。只会更改显示名称和封面。",
+  "helpFaqStatsQ": "游玩时间如何记录",
+  "helpFaqStatsA": "从启动到正常退出记为一次时长，显示在「统计」。若进程被系统强制结束，该次可能不会被记录。",
+  "helpFaqControlsQ": "无键盘或鼠标时如何操作",
+  "helpFaqControlsA": "游玩时会提供虚拟按键，包括确认、返回、快进和方向。具体键位以当时屏幕上的控件为准。",
+  "helpFaqSettingsQ": "如何更改语言与外观",
+  "helpFaqSettingsA": "从「我的」进入「设置」，可以更改语言，并在浅色、深色和跟随系统之间选择。部分引擎选项需要重启后才会生效。",
+  "helpFaqCompatQ": "支持哪些游戏",
+  "helpFaqCompatA": "面向 KiriKiri2 与 Artemis 作品，不是官方发行版本。资源缺失、指令未实现，或所用加密不受支持时，可能无法启动。",
 
   "removeGame": "移除游戏",
   "removeGameConfirm": "从列表中移除「{title}」？\n这不会删除游戏文件。",
@@ -287,10 +324,19 @@
 
   "settingsAbout": "关于",
   "version": "版本",
-  "aboutVersionDesc": "迭代测试，切勿长期使用",
-  "aboutAuthor": "作者",
-  "aboutEmail": "邮箱",
-  "aboutEmailCopied": "邮箱已复制到剪贴板",
+  "legal": "法律信息",
+  "legalTabOpenSource": "开源协议",
+  "legalTabPrivacy": "隐私声明",
+  "legalTabDisclaimer": "免责声明",
+  "legalOpenSourceTitle": "开源协议声明",
+  "legalPrivacyTitle": "隐私声明",
+  "legalDisclaimerTitle": "免责声明",
+  "legalUpdated": "本声明依据 {date} 之程序实现整理。",
+  "@legalUpdated": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
 
   "gameEngineError": "引擎错误",
   "unknownError": "未知错误",

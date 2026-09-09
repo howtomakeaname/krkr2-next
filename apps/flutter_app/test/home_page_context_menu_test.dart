@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_app/config/app_info.dart';
 import 'package:flutter_app/l10n/app_localizations.dart';
 import 'package:flutter_app/models/game_engine.dart';
 import 'package:flutter_app/models/game_info.dart';
@@ -32,7 +33,7 @@ void main() {
       ),
     );
 
-    expect(find.text('KrKr2 Next'), findsOneWidget);
+    expect(find.text(AppInfo.nameZh), findsOneWidget);
     expect(find.byType(UiLoader), findsNothing);
     expect(find.byType(UiSkeleton), findsWidgets);
 

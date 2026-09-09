@@ -1,15 +1,12 @@
-<p align="center">
-  <h1 align="center">KrKr2 Next</h1>
-  <p align="center">基于 Flutter 重构的下一代 KiriKiri2 跨平台模拟器</p>
-</p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/status-In%20Development-orange" alt="Status">
-  <img src="https://img.shields.io/badge/engine-KiriKiri2-blue" alt="Engine">
-  <img src="https://img.shields.io/badge/framework-Flutter-02569B" alt="Flutter">
-  <img src="https://img.shields.io/badge/graphics-ANGLE-red" alt="ANGLE">
-  <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License">
-</p>
+
+# 下一幕 NextScene
+
+基于 Flutter 重构的下一代跨平台视觉小说游戏模拟器
+
+
+
+![Status](https://img.shields.io/badge/status-In%20Development-orange)![Engine](https://img.shields.io/badge/engine-KiriKiri2-blue)![Flutter](https://img.shields.io/badge/framework-Flutter-02569B)![ANGLE](https://img.shields.io/badge/graphics-ANGLE-red)![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 ---
 
@@ -17,90 +14,75 @@
 
 > 🙏 本仓库（HarmonyOS 适配版）基于 [reAAAq/KrKr2-Next](https://github.com/reAAAq/KrKr2-Next) 二次开发而来，在其基础上新增了 HarmonyOS/OpenHarmony（原生鸿蒙）支持，感谢原作者的贡献。上游项目又是基于 [krkr2](https://github.com/2468785842/krkr2) 重构的，一并致谢。
 
+
+
 ## 简介
 
-**KrKr2 Next** 是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它完全兼容原版游戏脚本，使用现代图形接口进行硬件加速渲染，并在渲染性能和脚本执行效率上做了大量优化。基于 Flutter 构建统一的跨平台界面，支持 macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony 六大平台。
+**下一幕**（NextScene）是 [KiriKiri2 (吉里吉里2)](https://zh.wikipedia.org/wiki/%E5%90%89%E9%87%8C%E5%90%89%E9%87%8C2) 视觉小说引擎的现代化跨平台运行环境。它兼容原版游戏脚本，用现代图形接口做硬件加速渲染，并在渲染和脚本执行上做了不少优化。界面用 Flutter 统一实现，目标平台是 macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony。HarmonyOS 上同一个 HAP 还能跑 Artemis（`.pfs`）。
 
 ## 界面预览
 
-以下截图采集自 HarmonyOS SDK 20 真机。为保持展示聚焦，均已移除系统状态栏。
+以下截图采集自 HarmonyOS SDK 20 真机。竖图已裁掉系统状态栏。应用壳是四个 Tab：库 / 管理 / 统计 / 我的。游戏运行截图为《9-nine-九次九日九重色》标题画面，并打开了性能监控。
 
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/home.webp" alt="游戏库首页" width="280"><br>
-      <sub>游戏库首页</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/home-context-menu.webp" alt="首页长按快捷菜单" width="280"><br>
-      <sub>长按快捷菜单</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/game-detail.webp" alt="游戏详情页" width="280"><br>
-      <sub>游戏详情</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/settings.webp" alt="设置页" width="280"><br>
-      <sub>设置</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/game-loading.webp" alt="游戏资源加载页" width="280"><br>
-      <sub>游戏启动与资源加载</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="doc/screenshots/game-controls.webp" alt="游戏内快捷控制菜单" width="280"><br>
-      <sub>游戏内快捷控制</sub>
-    </td>
-  </tr>
-</table>
+
+|                                                 |                                                            |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| ![游戏库首页](doc/screenshots/home.webp) 库           | ![首页长按快捷菜单](doc/screenshots/home-context-menu.webp) 长按快捷菜单 |
+| ![游戏详情页](doc/screenshots/game-detail.webp) 游戏详情 | ![设置页](doc/screenshots/settings.webp) 设置                   |
+| ![文件管理](doc/screenshots/manage.webp) 管理         | ![我的](doc/screenshots/profile.webp) 我的                     |
+
+
+
 
 ### 游戏运行（横屏）
 
-<p align="center">
-  <img src="doc/screenshots/game-running-landscape.webp" alt="HarmonyOS 真机横屏运行 KiriKiri2 测试游戏" width="600"><br>
-  <sub>HarmonyOS 真机横屏运行 KiriKiri2 测试游戏</sub>
-</p>
+![HarmonyOS 真机横屏运行 9-nine-九次九日九重色](doc/screenshots/game-running-landscape.webp)  
+《9-nine-九次九日九重色》标题画面 （KiriKiri2 / GLES ，约 90 fps）
+
+![游戏内快捷控制](doc/screenshots/game-controls.webp)  
+游戏内快捷控制（暂停 / 虚拟操控手柄 / 退出）
 
 ## 架构
 
-<p align="center">
-  <img src="doc/architecture.png" alt="技术架构图" width="700">
-</p>
+![技术架构图](doc/architecture.png)
 
-**渲染管线**：引擎通过 ANGLE 的 EGL Pbuffer Surface 进行离屏渲染（OpenGL ES 2.0），渲染结果通过平台原生纹理共享机制（macOS → IOSurface、Windows → D3D11 Texture、Linux → DMA-BUF）零拷贝传递给 Flutter Texture Widget 显示。
-
+**渲染管线**：macOS 等桌面/移动端走 ANGLE 的 EGL Pbuffer 离屏渲染（OpenGL ES 2.0），再经平台纹理共享（macOS → IOSurface、Windows → D3D11 Texture、Linux → DMA-BUF）交给 Flutter Texture。HarmonyOS 不经 ANGLE，直接用系统 EGL（GLES）画到 pbuffer，再经 OHNativeWindow / RawImage 读回显示。
 
 ## 开发进度
 
-> ⚠️ 本项目处于活跃开发阶段，尚未发布稳定版本。macOS 平台进度领先。
+> ⚠️ 本项目仍在活跃开发，没有稳定发行版。本仓库当前以 HarmonyOS 真机为主；上游 macOS 进度仍较完整。
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| C++ 引擎核心编译 | ✅ 完成 | KiriKiri2 核心引擎全平台可编译 |
-| ANGLE 渲染层迁移 | ✅ 基本完成 | 替代原 Cocos2d-x + GLFW 渲染管线，使用 EGL/GLES 离屏渲染 |
-| engine_api 桥接层 | ✅ 完成 | 导出 `engine_create` / `engine_tick` / `engine_destroy` 等 C API |
-| Flutter Plugin | ✅ 基本完成 | Platform Channel 通信、Texture 纹理桥接 |
-| Texture 零拷贝渲染 | ✅ 基本完成 | 通过平台原生纹理共享机制零拷贝传递引擎渲染帧到 Flutter |
-| Flutter 调试 UI | ✅ 基本完成 | FPS 控制、引擎生命周期管理、渲染状态监控 |
-| 输入事件转发 | ✅ 基本完成 | 鼠标 / 触控事件坐标映射转发到引擎 |
-| 引擎性能优化 | 🔨 进行中 | SIMD 像素混合、GPU 合成管线、VM 解释器优化等 |
-| 游戏兼容性优化 | 🔨 进行中 | 补全解析引擎、添加插件，阶段目标与 Z 大闭源版兼容性持平 |
-| 原有 krkr2 模拟器功能移植 | 📋 规划中 | 将原有 krkr2 模拟器功能逐步移植到新架构 |
+
+| 模块               | 状态     | 说明                                                            |
+| ---------------- | ------ | ------------------------------------------------------------- |
+| C++ 引擎核心编译       | ✅ 完成   | KiriKiri2 核心引擎全平台可编译                                          |
+| ANGLE 渲染层迁移      | ✅ 基本完成 | 替代原 Cocos2d-x + GLFW 渲染管线，使用 EGL/GLES 离屏渲染                    |
+| engine_api 桥接层   | ✅ 完成   | 导出 `engine_create` / `engine_tick` / `engine_destroy` 等 C API |
+| Flutter Plugin   | ✅ 基本完成 | Platform Channel 通信、Texture 纹理桥接                              |
+| Texture 零拷贝渲染    | ✅ 基本完成 | 通过平台原生纹理共享机制零拷贝传递引擎渲染帧到 Flutter                               |
+| Flutter 应用壳      | ✅ 基本完成 | 库 / 管理 / 统计 / 我的，含设置、帮助、关于与性能监控                               |
+| 输入事件转发           | ✅ 基本完成 | 鼠标 / 触控事件坐标映射转发到引擎                                            |
+| 引擎性能优化           | 🔨 进行中 | SIMD 像素混合、GPU 合成管线、VM 解释器优化等                                  |
+| 游戏兼容性优化          | 🔨 进行中 | 补全解析引擎、添加插件，阶段目标与 Z 大闭源版兼容性持平                                 |
+| 原有 krkr2 模拟器功能移植 | 📋 规划中 | 将原有 krkr2 模拟器功能逐步移植到新架构                                       |
+
+
+
 
 ## 平台支持状态
 
-| 平台 | 状态 | 图形后端 | 纹理共享机制 |
-|------|------|----------|-------------|
-| macOS | ✅ 基本完成 | Metal | IOSurface |
-| iOS | 🔨 流程打通，正在优化和修复 OpenGL 渲染 | Metal | IOSurface |
-| Windows | 📋 计划中 | Direct3D 11 | D3D11 Texture |
-| Linux | 📋 计划中 | Vulkan / Desktop GL | DMA-BUF |
-| Android | 🔨 流程跑通，优化中 | OpenGL ES / Vulkan | HardwareBuffer |
-| HarmonyOS / OpenHarmony | 🔨 流程跑通（模拟器实测可玩），优化中；额外支持 Artemis 引擎（.pfs） | 系统 EGL (GLES) / 软件合成 | OHNativeWindow / RawImage 读回 |
+
+| 平台                      | 状态                                     | 图形后端                 | 纹理共享机制                       |
+| ----------------------- | -------------------------------------- | -------------------- | ---------------------------- |
+| macOS                   | ✅ 基本完成                                 | Metal                | IOSurface                    |
+| iOS                     | 🔨 流程打通，正在优化和修复 OpenGL 渲染              | Metal                | IOSurface                    |
+| Windows                 | 📋 计划中                                 | Direct3D 11          | D3D11 Texture                |
+| Linux                   | 📋 计划中                                 | Vulkan / Desktop GL  | DMA-BUF                      |
+| Android                 | 🔨 流程跑通，优化中                            | OpenGL ES / Vulkan   | HardwareBuffer               |
+| HarmonyOS / OpenHarmony | 🔨 真机可玩（SDK 20），优化中；额外支持 Artemis（.pfs） | 系统 EGL (GLES) / 软件合成 | OHNativeWindow / RawImage 读回 |
+
+
+
 
 ## HarmonyOS / OpenHarmony（原生鸿蒙）支持
 
@@ -109,38 +91,48 @@
 ### 环境准备
 
 1. [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/)（含 OpenHarmony SDK，实测用 API 20）
-2. Flutter OHOS fork：[flutter_flutter_ohos](https://gitcode.com/openharmony-sig/flutter_flutter)（实测 `oh-3.41.9-release` 分支），检出后将其 `bin` 加入 PATH
+2. Flutter OHOS fork：[flutter_flutter_ohos](https://gitcode.com/openharmony-sig/flutter_flutter)（ `oh-3.41.9-release` 分支），检出后将其 `bin` 加入 PATH
 3. [ohos_flutter_packages](https://gitcode.com/openharmony-sig/flutter_packages) 检出到与本仓库**同级**的 `ohos_flutter_packages/` 目录（OHOS 专属的 `dependency_overrides` 存放在 `apps/flutter_app/pubspec_overrides.ohos.yaml`，构建脚本会自动拷贝为 `pubspec_overrides.yaml` 启用；其他平台不受影响，无需该目录）
 4. vcpkg 依赖按仓库根 `vcpkg.json` 拉取，triplet 使用 `vcpkg/triplets/arm64-ohos.cmake`
+
+
 
 ### 构建与安装
 
 ```bash
 ./build/build_ohos.sh release     # 交叉编译引擎 + flutter build hap
-hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
+hdc install -r apps/flutter_app/build/ohos/hap/entry-default-signed.hap
+# 未配置本地签名时，改用 unsigned：
+# hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
 > ⚠️ 性能相关：请勿用 `debug` 产物评估性能——CMake Debug 为 `-O0`，Highway SIMD
 > 混合内核退化为每 16 像素多次跨函数调用，整帧合成慢约两个数量级。release 为
 > `-O2 -DNDEBUG` + Flutter AOT。
 
+
+
 ### 运行说明与已知限制
 
-- 模拟器上建议在应用设置中切换 **renderer=software**（软件渲染 + RawImage 帧路径）；模拟器 GPU 对高频纹理上传不稳定，实机可尝试默认 GL 路径
-- 游戏导入：系统文件选择器只返回 `docs://` URI（fopen 引擎无法消费），应用内提供沙箱目录扫描与 URL 网络导入（支持断点续传）；也可 `hdc file send` 直接送入应用沙箱
+- 模拟器上建议在设置里切 **renderer=software**（软件渲染 + RawImage）；模拟器 GPU 对高频纹理上传不稳定。真机用默认 OpenGL 即可
+- 游戏导入：在「库」点「添加游戏」，选完整游戏目录，或 XP3 / PFS 封包。HarmonyOS 也可以用系统文件管理把整个目录拷到 `Download/com.nextscene.app/games`，回首页下拉刷新；「管理」页能直接看这个目录。`hdc file send` 送进去同样有效
 - Cubism Live2D 插件因无 OHOS 预编译 Core 暂未编入；layerex_draw（libgdiplus 依赖）同
 - 引擎日志：hilog（tag `krkr2`）与应用沙箱内 `files/flutter/krkr2-engine.log` 双通道
 - 游戏页支持横竖屏切换：设置页「屏幕方向」选择默认方向（横屏 / 竖屏 / 跟随系统），游戏内覆盖层菜单可随时「旋转屏幕」
+
+
 
 ### Artemis 引擎游戏（.pfs）
 
 OHOS 版额外内置了 [artemis-compat](https://github.com/Weiss-UltimateSavior/artemis-compat)（clean-room 的 Artemis Engine 兼容运行时，GPL-3.0，vendored 于 `cpp/artemis/`，pin 见 `cpp/artemis/upstream/UPSTREAM.md`），同一个 `libengine_api.so` 按游戏路径自动分发：`.pfs` 封包或含 `.pfs` 的目录走 Artemis 后端，其余走 KiriKiri2。
 
 - 渲染：GLES2 图层合成器绘制到与 krkr2 共用的 EGL pbuffer，经 RawImage 读回呈现（静态帧按图层修订号跳过读回）；音频走 OHAudio（每声部独立 renderer）
-- 导入：游戏目录需包含主包 `root.pfs` 及其补丁卷 `root.pfs.000/.001…`，存档 `*.dat` 写在同目录。推荐 `hdc file send` 送入沙箱后用「添加游戏 → 扫描应用沙箱」注册；文件选择器的「选择游戏目录」也支持 Artemis 目录（适配层会把封包链与存档整体拷入 cache 再迁入 files）
+- 导入：游戏目录需包含主包 `root.pfs` 及其补丁卷 `root.pfs.000/.001…`，存档 `*.dat` 写在同目录。放到 `Download/com.nextscene.app/games` 后回首页下拉刷新，或在「库」里用「添加游戏」选目录 / PFS。`hdc file send` 送入后同样走刷新或添加游戏注册（适配层会把封包链与存档整体拷入 cache 再迁入 files）
 - 兼容范围沿用上游并在本仓库修补/补全了若干引擎行为（`e:random` 整数语义、`e:loadPngComments` 表情锚点、图层变换组合、`[stop]`/`[return]` 调用栈语义、跨文件 `[return]`、点击命中事件层、`lytween` 补间与 `trans` 过渡、`wait se=`/`setonsoundfinish` 音效等待，清单见 `cpp/artemis/upstream/UPSTREAM.md`）：模拟器实测《常轨脱离 Creative 凸》标题（含入场动画）→ STORY SELECT → 序章选项 → 剧情文本/立绘/名牌全程推进，引擎日志无 Lua 报错
 - 仍未实现：视频播放（`video` 标签直接跳过，剧情自动续接）、E-mote 动态立绘（M2 闭源中间件，无法实现）、`anime` 逐帧动画与 `rotate` 补间
 - 日志：hilog tag `Artemis`（domain `0x0207`），同时写入 `krkr2-engine.log`（前缀 `[artemis]`）
+
+
 
 ## macOS 源码构建
 
@@ -157,11 +149,16 @@ Live2D Cubism SDK 因再分发许可**不入库**（`cpp/plugins/cubism/` 下的
 
 ## 引擎性能优化
 
-| 优先级 | 任务 | 状态 |
-|--------|------|------|
-| P0 | 像素混合 SIMD 化 ([Highway](https://github.com/google/highway)) | ✅ 完成 |
-| P0 | 全 GPU 合成渲染管线 | 🔨 进行中 |
-| P0 | TJS2 VM 解释器优化 (computed goto) | 📋 计划中 |
+
+| 优先级 | 任务                                                         | 状态     |
+| --- | ---------------------------------------------------------- | ------ |
+| P0  | 像素混合 SIMD 化 ([Highway](https://github.com/google/highway)) | ✅ 完成   |
+| P0  | 全 GPU 合成渲染管线                                               | 🔨 进行中 |
+| P0  | TJS2 VM 解释器优化 (computed goto)                              | 📋 计划中 |
+
+
+
+
 ## 许可证
 
 本项目基于 GNU General Public License v3.0 (GPL-3.0) 开源，详见 [LICENSE](./LICENSE)。

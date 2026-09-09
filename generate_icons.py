@@ -192,6 +192,73 @@ def generate_ios():
     print("  iOS done.")
 
 
+def _fill_icon_corners(src: Image.Image) -> Image.Image:
+    """Extend each row's edge color into transparent corners. No redraw."""
+    src = src.convert("RGBA")
+    width, height = src.size
+    pixels = src.load()
+    filled = Image.new("RGB", (width, height))
+    out = filled.load()
+    row_colors = []
+    for y in range(height):
+        opaque = [pixels[x, y][:3] for x in range(width) if pixels[x, y][3] > 16]
+        row_colors.append((opaque[0], opaque[-1]) if opaque else None)
+    for y in range(height):
+        if row_colors[y] is not None:
+            continue
+        for delta in range(1, height):
+            if y - delta >= 0 and row_colors[y - delta] is not None:
+                row_colors[y] = row_colors[y - delta]
+                break
+            if y + delta < height and row_colors[y + delta] is not None:
+                row_colors[y] = row_colors[y + delta]
+                break
+    mid = width // 2
+    for y in range(height):
+        left, right = row_colors[y]
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            edge = left if x < mid else right
+            if alpha >= 255:
+                out[x, y] = (red, green, blue)
+            elif alpha <= 0:
+                out[x, y] = edge
+            else:
+                t = alpha / 255.0
+                out[x, y] = (
+                    int(red * t + edge[0] * (1 - t)),
+                    int(green * t + edge[1] * (1 - t)),
+                    int(blue * t + edge[2] * (1 - t)),
+                )
+    return filled
+
+
+def generate_ohos_and_store():
+    """Square 1024 listing/package icon: expand the original gamepad, do not redraw."""
+    print("Expanding branding/app_icon_ohos.png to a 1024 square...")
+    src = FLUTTER_APP / "assets" / "branding" / "app_icon_ohos.png"
+    if not src.exists():
+        raise SystemExit(f"missing {src}")
+
+    filled = _fill_icon_corners(Image.open(src))
+    store_png = ROOT / "doc" / "store" / "app_icon_1024.png"
+    store_png.parent.mkdir(parents=True, exist_ok=True)
+    filled.resize((1024, 1024), Image.LANCZOS).save(store_png, "PNG")
+
+    branding_png = FLUTTER_APP / "assets" / "branding" / "app_icon.png"
+    filled.resize((512, 512), Image.LANCZOS).save(branding_png, "PNG")
+
+    for dest in (
+        FLUTTER_APP / "ohos" / "AppScope" / "resources" / "base" / "media" / "app_icon.png",
+        FLUTTER_APP / "ohos" / "entry" / "src" / "main" / "resources" / "base" / "media" / "icon.png",
+        FLUTTER_APP / "ohos" / "entry" / "src" / "ohosTest" / "resources" / "base" / "media" / "icon.png",
+    ):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(store_png.read_bytes())
+
+    print(f"  wrote {store_png} and {branding_png} (OHOS source left untouched).")
+
+
 def generate_macos():
     print("Generating macOS icons (dark bg + pink shark, Apple squircle mask)...")
     icon_dir = FLUTTER_APP / "macos" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
@@ -227,4 +294,5 @@ if __name__ == "__main__":
     generate_android()
     generate_ios()
     generate_macos()
+    generate_ohos_and_store()
     print("\nAll icons generated!")

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_app/config/app_info.dart';
 import 'package:flutter_app/ui/components/ui_context_menu.dart';
 
 void main() {
@@ -11,8 +12,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    const subtitle =
-        '查找放入 Download/org.github.krkr2.flutter_app/games '
+    final subtitle =
+        '查找放入 ${AppInfo.downloadDisplayRoot}/games '
         '或经 hdc 送入的游戏';
     await tester.pumpWidget(
       MaterialApp(
@@ -23,9 +24,9 @@ void main() {
               builder: (context) => TextButton(
                 onPressed: () => UiPopupMenu.show<void>(
                   context,
-                  items: const [
-                    UiMenuItem(label: '选择游戏目录'),
-                    UiMenuItem(label: '选择游戏归档'),
+                  items: [
+                    const UiMenuItem(label: '选择游戏目录'),
+                    const UiMenuItem(label: '选择游戏归档'),
                     UiMenuItem(label: '重新扫描游戏目录', subtitle: subtitle),
                   ],
                 ),

@@ -39,18 +39,12 @@ void main() {
     }
   });
 
-  test('does not apply the HarmonyOS bundle name to Apple platforms', () {
+  test('all platforms share the current product bundle id', () {
+    expect(appId, appleId);
     expect(ManagerScope.expectedAppId('ios'), appleId);
     expect(ManagerScope.expectedAppId('macos'), appleId);
     expect(ManagerScope.expectedAppId('ohos'), appId);
-    expect(
-      ManagerScope.dedicatedRoot(
-        '/Users/me/Downloads/$appId',
-        appId: appleId,
-        platform: 'macos',
-      ),
-      isNull,
-    );
+    expect(ManagerScope.expectedAppId('android'), appId);
     expect(
       ManagerScope.dedicatedRoot(
         '/Users/me/Downloads/$appleId',
@@ -58,6 +52,14 @@ void main() {
         platform: 'macos',
       ),
       '/Users/me/Downloads/$appleId',
+    );
+    expect(
+      ManagerScope.dedicatedRoot(
+        '/Users/me/Downloads/other.app',
+        appId: appleId,
+        platform: 'macos',
+      ),
+      isNull,
     );
   });
 

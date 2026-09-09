@@ -281,7 +281,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get managerEncodingCp932 => 'Shift_JIS';
 
   @override
-  String get appTitle => 'KrKr2 Next';
+  String get appTitle => 'NextScene';
 
   @override
   String get settings => '設定';
@@ -302,8 +302,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noGamesHintDesktop => '「ゲームを追加」をクリックしてゲームディレクトリを選択してください';
 
   @override
-  String get noGamesHintIos =>
-      '「ファイル」アプリでゲームフォルダをコピーしてください：\niPhone内 > Krkr2 > Games\nその後「更新」をタップ';
+  String noGamesHintIos(String appName) {
+    return '「ファイル」アプリでゲームフォルダをコピーしてください：\niPhone内 > $appName > Games\nその後「更新」をタップ';
+  }
 
   @override
   String get importGames => 'ゲームをインポート';
@@ -316,7 +317,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get importStep1 => '1. iPhoneの「ファイル」アプリを開く';
 
   @override
-  String get importStep2 => '2. iPhone内 > Krkr2 > Games に移動';
+  String importStep2(String appName) {
+    return '2. iPhone内 > $appName > Games に移動';
+  }
 
   @override
   String get importStep3 => '3. ゲームフォルダをGamesディレクトリにコピー';
@@ -342,6 +345,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tabManage => '管理';
+
+  @override
+  String get tabStatistics => '統計';
 
   @override
   String get tabProfile => 'マイページ';
@@ -451,6 +457,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get profileGameRecords => 'ゲーム記録';
 
   @override
+  String get profileLocalSummary => 'このデバイス';
+
+  @override
+  String get profileLibraryCount => 'ライブラリ';
+
+  @override
   String get profileRecentGame => '最近プレイしたゲーム';
 
   @override
@@ -480,18 +492,102 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get helpImportTitle => 'ゲームをインポート';
+  String get helpIntro => 'ゲームの取り込み、保存場所、ファイル管理、プレイ時間の記録について説明します。';
 
   @override
-  String get helpImportBody =>
-      'ゲームフォルダ全体、または XP3 / PFS パックをライブラリに追加します。HarmonyOS では公開ゲームフォルダに配置してから、下に引いて更新することもできます。';
+  String get helpSectionLibrary => '取り込みと起動';
 
   @override
-  String get helpLaunchTitle => '起動とクイック操作';
+  String get helpSectionFiles => 'ファイルと資料';
 
   @override
-  String get helpLaunchBody =>
-      'ゲームカードをタップすると詳細を表示します。長押しすると、起動、情報取得、名前変更、削除ができます。';
+  String get helpSectionMore => '統計と設定';
+
+  @override
+  String get helpFaqImportQ => 'ゲームをライブラリへ追加する方法';
+
+  @override
+  String get helpFaqImportA =>
+      '「ライブラリ」の「ゲームを追加」から、ゲームフォルダ全体、または XP3 / PFS パックを選びます。HarmonyOS では、公開のゲーム用フォルダに置いてからホームを下に引いて更新することもできます。';
+
+  @override
+  String get helpFaqOhosQ => 'HarmonyOS における保存場所';
+
+  @override
+  String helpFaqOhosA(String path) {
+    return 'システムの「ファイル」で、ゲームフォルダ全体を次の場所へコピーしてください。\n$path\nこのアプリが読み書きするのは、Download 配下の専用フォルダだけです。';
+  }
+
+  @override
+  String get helpFaqIosQ => 'iPhone でのコピー手順';
+
+  @override
+  String helpFaqIosA(String appName) {
+    return '「ファイル」アプリで、ゲームフォルダを「iPhone内 > $appName > Games」へコピーし、アプリに戻って更新します。';
+  }
+
+  @override
+  String get helpFaqLaunchQ => 'タップと長押しの違い';
+
+  @override
+  String get helpFaqLaunchA =>
+      'カードをタップすると詳細が開き、そこから起動できます。長押しすると、詳細を開かずに起動、情報取得、名前の変更、リストからの削除ができます。';
+
+  @override
+  String get helpFaqManageQ => '「管理」で行える操作';
+
+  @override
+  String get helpFaqManageA =>
+      '許可済みのアプリフォルダ内で、コピー、移動、名前の変更、展開、詳細表示ができます。ルート、games、非公開のセーブフォルダは保護されており、通常のファイルのように削除できません。';
+
+  @override
+  String get helpFaqArchiveQ => '圧縮ファイルと分割ファイル';
+
+  @override
+  String get helpFaqArchiveA =>
+      '「管理」では zip、7z、rar を展開できます。分割された XP3 は同じフォルダに置いてください。展開や取り込みでゲームスクリプトは書き換えません。';
+
+  @override
+  String get helpFaqRemoveQ => 'ライブラリから外すとファイルも消えますか';
+
+  @override
+  String get helpFaqRemoveA =>
+      '消えません。リストの項目だけが除かれ、フォルダは残ります。ファイルを消すときは「管理」から操作してください。';
+
+  @override
+  String get helpFaqMetadataQ => '題名とカバーの取得';
+
+  @override
+  String get helpFaqMetadataA =>
+      '追加のあと、または長押しメニューの「情報を取得」から、作品名で VNDB を検索します。変わるのは表示名とカバーだけです。';
+
+  @override
+  String get helpFaqStatsQ => 'プレイ時間の記録方法';
+
+  @override
+  String get helpFaqStatsA =>
+      '起動から通常終了までを1回として「統計」に残します。システムから強制終了すると、その回は残らないことがあります。';
+
+  @override
+  String get helpFaqControlsQ => 'キーボードやマウスがないとき';
+
+  @override
+  String get helpFaqControlsA =>
+      'プレイ中は、決定、戻る、スキップ、方向の仮想キーを使います。配置はその場の表示に従ってください。';
+
+  @override
+  String get helpFaqSettingsQ => '言語と外観の変更';
+
+  @override
+  String get helpFaqSettingsA =>
+      '「マイページ」から「設定」を開き、言語を変え、ライト、ダーク、システム外観を選びます。エンジン関連の一部は再起動後に有効になります。';
+
+  @override
+  String get helpFaqCompatQ => '対象となる作品';
+
+  @override
+  String get helpFaqCompatA =>
+      'KiriKiri2 と Artemis の作品向けです。公式の配布ではありません。資源が足りない、未実装の命令がある、または未対応の暗号化がある場合、起動しないことがあります。';
 
   @override
   String get removeGame => 'ゲームを削除';
@@ -713,16 +809,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get version => 'バージョン';
 
   @override
-  String get aboutVersionDesc => '反復テスト中、長期使用はご遠慮ください';
+  String get legal => '法的情報';
 
   @override
-  String get aboutAuthor => '作者';
+  String get legalTabOpenSource => 'ライセンス';
 
   @override
-  String get aboutEmail => 'メール';
+  String get legalTabPrivacy => 'プライバシー';
 
   @override
-  String get aboutEmailCopied => 'メールアドレスをコピーしました';
+  String get legalTabDisclaimer => '免責';
+
+  @override
+  String get legalOpenSourceTitle => 'オープンソースライセンス';
+
+  @override
+  String get legalPrivacyTitle => 'プライバシーに関する説明';
+
+  @override
+  String get legalDisclaimerTitle => '免責事項';
+
+  @override
+  String legalUpdated(String date) {
+    return '本声明は $date 時点の実装に基づき作成しています。';
+  }
 
   @override
   String get gameEngineError => 'エンジンエラー';
