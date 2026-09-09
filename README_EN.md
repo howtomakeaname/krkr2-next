@@ -1,6 +1,6 @@
 <p align="center">
-  <h1 align="center">KrKr2 Next</h1>
-  <p align="center">Next-Generation KiriKiri2 Cross-Platform Emulator Built with Flutter</p>
+  <h1 align="center">NextScene</h1>
+  <p align="center">A next-generation cross-platform visual novel emulator, rebuilt with Flutter</p>
 </p>
 
 <p align="center">
@@ -19,17 +19,17 @@
 
 ## Overview
 
-**KrKr2 Next** is a modern, cross-platform runtime for the [KiriKiri2](https://en.wikipedia.org/wiki/KiriKiri) visual novel engine. It is fully compatible with original game scripts, uses modern graphics APIs for hardware-accelerated rendering, and includes numerous optimizations for both rendering performance and script execution. Built on Flutter for a unified cross-platform UI, it targets macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony.
+**NextScene** is a modern, cross-platform runtime for the [KiriKiri2](https://en.wikipedia.org/wiki/KiriKiri) visual novel engine. It runs original game scripts, uses modern graphics APIs for hardware-accelerated rendering, and includes a number of rendering and script-execution optimizations. The UI is Flutter; target platforms are macOS · iOS · Windows · Linux · Android · HarmonyOS/OpenHarmony. On HarmonyOS the same HAP also runs Artemis games (`.pfs`).
 
 ## Interface Preview
 
-The screenshots below were captured on a physical HarmonyOS SDK 20 device. The system status bar has been removed from each image to keep the focus on the app.
+The screenshots below were captured on a physical HarmonyOS SDK 20 device. Portrait shots have the system status bar cropped out. The app shell is four tabs: Library / Manage / Stats / Me. The in-game shots are the title screen of *9-nine- Episode 1: Miyako Kujo* (*九次九日九重色*), with the performance overlay turned on.
 
 <table>
   <tr>
     <td align="center" width="50%">
       <img src="doc/screenshots/home.webp" alt="Game library home screen" width="280"><br>
-      <sub>Game library</sub>
+      <sub>Library</sub>
     </td>
     <td align="center" width="50%">
       <img src="doc/screenshots/home-context-menu.webp" alt="Home screen long-press menu" width="280"><br>
@@ -48,12 +48,12 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="doc/screenshots/game-loading.webp" alt="Game resource loading screen" width="280"><br>
-      <sub>Game startup and resource loading</sub>
+      <img src="doc/screenshots/manage.webp" alt="Manage" width="280"><br>
+      <sub>Manage</sub>
     </td>
     <td align="center" width="50%">
-      <img src="doc/screenshots/game-controls.webp" alt="In-game quick controls" width="280"><br>
-      <sub>In-game quick controls</sub>
+      <img src="doc/screenshots/profile.webp" alt="Me" width="280"><br>
+      <sub>Me</sub>
     </td>
   </tr>
 </table>
@@ -61,8 +61,13 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
 ### Game Running in Landscape
 
 <p align="center">
-  <img src="doc/screenshots/game-running-landscape.webp" alt="KiriKiri2 test game running in landscape on a HarmonyOS device" width="600"><br>
-  <sub>KiriKiri2 test game running in landscape on a physical HarmonyOS device</sub>
+  <img src="doc/screenshots/game-running-landscape.webp" alt="9-nine- Episode 1 running in landscape on a HarmonyOS device" width="600"><br>
+  <sub>*9-nine- Episode 1: Miyako Kujo* title screen · KiriKiri2 / GLES · ~90 fps</sub>
+</p>
+
+<p align="center">
+  <img src="doc/screenshots/game-controls.webp" alt="In-game quick controls" width="600"><br>
+  <sub>In-game quick controls (pause / virtual pad / exit)</sub>
 </p>
 
 ## Architecture
@@ -71,12 +76,12 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
   <img src="doc/architecture.png" alt="Architecture Diagram" width="700">
 </p>
 
-**Rendering Pipeline**: The engine performs offscreen rendering via ANGLE's EGL Pbuffer Surface (OpenGL ES 2.0). Rendered frames are delivered to the Flutter Texture Widget through platform-native texture sharing mechanisms (macOS → IOSurface, Windows → D3D11 Texture, Linux → DMA-BUF) with zero-copy transfer.
+**Rendering Pipeline**: On desktop and most mobile targets the engine renders offscreen through ANGLE's EGL Pbuffer (OpenGL ES 2.0), then hands the frame to Flutter via platform texture sharing (macOS → IOSurface, Windows → D3D11 Texture, Linux → DMA-BUF). HarmonyOS skips ANGLE and uses system EGL (GLES) into a pbuffer, presented through OHNativeWindow / RawImage readback.
 
 
 ## Development Progress
 
-> ⚠️ This project is under active development. No stable release is available yet. macOS is the most advanced platform.
+> ⚠️ This project is under active development. No stable release is available yet. This fork is currently focused on HarmonyOS hardware; upstream macOS remains the most complete desktop build.
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -85,7 +90,7 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
 | engine_api Bridge Layer | ✅ Done | Exports `engine_create` / `engine_tick` / `engine_destroy` C APIs |
 | Flutter Plugin | ✅ Mostly Done | Platform Channel communication, Texture bridge |
 | Zero-Copy Texture Rendering | ✅ Mostly Done | Zero-copy engine render frame sharing to Flutter via platform-native texture mechanisms |
-| Flutter Debug UI | ✅ Mostly Done | FPS control, engine lifecycle management, rendering status monitor |
+| Flutter App Shell | ✅ Mostly Done | Library / Manage / Stats / Me, plus Settings, Help, About, and the performance overlay |
 | Input Event Forwarding | ✅ Mostly Done | Mouse / touch event coordinate mapping and forwarding to the engine |
 | Engine Performance Optimization | 🔨 In Progress | SIMD pixel blending, GPU compositing pipeline, VM interpreter optimization, etc. |
 | Game Compatibility | 🔨 In Progress | Completing the script parser, adding plugins. Current goal: match compatibility with Z's closed-source build |
@@ -100,7 +105,7 @@ The screenshots below were captured on a physical HarmonyOS SDK 20 device. The s
 | Windows | 📋 Planned | Direct3D 11 | D3D11 Texture |
 | Linux | 📋 Planned | Vulkan / Desktop GL | DMA-BUF |
 | Android | 🔨 Pipeline Working, Optimizing | OpenGL ES / Vulkan | HardwareBuffer |
-| HarmonyOS / OpenHarmony | 🔨 Pipeline Working (playable on the emulator), Optimizing; also runs Artemis Engine games (.pfs) | System EGL (GLES) / software compositing | OHNativeWindow / RawImage readback |
+| HarmonyOS / OpenHarmony | 🔨 Playable on device (SDK 20), still optimizing; also runs Artemis (.pfs) | System EGL (GLES) / software compositing | OHNativeWindow / RawImage readback |
 
 ## HarmonyOS / OpenHarmony Support
 
@@ -117,7 +122,9 @@ This repository adds native HarmonyOS/OpenHarmony (API 20 / SDK 5.x) support on 
 
 ```bash
 ./build/build_ohos.sh release     # cross-compile the engine + flutter build hap
-hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
+hdc install -r apps/flutter_app/build/ohos/hap/entry-default-signed.hap
+# if local signing is not configured, use the unsigned HAP instead:
+# hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
 > ⚠️ Performance note: never benchmark the `debug` build — CMake Debug is `-O0`, which
@@ -127,8 +134,8 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 
 ### Notes & Known Limitations
 
-- On the emulator, switch to **renderer=software** in the app settings (software rendering + the RawImage frame path); the emulator GPU is unstable under frequent texture uploads. Real devices may try the default GL path
-- Game import: the system picker only returns `docs://` URIs (unusable by the fopen-based engine), so the app offers sandbox-directory scanning and URL network import (resumable); `hdc file send` into the app sandbox also works
+- On the emulator, switch to **renderer=software** in Settings (software rendering + the RawImage path); the emulator GPU is unstable under frequent texture uploads. Real devices should use the default OpenGL path
+- Game import: on Library, tap Add Game and pick a full game folder, or an XP3 / PFS archive. On HarmonyOS you can also copy the folder into `Download/com.nextscene.app/games` with the system Files app and pull-to-refresh on Library; the Manage tab browses that directory. `hdc file send` into the same place works too
 - The Cubism Live2D plugin is not built on OHOS yet (no prebuilt Core); layerex_draw (libgdiplus) likewise
 - Engine logs go to both hilog (tag `krkr2`) and `files/flutter/krkr2-engine.log` inside the app sandbox
 - The game page supports landscape/portrait switching: pick the default in Settings → "Screen Orientation" (landscape / portrait / follow system) and flip it at any time from the in-game overlay menu ("Rotate Screen")
@@ -138,7 +145,7 @@ hdc install -r apps/flutter_app/ohos/entry/build/default/outputs/default/entry-d
 The OHOS build additionally bundles [artemis-compat](https://github.com/Weiss-UltimateSavior/artemis-compat) (a clean-room Artemis Engine compatible runtime, GPL-3.0, vendored under `cpp/artemis/`; pinned commit in `cpp/artemis/upstream/UPSTREAM.md`). The single `libengine_api.so` dispatches on the game path: a `.pfs` pack or a directory holding one goes to the Artemis backend, everything else to KiriKiri2.
 
 - Rendering: the GLES2 layer compositor draws into the same EGL pbuffer krkr2 uses and frames are presented through the RawImage readback (static frames skip the readback based on the layer revision counter); audio goes through OHAudio (one renderer per voice)
-- Import: the game directory must contain the base pack `root.pfs` plus its patch volumes `root.pfs.000/.001…`; saves (`*.dat`) are written next to it. Recommended: `hdc file send` the folder into the sandbox and register it with "Add game → Scan App Sandbox"; the picker's "Select Game Directory" also handles Artemis folders (the ArkTS layer copies the pack chain and saves into the cache, the app then moves them into `files`)
+- Import: the game directory must contain the base pack `root.pfs` plus its patch volumes `root.pfs.000/.001…`; saves (`*.dat`) are written next to it. Drop the folder into `Download/com.nextscene.app/games` and pull-to-refresh on Library, or use Add Game to pick the folder / PFS. `hdc file send` followed by the same refresh or Add Game path also works (the ArkTS layer copies the pack chain and saves into the cache, then the app moves them into `files`)
 - Compatibility follows upstream plus a set of engine fixes/additions made here (`e:random` integer semantics, `e:loadPngComments` face-part anchors, composed layer transforms, `[stop]`/`[return]` call-stack semantics, cross-file `[return]`, event-owner click dispatch, real `lytween` tweens and `trans` crossfades, `wait se=` / `setonsoundfinish` — full list in `cpp/artemis/upstream/UPSTREAM.md`): verified on the emulator with *Hamidashi Creative Totsu* through title (with intro animation) → STORY SELECT → prologue choice → story text / sprites / name plates, with no Lua errors in the engine log
 - Still missing: video playback (the `video` tag is skipped and the story resumes), E-mote puppets (closed M2 middleware, not feasible), `anime` frame animations and `rotate` tweens
 - Logs: hilog tag `Artemis` (domain `0x0207`), mirrored into `krkr2-engine.log` with an `[artemis]` prefix
